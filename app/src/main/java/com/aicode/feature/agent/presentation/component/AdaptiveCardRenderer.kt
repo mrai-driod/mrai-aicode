@@ -88,7 +88,7 @@ import compose.icons.feathericons.ExternalLink
 import compose.icons.feathericons.HelpCircle
 
 /**
- * Adaptive Card 原生 Compose 渲染主入口。
+ * Main entry point for native Compose rendering of Adaptive Cards.
  */
 @Composable
 fun AdaptiveCardView(
@@ -99,11 +99,11 @@ fun AdaptiveCardView(
     modifier: Modifier = Modifier
 ) {
     if (!isExpanded) {
-        // ── 收起态视图 ──
+        // ── Collapsed-state view ──
         if (card.compact != null) {
             RenderElement(card.compact, isCompact = true, onAction = onAction, onRefresh = onRefresh, modifier = modifier)
         } else {
-            // 自动从 body 提取前 2~3 个主要组件紧凑展示
+            // Automatically extracts the first 2-3 main components from the body and shows them compactly
             Row(
                 modifier = modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -117,7 +117,7 @@ fun AdaptiveCardView(
             }
         }
     } else {
-        // ── 展开态视图 ──
+        // ── Expanded-state view ──
         Column(
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
@@ -190,7 +190,7 @@ private fun RenderColumnSet(
     ) {
         element.columns.forEachIndexed { index, column ->
             if (!isCompact && index > 0 && column.separator) {
-                // 列间竖直分割线
+                // Vertical divider between columns
                 Box(
                     modifier = Modifier
                         .padding(horizontal = Spacing.sm)
@@ -458,7 +458,7 @@ private fun RenderMetric(
     val activeColor = resolveColor(element.color, isSubtle = false)
 
     if (isCompact) {
-        // 收起态下的指标呈现
+        // Metric presentation in the collapsed state
         Column(
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -491,7 +491,7 @@ private fun RenderMetric(
             }
         }
     } else {
-        // 展开态下的卡片呈现
+        // Card presentation in the expanded state
         Column(
             modifier = modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -787,7 +787,7 @@ private fun RenderTabSet(
     if (element.tabs.isEmpty()) return
 
     if (isCompact) {
-        // 收起态：只渲染第一个 tab 的内容
+        // Collapsed state: render only the first tab's content
         element.tabs.first().items.forEach { child ->
             RenderElement(child, isCompact, onAction, onRefresh)
         }

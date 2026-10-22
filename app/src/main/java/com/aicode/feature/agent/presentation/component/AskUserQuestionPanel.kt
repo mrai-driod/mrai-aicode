@@ -62,17 +62,17 @@ import compose.icons.feathericons.ChevronDown
 import compose.icons.feathericons.ChevronUp
 
 
-/** 「其他」选项在选中集合内的内部哨兵：用 AI 不可能传出的控制字符前缀，避免与预设选项 label 撞车。 */
+/** Internal sentinel for the "Other" option in the selected set: uses a control-character prefix the AI can never emit, avoiding collisions with preset option labels. */
 private const val OTHER_SENTINEL = "\u0000__other__"
 
 /**
- * AI 向用户提问的面板：展示 1-4 个结构化问题，每个带 2-4 个预设选项 + 一个「其他」自由输入选项。
+ * Panel where the AI asks the user questions: shows 1-4 structured questions, each with 2-4 preset options + an "Other" free-text option.
  *
- * 风格对齐 [ToolPermissionPanel]：内联 Surface，不用 AlertDialog。
+ * Style matches [ToolPermissionPanel]: an inline Surface, no AlertDialog.
  *
- * @param question 待回答的问题请求。
- * @param onConfirm 用户点击确认后回传答案。
- * @param onSkip 用户点击「补充」，返回空答案——表示用户想补充说明而非在预设选项中做选择。
+ * @param question the question request awaiting an answer.
+ * @param onConfirm called with the answers after the user taps Confirm.
+ * @param onSkip the user taps "Add details", returning empty answers - meaning the user wants to add an explanation rather than choose among the preset options.
  */
 @Composable
 fun AskUserQuestionPanel(
@@ -81,21 +81,21 @@ fun AskUserQuestionPanel(
     onSkip: () -> Unit,
     forceCollapse: Boolean = false
 ) {
-    // 每个问题的已选 label 集合
+    // The set of selected labels for each question
     val selectedMap = remember(question.id) {
         mutableStateMapOf<Int, MutableList<String>>().apply {
             question.questions.forEachIndexed { idx, _ -> this[idx] = mutableStateListOf() }
         }
     }
-    // 每个问题的「其他」自由文本
+    // The "Other" free text for each question
     val customTexts = remember(question.id) {
         mutableStateMapOf<Int, String>().apply {
             question.questions.forEachIndexed { idx, _ -> this[idx] = "" }
         }
     }
-    // 面板折叠状态：默认展开；多问题时长面板可收起，避免挡住 AI 输出
+    // Panel collapsed state: expanded by default; with many questions the long panel can be collapsed so it does not block the AI output
     var expanded by remember(question.id) { mutableStateOf(true) }
-    // 余额面板展开时同帧收起本面板，避免叠加顶开输入框
+    // Collapse this panel in the same frame when the balance panel expands, avoiding the two stacking up and pushing the input box open
     val effectiveExpanded = expanded && !forceCollapse
 
     Surface(
@@ -109,7 +109,7 @@ fun AskUserQuestionPanel(
         Column(
             modifier = Modifier.padding(Spacing.md)
         ) {
-            // 面板标题：点击折叠/展开
+            // Panel title: tap to collapse/expand
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -159,7 +159,7 @@ fun AskUserQuestionPanel(
                 ) {
                     Spacer(Modifier.height(Spacing.md))
 
-                    // 逐个渲染问题
+                    // Render each question in turn
                     question.questions.forEachIndexed { idx, q ->
                         if (idx > 0) Spacer(Modifier.height(Spacing.md))
                         QuestionCard(
@@ -207,7 +207,7 @@ fun AskUserQuestionPanel(
 }
 
 /**
- * 单个问题的卡片区域。
+ * Card area for a single question.
  */
 @Composable
 private fun QuestionCard(
@@ -219,7 +219,7 @@ private fun QuestionCard(
     onCustomTextChanged: (String) -> Unit
 ) {
     Column {
-        // 标题行：header 标签 + 问题文本
+        // Title row: header tag + question text
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (item.header.isNotBlank()) {
                 Surface(
@@ -245,7 +245,7 @@ private fun QuestionCard(
 
         Spacer(Modifier.height(Spacing.sm))
 
-        // 选项列表：预设选项 + 追加的「其他」自由输入项（内部用哨兵标识，避免与 AI 传入的同名选项冲突）
+        // Option list: preset options + an appended "Other" free-input item (marked internally with the sentinel, avoiding conflicts with a same-named option passed in by the AI)
         val allOptions = item.options.map { it.label } + OTHER_SENTINEL
 
         allOptions.forEachIndexed { optIdx, label ->
@@ -306,7 +306,7 @@ private fun QuestionCard(
                 }
             }
 
-            // 「其他」被选中时展开文本输入框
+            // When "Other" is selected, expand the text input box
             if (isOther && isSelected) {
                 Spacer(Modifier.height(Spacing.xs))
                 TextField(

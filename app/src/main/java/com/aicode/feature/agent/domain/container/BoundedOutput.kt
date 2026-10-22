@@ -1,34 +1,36 @@
 package com.aicode.feature.agent.domain.container
 
 /**
- * 不限幅命令（git diff / 文件内容等）的输出硬上限（字符）：超过即截断并置
- * [CommandResult.outputTruncated]，避免无界输出撑爆内存。
+ * Hard upper limit (in characters) on the output of uncapped commands (git diff, file contents, etc.): output
+ * beyond it is truncated and [CommandResult.outputTruncated] is set, so unbounded output cannot exhaust memory.
  */
 const val MAX_UNBOUNDED_CHARS = 8 * 1024 * 1024
 
 /**
- * 累积命令输出但限制内存占用：保留「开头 [headLimit] 个字符」与「结尾 [tailLimit] 个字符」，
- * 丢弃中间，避免超大输出（如 `cat` 大文件 / 安装日志）撑爆内存、模型上下文与 UI 渲染。
+ * Accumulates command output while limiting memory use: keeps the first [headLimit] characters and the last
+ * [tailLimit] characters and discards the middle, so huge output (such as `cat` on a large file, or install logs)
+ * cannot exhaust memory, the model context, or UI rendering.
  *
- * 为何 head+tail 都留：开头通常含命令意图与起始信息，结尾通常含错误与最终结果，二者对模型
- * 与用户最有价值；中间的海量重复输出可安全省略，并在省略处标注被丢弃的字符数。
+ * Why keep both head and tail: the beginning usually holds the command intent and starting information, and the
+ * end usually holds errors and the final result; both are the most valuable parts for the model and the user.
+ * The mass of repetitive output in the middle can safely be omitted, with the number of discarded characters noted at the omission point.
  *
- * 线程安全：append 会从并发读取 stdout/stderr 的协程调用，故方法级同步。
+ * Thread safety: append is called from coroutines concurrently reading stdout/stderr, so it is synchronized at method level.
  */
 class BoundedOutput(
     private val headLimit: Int = DEFAULT_HEAD,
     private val tailLimit: Int = DEFAULT_TAIL
 ) {
     private val head = StringBuilder()
-    // 仅保留最近 tailLimit 个字符的滑动窗口（超出即从头部丢弃）。
+    // Sliding window keeping only the most recent tailLimit characters (excess is dropped from the head).
     private val tail = StringBuilder()
     private var total = 0L
 
-    /** 已接收的原始字符总数（截断之前）。 */
+    /** Total number of raw characters received (before truncation). */
     val totalChars: Long
         @Synchronized get() = total
 
-    /** 是否发生了中间截断（接收量超过 head+tail 容量）。 */
+    /** Whether middle truncation occurred (received amount exceeded the head+tail capacity). */
     val truncated: Boolean
         @Synchronized get() = total > head.length.toLong() + tail.length.toLong()
 
@@ -42,7 +44,7 @@ class BoundedOutput(
                 head.append(text)
                 return
             }
-            // 先把开头填满，剩余溢出进入尾部窗口。
+            // Fill the head first; any overflow goes into the tail window.
             head.append(text, 0, room)
             appendTail(text, room, text.length)
         } else {
@@ -55,7 +57,7 @@ class BoundedOutput(
         if (tail.length > tailLimit) tail.delete(0, tail.length - tailLimit)
     }
 
-    /** 组装最终文本：未截断时即完整输出；截断时为 head + 省略提示 + tail。 */
+    /** Builds the final text: the complete output when not truncated; head + omission note + tail when truncated. */
     @Synchronized
     fun build(): String {
         if (!truncated) return head.toString() + tail.toString()
@@ -63,13 +65,13 @@ class BoundedOutput(
         return buildString {
             append(head)
             if (tail.isEmpty()) {
-                append("\n\n…[输出过长，已省略后续 ")
+                append("\n\n…[Output too long; omitted the following ")
                 append(omitted)
-                append(" 个字符]…")
+                append(" characters]…")
             } else {
-                append("\n\n…[输出过长，已省略中间 ")
+                append("\n\n…[Output too long; omitted the middle ")
                 append(omitted)
-                append(" 个字符；仅保留开头与结尾]…\n\n")
+                append(" characters; kept only the beginning and end]…\n\n")
                 append(tail)
             }
         }
@@ -80,10 +82,10 @@ class BoundedOutput(
         const val DEFAULT_TAIL = 20_000
 
         /**
-         * 只保留开头、到 [maxChars] 字符为止的硬上限模式（tail 容量为 0）。
+         * Hard-cap mode that keeps only the beginning, up to [maxChars] characters (tail capacity is 0).
          *
-         * 与默认的 head+tail 不同：省略提示只出现在**末尾**，因为调用方（git diff / 文件内容）
-         * 会按行解析输出，中间插入提示会破坏解析。
+         * Unlike the default head+tail mode, the omission note appears only at the **end**, because callers
+         * (git diff / file contents) parse the output line by line, and inserting a note in the middle would break parsing.
          */
         fun hardCapped(maxChars: Int): BoundedOutput = BoundedOutput(maxChars, 0)
     }

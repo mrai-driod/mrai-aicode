@@ -10,13 +10,13 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * 敏感数据的对称加密：密钥存放在 Android Keystore（不可导出，有 TEE 时受硬件保护），
- * 数据用 AES-256-GCM 加密。用于私钥文件与数据库里的密码/API Key 等字段。
+ * Symmetric encryption for sensitive data: the key is stored in the Android Keystore (non-exportable, hardware-protected when a TEE is present),
+ * and data is encrypted with AES-256-GCM. Used for private key files and password/API Key fields in the database.
  *
- * 密钥与设备绑定：清除应用数据、换机直拷数据目录后密文不可解，属预期代价；
- * 跨设备迁移走备份（备份导出为明文、导入时按新设备密钥重新加密）。
+ * The key is bound to the device: clearing app data or directly copying the data directory to another device makes the ciphertext undecryptable, which is an expected cost;
+ * cross-device migration goes through backup (backups are exported in plaintext and re-encrypted with the new device's key on import).
  *
- * 明文兼容：解密入口对非密文输入原样返回，便于旧明文数据的平滑迁移。
+ * Plaintext compatibility: the decryption entry returns non-ciphertext input unchanged, for smooth migration of legacy plaintext data.
  */
 object KeystoreCipher {
     private const val TAG = "KeystoreCipher"
@@ -26,10 +26,10 @@ object KeystoreCipher {
     private const val GCM_TAG_BITS = 128
     private const val IV_LEN = 12
 
-    /** 字符串密文前缀；不含此前缀的值按旧明文处理。 */
+    /** String ciphertext prefix; values without this prefix are treated as legacy plaintext. */
     private const val STRING_PREFIX = "AICODEENC1:"
 
-    /** 字节密文文件头；用于区分加密文件与旧明文文件。 */
+    /** Byte ciphertext file header; used to distinguish encrypted files from legacy plaintext files. */
     private val BYTE_MAGIC = "AICODEENC1\u0000".toByteArray(Charsets.US_ASCII)
 
     private val lock = Any()
@@ -64,7 +64,7 @@ object KeystoreCipher {
         bytes.size >= BYTE_MAGIC.size + IV_LEN && BYTE_MAGIC.indices.all { bytes[it] == BYTE_MAGIC[it] }
 
     fun decryptBytes(encrypted: ByteArray): ByteArray {
-        require(isEncryptedBytes(encrypted)) { "不是加密数据" }
+        require(isEncryptedBytes(encrypted)) { "Not encrypted data" }
         return runCatching {
             val iv = encrypted.copyOfRange(BYTE_MAGIC.size, BYTE_MAGIC.size + IV_LEN)
             val ciphertext = encrypted.copyOfRange(BYTE_MAGIC.size + IV_LEN, encrypted.size)
@@ -72,11 +72,11 @@ object KeystoreCipher {
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
             cipher.doFinal(ciphertext)
         }.getOrElse { e ->
-            // 密钥失效（清除应用数据 / 换机直拷 / Keystore 重置 / 跨包迁移）时密文不可解。
-            // 必须降级为空而不是抛出——调用方多在 Room Flow 的 map 里，一个异常会让
-            // 整条 Flow 崩掉并落到未捕获处理器，直接进程闪退（2026-10-04 线上复现）。
+            // When the key is invalidated (app data cleared / data directory copied to another device / Keystore reset / cross-package migration) the ciphertext cannot be decrypted.
+            // It must degrade to empty instead of throwing -- callers are mostly inside a Room Flow map, where one exception would
+            // crash the whole Flow and reach the uncaught handler, directly crashing the process (reproduced in production 2026-10-04).
             com.aicode.core.util.FileLogger.e(
-                TAG, "解密字节失败（密钥不可用），降级为空: ${e.javaClass.simpleName}: ${e.message}"
+                TAG, "Failed to decrypt bytes (key unavailable), degrading to empty: ${e.javaClass.simpleName}: ${e.message}"
             )
             ByteArray(0)
         }
@@ -84,13 +84,13 @@ object KeystoreCipher {
 
     fun isEncryptedString(value: String?): Boolean = value != null && value.startsWith(STRING_PREFIX)
 
-    /** 加密字符串；空串原样返回，避免把「未填写」变成非空密文。 */
+    /** Encrypts a string; an empty string is returned unchanged, to avoid turning "not filled in" into non-empty ciphertext. */
     fun encryptString(plain: String): String {
         if (plain.isEmpty()) return plain
         return STRING_PREFIX + Base64.getEncoder().encodeToString(encryptBytes(plain.toByteArray(Charsets.UTF_8)))
     }
 
-    /** 解密字符串；非密文（旧明文）原样返回。密钥失效时降级为空串并记录（见 [decryptBytes]）。 */
+    /** Decrypts a string; non-ciphertext (legacy plaintext) is returned unchanged. When the key is invalidated it degrades to an empty string and logs (see [decryptBytes]). */
     fun decryptString(value: String): String {
         if (!isEncryptedString(value)) return value
         return runCatching {
@@ -98,7 +98,7 @@ object KeystoreCipher {
             String(decryptBytes(body), Charsets.UTF_8)
         }.getOrElse { e ->
             com.aicode.core.util.FileLogger.e(
-                TAG, "解密字符串失败（密钥不可用），降级为空串: ${e.javaClass.simpleName}: ${e.message}"
+                TAG, "Failed to decrypt string (key unavailable), degrading to empty string: ${e.javaClass.simpleName}: ${e.message}"
             )
             ""
         }

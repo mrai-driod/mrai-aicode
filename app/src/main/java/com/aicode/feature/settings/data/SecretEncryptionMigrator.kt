@@ -13,10 +13,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 一次性把历史明文的敏感字段加密回写：提供商 API Key（及代理密码、自定义请求头、脚本参数）、
- * 远程连接的密码/passphrase、SSH 私钥文件。这些字段此前为明文存储，改 Keystore 加密后需补齐存量数据。
+ * One-time migration that encrypts and writes back historically plaintext sensitive fields: provider API keys (plus proxy passwords, custom request headers, script params),
+ * remote connection passwords/passphrases, and SSH private key files. These fields were previously stored in plaintext; after switching to Keystore encryption, existing data must be migrated.
  *
- * 幂等：已加密的字段跳过，可重复调用。
+ * Idempotent: already-encrypted fields are skipped, so it can be called repeatedly.
  */
 @Singleton
 class SecretEncryptionMigrator @Inject constructor(
@@ -29,12 +29,12 @@ class SecretEncryptionMigrator @Inject constructor(
     }
 
     suspend fun migrateIfNeeded() = withContext(Dispatchers.IO) {
-        runCatching { migrateProviders() }.onFailure { FileLogger.w(TAG, "迁移 provider 敏感字段失败", it) }
-        runCatching { migrateConnections() }.onFailure { FileLogger.w(TAG, "迁移连接敏感字段失败", it) }
-        runCatching { migrateSshKeys() }.onFailure { FileLogger.w(TAG, "迁移 SSH 私钥文件失败", it) }
+        runCatching { migrateProviders() }.onFailure { FileLogger.w(TAG, "Failed to migrate provider sensitive fields", it) }
+        runCatching { migrateConnections() }.onFailure { FileLogger.w(TAG, "Failed to migrate connection sensitive fields", it) }
+        runCatching { migrateSshKeys() }.onFailure { FileLogger.w(TAG, "Failed to migrate SSH private key files", it) }
     }
 
-    /** 已加密则原样返回，未加密则加密（幂等）。 */
+    /** Returns the value as-is if already encrypted, otherwise encrypts it (idempotent). */
     private fun enc(value: String): String =
         if (KeystoreCipher.isEncryptedString(value)) value else KeystoreCipher.encryptString(value)
 
@@ -51,7 +51,7 @@ class SecretEncryptionMigrator @Inject constructor(
         }
         if (migrated != providers) {
             aiProviderDao.insertAllProviders(migrated)
-            FileLogger.i(TAG, "已加密 ${providers.size} 个 provider 的敏感字段")
+            FileLogger.i(TAG, "Encrypted sensitive fields for ${providers.size} providers")
         }
     }
 
@@ -65,7 +65,7 @@ class SecretEncryptionMigrator @Inject constructor(
         }
         if (migrated != connections) {
             remoteConnectionDao.insertAllConnections(migrated)
-            FileLogger.i(TAG, "已加密 ${connections.size} 个连接的敏感字段")
+            FileLogger.i(TAG, "Encrypted sensitive fields for ${connections.size} connections")
         }
     }
 
@@ -78,9 +78,9 @@ class SecretEncryptionMigrator @Inject constructor(
             if (!KeystoreCipher.isEncryptedBytes(bytes)) {
                 runCatching { file.writeBytes(KeystoreCipher.encryptBytes(bytes)) }
                     .onSuccess { count++ }
-                    .onFailure { FileLogger.w(TAG, "加密私钥文件失败: ${file.name}", it) }
+                    .onFailure { FileLogger.w(TAG, "Failed to encrypt private key file: ${file.name}", it) }
             }
         }
-        if (count > 0) FileLogger.i(TAG, "已加密 $count 个 SSH 私钥文件")
+        if (count > 0) FileLogger.i(TAG, "Encrypted $count SSH private key files")
     }
 }

@@ -18,8 +18,8 @@ import com.aicode.R
 import com.aicode.feature.settings.presentation.UpdateCheckUiState
 
 /**
- * 检查更新结果弹窗（全局宿主渲染，自动/手动共用）。
- * 新版本弹窗直接列出从当前版本到最新版本的更新日志，可滚动。
+ * Update check result dialog (rendered by the global host, shared by automatic/manual checks).
+ * The new-version dialog directly lists the changelog from the current version to the latest version, scrollable.
  */
 @Composable
 internal fun UpdateCheckDialog(
@@ -72,7 +72,7 @@ internal fun UpdateCheckDialog(
     }
 }
 
-/** 用隐式 Intent 打开浏览器，捕获异常避免崩溃。 */
+/** Opens the browser with an implicit Intent, catching exceptions to avoid a crash. */
 internal fun openUrl(context: android.content.Context, url: String) {
     runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -80,10 +80,10 @@ internal fun openUrl(context: android.content.Context, url: String) {
 }
 
 /**
- * 指定版本 tag 的 GitHub Release 页面地址；tag 为空时回退到最新正式版页面。
+ * The GitHub Release page URL for the specified version tag; falls back to the latest stable release page when the tag is empty.
  *
- * GitHub 的 `releases/latest` 只解析到最新的**正式** release（预发布不计入），最新版通道
- * 检测到 RC 时跳过去会看到旧的稳定版，因此必须按 tag 直达对应版本页面。
+ * GitHub's `releases/latest` only resolves to the latest **stable** release (pre-releases are not counted); the latest channel
+ * would show an old stable version when an RC is detected, so it must go directly to the corresponding version page by tag.
  */
 internal fun githubReleaseUrl(tag: String?): String = when {
     tag.isNullOrBlank() -> "$GITHUB_RELEASES_URL/latest"

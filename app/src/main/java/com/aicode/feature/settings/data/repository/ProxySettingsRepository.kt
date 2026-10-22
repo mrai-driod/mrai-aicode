@@ -10,10 +10,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** 默认不走代理的主机/网段列表（含内网 CIDR）。顶层常量：ProxyConfig 主构造函数默认值不能引用 companion 成员。 */
+/** Default list of hosts/network ranges that bypass the proxy (including private-network CIDRs). Top-level constant: the default value in ProxyConfig's primary constructor cannot reference companion members. */
 const val DEFAULT_NO_PROXY = "localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1"
 
-/** 全局 HTTP/SOCKS5 代理配置快照。 */
+/** Snapshot of the global HTTP/SOCKS5 proxy configuration. */
 data class ProxyConfig(
     val enabled: Boolean = false,
     val type: ProxyType = ProxyType.HTTP,
@@ -21,18 +21,18 @@ data class ProxyConfig(
     val port: Int = 0,
     val username: String = "",
     val password: String = "",
-    /** 不走代理的主机列表（逗号分隔，精确匹配 host）。 */
+    /** List of hosts that bypass the proxy (comma-separated, exact host match). */
     val noProxy: String = DEFAULT_NO_PROXY
 ) {
-    /** 配置是否完整可用：仅当开启且 host 非空、port 合法时才会真正走代理。 */
+    /** Whether the configuration is complete and usable: traffic only actually goes through the proxy when it is enabled, the host is non-empty, and the port is valid. */
     val valid: Boolean
         get() = host.isNotBlank() && port in 1..65535
 }
 
 /**
- * 全局代理设置。用 SharedPreferences 存储（而非 DataStore）：
- * 需要支持 Application.attachBaseContext 阶段的同步读取（见 [AppProxy]），
- * 那里没有任何注入、也等不了异步首帧。
+ * Global proxy settings. Stored in SharedPreferences (rather than DataStore):
+ * it needs to support synchronous reads during the Application.attachBaseContext phase (see [AppProxy]),
+ * where there is no injection and no way to wait for an asynchronous first frame.
  */
 @Singleton
 class ProxySettingsRepository @Inject constructor(
@@ -75,10 +75,10 @@ class ProxySettingsRepository @Inject constructor(
         const val KEY_PASSWORD = "password"
         const val KEY_NO_PROXY = "no_proxy"
 
-        /** 旧版默认绕过列表（无 CIDR 网段）：读到此值视为未自定义，迁移为新默认。 */
+        /** Legacy default bypass list (without CIDR ranges): when this value is read it is treated as not customized, and migrated to the new default. */
         private const val LEGACY_DEFAULT_NO_PROXY = "localhost,127.0.0.1,::1"
 
-        /** 同步读取当前配置，供非注入场景（如 Application.attachBaseContext）使用。 */
+        /** Synchronously reads the current configuration, for non-injected scenarios (such as Application.attachBaseContext). */
         fun readConfig(context: Context): ProxyConfig =
             readConfig(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
 
@@ -90,7 +90,7 @@ class ProxySettingsRepository @Inject constructor(
             port = prefs.getInt(KEY_PORT, 0),
             username = prefs.getString(KEY_USERNAME, "") ?: "",
             password = prefs.getString(KEY_PASSWORD, "") ?: "",
-            // 旧版本默认值（无内网网段）迁移为新默认列表，让输入框直接显示完整绕过地址。
+            // Migrate the old default value (without private-network ranges) to the new default list, so the input field directly shows the full bypass addresses.
             noProxy = (prefs.getString(KEY_NO_PROXY, null) ?: "")
                 .takeUnless { it.isBlank() || it == LEGACY_DEFAULT_NO_PROXY }
                 ?: DEFAULT_NO_PROXY

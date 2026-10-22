@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** 独立编辑器设置页的状态与操作，直接读写 [EditorSettingsRepository]。 */
+/** State and actions for the standalone editor settings page, reading and writing [EditorSettingsRepository] directly. */
 @HiltViewModel
 class EditorSettingsViewModel @Inject constructor(
     private val editorSettings: EditorSettingsRepository

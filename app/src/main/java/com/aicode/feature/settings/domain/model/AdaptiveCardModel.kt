@@ -1,7 +1,7 @@
 package com.aicode.feature.settings.domain.model
 
 /**
- * 传递给面板脚本的实时上下文环境变量。
+ * Live context environment variables passed to the panel script.
  */
 data class DashboardContext(
     val model: String = "",
@@ -30,7 +30,7 @@ data class DashboardContext(
 )
 
 /**
- * Adaptive Card 根对象。
+ * Adaptive Card root object.
  */
 data class AdaptiveCardRoot(
     val version: String = "1.5",
@@ -39,7 +39,7 @@ data class AdaptiveCardRoot(
 )
 
 /**
- * 语义化颜色定义，支持标准语义色或自定义 16 进制颜色。
+ * Semantic color definition, supporting standard semantic colors or a custom hexadecimal color.
  */
 sealed interface CardColor {
     data object Default : CardColor
@@ -67,7 +67,7 @@ sealed interface CardColor {
 }
 
 /**
- * 容器背景样式。
+ * Container background style.
  */
 enum class ContainerStyle {
     DEFAULT,
@@ -94,7 +94,7 @@ enum class ContainerStyle {
 }
 
 /**
- * 文本字号。
+ * Text size.
  */
 enum class TextSize {
     MICRO,       // 10sp
@@ -119,7 +119,7 @@ enum class TextSize {
 }
 
 /**
- * 文本字重。
+ * Text weight.
  */
 enum class TextWeight {
     LIGHTER,
@@ -138,7 +138,7 @@ enum class TextWeight {
 }
 
 /**
- * 间距尺寸。
+ * Spacing size.
  */
 enum class SpacingSize {
     NONE,
@@ -159,7 +159,7 @@ enum class SpacingSize {
 }
 
 /**
- * 边距定义（dp）。
+ * Padding definition (dp).
  */
 data class CardPadding(
     val top: Int = 0,
@@ -177,7 +177,7 @@ data class CardPadding(
 }
 
 /**
- * 列宽度模式。
+ * Column width mode.
  */
 sealed interface ColumnWidth {
     data object Auto : ColumnWidth
@@ -207,7 +207,7 @@ sealed interface ColumnWidth {
 }
 
 /**
- * 键值对明细项。
+ * Key-value detail item.
  */
 data class FactItem(
     val title: String,
@@ -215,12 +215,12 @@ data class FactItem(
 )
 
 /**
- * Adaptive Card 组件基础接口。
+ * Base interface for Adaptive Card elements.
  */
 sealed interface AdaptiveCardElement
 
 /**
- * 多列网格容器。
+ * Multi-column grid container.
  */
 data class ColumnSetElement(
     val columns: List<ColumnElement> = emptyList(),
@@ -234,7 +234,7 @@ data class ColumnSetElement(
 ) : AdaptiveCardElement
 
 /**
- * 单个列。
+ * A single column.
  */
 data class ColumnElement(
     val width: ColumnWidth = ColumnWidth.Stretch,
@@ -252,7 +252,7 @@ data class ColumnElement(
 ) : AdaptiveCardElement
 
 /**
- * 通用块级容器。
+ * Generic block-level container.
  */
 data class ContainerElement(
     val style: ContainerStyle = ContainerStyle.DEFAULT,
@@ -270,7 +270,7 @@ data class ContainerElement(
 ) : AdaptiveCardElement
 
 /**
- * 单行水平容器（常用于 compact 收起态）。
+ * Single-row horizontal container (often used for the compact collapsed state).
  */
 data class RowElement(
     val spacing: SpacingSize = SpacingSize.SMALL,
@@ -285,7 +285,7 @@ data class RowElement(
 ) : AdaptiveCardElement
 
 /**
- * 文本组件。
+ * Text element.
  */
 data class TextBlockElement(
     val text: String,
@@ -303,7 +303,7 @@ data class TextBlockElement(
 ) : AdaptiveCardElement
 
 /**
- * 进度条组件。
+ * Progress bar element.
  */
 data class ProgressBarElement(
     val value: Float = 0f,
@@ -319,7 +319,7 @@ data class ProgressBarElement(
 ) : AdaptiveCardElement
 
 /**
- * 综合指标块（标题 + 大字数值 + 单位 + 进度条 + 副文本）。
+ * Combined metric block (title + large value + unit + progress bar + subtext).
  */
 data class MetricElement(
     val label: String = "",
@@ -332,7 +332,7 @@ data class MetricElement(
 ) : AdaptiveCardElement
 
 /**
- * 胶囊徽章。
+ * Pill badge.
  */
 data class BadgeElement(
     val text: String,
@@ -341,7 +341,7 @@ data class BadgeElement(
 ) : AdaptiveCardElement
 
 /**
- * 状态小圆点。
+ * Small status dot.
  */
 data class StatusDotElement(
     val color: CardColor = CardColor.Good,
@@ -349,21 +349,21 @@ data class StatusDotElement(
 ) : AdaptiveCardElement
 
 /**
- * 键值对明细列表。
+ * Key-value detail list.
  */
 data class FactSetElement(
     val facts: List<FactItem> = emptyList()
 ) : AdaptiveCardElement
 
 /**
- * 分割线。
+ * Divider.
  */
 data class DividerElement(
     val spacing: SpacingSize = SpacingSize.MEDIUM
 ) : AdaptiveCardElement
 
 /**
- * 显式空白占位元素。
+ * Explicit blank placeholder element.
  */
 data class SpacerElement(
     val heightDp: Int? = null,
@@ -372,7 +372,7 @@ data class SpacerElement(
 ) : AdaptiveCardElement
 
 /**
- * 自动换行流式布局容器。
+ * Wrapping flow layout container.
  */
 data class FlowRowElement(
     val items: List<AdaptiveCardElement> = emptyList(),
@@ -385,7 +385,7 @@ data class FlowRowElement(
 ) : AdaptiveCardElement
 
 /**
- * 横向滚动容器。
+ * Horizontal scrolling container.
  */
 data class ScrollRowElement(
     val items: List<AdaptiveCardElement> = emptyList(),
@@ -397,7 +397,7 @@ data class ScrollRowElement(
 ) : AdaptiveCardElement
 
 /**
- * 图标元素。icon 使用内置图标名称映射。
+ * Icon element. icon uses the built-in icon name mapping.
  */
 data class ImageElement(
     val icon: String? = null,
@@ -408,7 +408,7 @@ data class ImageElement(
 ) : AdaptiveCardElement
 
 /**
- * 单个标签页。
+ * A single tab.
  */
 data class TabElement(
     val label: String,
@@ -419,7 +419,7 @@ data class TabElement(
 ) : AdaptiveCardElement
 
 /**
- * 标签页容器，在有限空间内通过 Tab 切换展示多组内容。
+ * Tab container that shows multiple groups of content in limited space by switching tabs.
  */
 data class TabSetElement(
     val tabs: List<TabElement> = emptyList(),
@@ -434,7 +434,7 @@ data class TabSetElement(
 ) : AdaptiveCardElement
 
 /**
- * 可点击按钮元素，可放在任意容器中。替代旧的根级 actions。
+ * Clickable button element that can be placed in any container. Replaces the old root-level actions.
  */
 data class ActionButtonElement(
     val title: String,
@@ -449,7 +449,7 @@ data class ActionButtonElement(
 ) : AdaptiveCardElement
 
 /**
- * 动作操作。
+ * Action operation.
  */
 sealed interface AdaptiveCardAction {
     val title: String

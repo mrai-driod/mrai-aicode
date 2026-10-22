@@ -7,7 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
-/** Shizuku 执行后端的设置页状态与操作入口。 */
+/** Settings page state and action entry points for the Shizuku execution backend. */
 @HiltViewModel
 class ShizukuViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager
@@ -15,7 +15,7 @@ class ShizukuViewModel @Inject constructor(
 
     val state: StateFlow<ShizukuState> = shizukuManager.state
 
-    /** 重新探测状态（如从 Shizuku 应用返回后）。 */
+    /** Re-probes the state (e.g. after returning from the Shizuku app). */
     fun refresh() = shizukuManager.refreshState()
 
     fun requestPermission() = shizukuManager.requestPermission()

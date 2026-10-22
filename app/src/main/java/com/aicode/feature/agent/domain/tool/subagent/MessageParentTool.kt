@@ -18,10 +18,10 @@ import kotlinx.serialization.json.put
 import javax.inject.Inject
 
 /**
- * 子代理 → 主会话的单向消息工具 `messageParent`。
+ * The one-way sub-agent -> main session message tool `messageParent`.
  *
- * 异步不阻塞：调用即返回，消息由 ViewModel 按主会话状态分发（忙碌时搭车送达，空闲时触发新一轮）。
- * 只在子代理会话中可用——主会话的工具集剔除了它（见 [com.aicode.feature.agent.presentation.AIAgentViewModel]）。
+ * Asynchronous and non-blocking: it returns as soon as it is called; the message is dispatched by the ViewModel according to the main session's state (piggybacked when busy, triggering a new round when idle).
+ * Only available in sub-agent sessions -- the main session's tool set excludes it (see [com.aicode.feature.agent.presentation.AIAgentViewModel]).
  */
 class MessageParentTool @Inject constructor(
     private val sessionUseCase: SessionUseCase,
@@ -66,7 +66,7 @@ class MessageParentTool @Inject constructor(
                 detail = message
             )
         )
-        FileLogger.i(TAG, "子代理向主会话发消息: session=$sessionId parent=$parentSessionId")
+        FileLogger.i(TAG, "Sub-agent sending message to main session: session=$sessionId parent=$parentSessionId")
         return ToolResult.Success(
             buildJsonObject {
                 put("state", "sent")

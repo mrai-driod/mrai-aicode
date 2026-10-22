@@ -5,16 +5,16 @@ import com.aicode.feature.agent.domain.container.BoundedOutput
 import java.util.concurrent.TimeUnit
 
 /**
- * Shizuku UserService：由 Shizuku 在 shell（uid 2000）进程中实例化，代 App 执行 shell 命令。
+ * Shizuku UserService: instantiated by Shizuku in the shell (uid 2000) process, executing shell commands on behalf of the App.
  *
- * 本进程不是合法的 Android 应用进程，只能用 Java/系统级 API，不能用 Context 相关能力
- * （getContentResolver / registerReceiver 等），故实现只用 [ProcessBuilder]。
+ * This process is not a legitimate Android application process; it can only use Java/system-level APIs and cannot use Context-related capabilities
+ * (getContentResolver / registerReceiver, etc.), so the implementation uses only [ProcessBuilder].
  *
- * 类名与构造器会被 Shizuku 反射加载，不可被 R8 混淆（见 proguard-rules.pro）。
+ * The class name and constructor are loaded by Shizuku via reflection and must not be obfuscated by R8 (see proguard-rules.pro).
  */
 class ShizukuShellService : IShizukuShellService.Stub() {
 
-    /** Shizuku 保留的销毁入口：unbindUserService(remove=true) 时触发，结束本进程。 */
+    /** Destruction entry point reserved by Shizuku: triggered on unbindUserService(remove=true), ending this process. */
     override fun destroy() {
         System.exit(0)
     }
@@ -26,8 +26,8 @@ class ShizukuShellService : IShizukuShellService.Stub() {
             process = ProcessBuilder("sh", "-c", command)
                 .redirectErrorStream(true)
                 .start()
-            // 输出读取与等待结束必须并行：管道写满会阻塞子进程，先 waitFor 再读会死锁。
-            // 同时限幅：Binder 事务缓冲上限 1MB，超大输出直接回传会抛 TransactionTooLargeException。
+            // Reading the output and waiting for completion must happen in parallel: a full pipe blocks the child process, so calling waitFor before reading would deadlock.
+            // Also capped: the Binder transaction buffer limit is 1MB, and returning oversized output directly would throw TransactionTooLargeException.
             val output = BoundedOutput()
             val reader = Thread {
                 runCatching {
@@ -46,7 +46,7 @@ class ShizukuShellService : IShizukuShellService.Stub() {
             result.putString(KEY_OUTPUT, output.build())
             result.putInt(KEY_EXIT_CODE, if (finished) process.exitValue() else EXIT_TIMEOUT)
         } catch (e: Exception) {
-            result.putString(KEY_OUTPUT, e.message ?: "执行失败")
+            result.putString(KEY_OUTPUT, e.message ?: "Execution failed")
             result.putInt(KEY_EXIT_CODE, EXIT_FAILURE)
         } finally {
             process?.destroy()
@@ -58,10 +58,10 @@ class ShizukuShellService : IShizukuShellService.Stub() {
         const val KEY_OUTPUT = "output"
         const val KEY_EXIT_CODE = "exitCode"
 
-        /** 命令超时（进程被强杀）时的退出码。 */
+        /** Exit code when a command times out (the process is force-killed). */
         const val EXIT_TIMEOUT = -1000
 
-        /** 启动/读取异常时的退出码。 */
+        /** Exit code on a startup/read exception. */
         const val EXIT_FAILURE = -1
 
         private const val READER_JOIN_TIMEOUT_MS = 2_000L

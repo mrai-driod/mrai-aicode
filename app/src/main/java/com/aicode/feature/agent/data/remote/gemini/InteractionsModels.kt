@@ -1,80 +1,80 @@
 package com.aicode.feature.agent.data.remote.gemini
 
 /**
- * Interactions API（`v1beta/interactions`）的 step `type` 取值。
+ * Values for the step `type` in the Interactions API (`v1beta/interactions`).
  *
- * 与 generateContent 的 `contents[].parts[]` 不同：一轮对话被拆成时间线上的独立 step，
- * 工具调用、思考、模型输出各占一个 step，无状态回放时整条历史就是 step 数组。
+ * Unlike generateContent `contents[].parts[]`: a conversation turn is split into separate steps on a timeline,
+ * with tool calls, thinking and model output each occupying a step; in stateless replay the whole history is the step array.
  */
 object InteractionStep {
-    /** 用户输入，正文在 `content`（Content 数组，也接受纯字符串）。 */
+    /** User input; the body is in `content` (a Content array, a plain string is also accepted). */
     const val USER_INPUT = "user_input"
 
-    /** 模型输出，正文在 `content`（Content 数组）。 */
+    /** Model output; the body is in `content` (a Content array). */
     const val MODEL_OUTPUT = "model_output"
 
     /**
-     * 思考 step：`signature` 是后端校验用的签名，`summary` 是可选的思考摘要（Content 数组）。
-     * 无状态模式下必须原样回传，否则接不上上一轮的推理上下文。
+     * Thought step: `signature` is the signature used for backend validation, `summary` is an optional thinking summary (Content array).
+     * In stateless mode it must be sent back verbatim, otherwise it cannot connect to the reasoning context of the previous turn.
      */
     const val THOUGHT = "thought"
 
-    /** 模型请求调用函数：`id` / `name` / `arguments`（对象，非字符串）。 */
+    /** The model requests a function call: `id` / `name` / `arguments` (an object, not a string). */
     const val FUNCTION_CALL = "function_call"
 
-    /** 函数执行结果：`call_id` 对应调用的 `id`，`result` 是 Content 数组 / 对象 / 字符串。 */
+    /** Function execution result: `call_id` corresponds to the call `id`, `result` is a Content array / object / string. */
     const val FUNCTION_RESULT = "function_result"
 }
 
-/** Interactions 的 Content block `type` 取值。 */
+/** Values for the Content block `type` in Interactions. */
 object InteractionContent {
     const val TEXT = "text"
     const val IMAGE = "image"
 }
 
 /**
- * Interactions 流式 SSE 的事件类型，判别字段是 **`event_type`**（不是 `type`）。
+ * Event types for Interactions streaming SSE; the discriminator field is **`event_type`** (not `type`).
  *
- * 生命周期事件带 `interaction` 对象（含 status / usage），step 事件按 `index` 归组。
- * 流**不发 `[DONE]`**，结束只能看 interaction 的 status 是否已到终态（见 [TERMINAL_STATUSES]）。
+ * Lifecycle events carry an `interaction` object (including status / usage), and step events are grouped by `index`.
+ * The stream **does not send `[DONE]`**; the end can only be determined by whether the interaction status has reached a terminal state (see [TERMINAL_STATUSES]).
  */
 object InteractionEvent {
     const val STEP_START = "step.start"
     const val STEP_DELTA = "step.delta"
     const val STEP_STOP = "step.stop"
 
-    /** 传输层 / 平台错误，自身带 `error: {code, message}`。 */
+    /** Transport-layer / platform error, itself carrying `error: {code, message}`. */
     const val ERROR = "error"
 
-    /** 生命周期事件前缀：created / in_progress / status_update / requires_action / completed 等。 */
+    /** Lifecycle event prefix: created / in_progress / status_update / requires_action / completed, etc. */
     const val LIFECYCLE_PREFIX = "interaction."
 }
 
-/** `step.delta` 里 `delta.type` 的取值。 */
+/** Values for `delta.type` in `step.delta`. */
 object InteractionDelta {
-    /** 正文增量，文本在 `text`。 */
+    /** Body-text delta; the text is in `text`. */
     const val TEXT = "text"
 
-    /** 思考摘要增量：文本在 `content.text`（部分实现直接铺 `text`）。 */
+    /** Thinking summary delta: the text is in `content.text` (some implementations put it directly in `text`). */
     const val THOUGHT_SUMMARY = "thought_summary"
 
-    /** 同上的另一种写法，迁移指南示例用的是这个。 */
+    /** Another spelling of the above; this is the one used in the migration guide examples. */
     const val THOUGHT = "thought"
 
-    /** 思考签名，值在 `signature`；挂在所属 thought step 上。 */
+    /** Thinking signature; the value is in `signature`, attached to the thought step it belongs to. */
     const val THOUGHT_SIGNATURE = "thought_signature"
 
-    /** 工具入参逐字增量，片段在 `arguments`（迁移指南写作 `partial_arguments`）。 */
+    /** Tool argument delta, character by character; the fragment is in `arguments` (the migration guide writes it as `partial_arguments`). */
     const val ARGUMENTS = "arguments_delta"
 
-    /** 同上的另一种写法。 */
+    /** Another spelling of the above. */
     const val ARGUMENTS_LEGACY = "arguments"
 }
 
 /**
- * interaction 的终态。流式下读到任一终态即可停止读流：
- * 有工具待执行时服务端停在 `requires_action`，**不会**再发 `completed`，
- * 只等 `completed` 会一路读到流尾、被误判成断流。
+ * Terminal states of an interaction. When streaming, reading any terminal state is enough to stop reading the stream:
+ * when a tool is waiting to run, the server stops at `requires_action` and will **not** send `completed` afterwards;
+ * waiting only for `completed` would read all the way to the end of the stream and be misjudged as a dropped stream.
  */
 val TERMINAL_STATUSES = setOf(
     "completed",

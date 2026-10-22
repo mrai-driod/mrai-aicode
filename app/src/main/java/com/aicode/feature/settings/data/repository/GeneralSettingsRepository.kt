@@ -16,40 +16,40 @@ import javax.inject.Singleton
 private val Context.generalDataStore by preferencesDataStore(name = "general_prefs")
 
 /**
- * 聊天页「任务待办」区域的显示位置。
+ * Display position of the "Task Todo" area on the chat page.
  *
- * 待办由 AI 通过 TodoTool 维护，UI 上是一个可折叠的轻量条：默认只显示
- * 「x/y 已完成」和当前进行中的任务，点击展开完整列表。本枚举决定它挂在聊天页的哪一处。
+ * Todos are maintained by the AI via TodoTool, and in the UI they appear as a collapsible lightweight bar: by default it only shows
+ * "x/y completed" and the currently in-progress task; tap to expand the full list. This enum decides where on the chat page it is attached.
  */
 enum class TodoDisplayPosition {
-    /** 标题栏下方：紧贴顶部悬浮标题栏之下，进入消息流之前占一行高度。 */
+    /** Below the title bar: directly under the floating title bar at the top, occupying one row of height before entering the message flow. */
     BELOW_TITLE_BAR,
 
-    /** 消息栏上方：紧贴底部输入区之上（改造前既有行为，默认保持）。 */
+    /** Above the message bar: directly above the input area at the bottom (the pre-rework existing behaviour, kept as the default). */
     ABOVE_INPUT_BAR,
 
-    /** 关闭：不在聊天页渲染待办区域（仍可在会话内被 AI 维护，仅不展示）。 */
+    /** Off: the todo area is not rendered on the chat page (it can still be maintained by the AI within the session, just not shown). */
     OFF
 }
 
-/** App 启动（含切换工作区）时进入哪个会话。 */
+/** Which session to enter when the app starts (including when switching workspaces). */
 enum class StartupSessionMode {
-    /** 新开会话：复用当前工作区里还没发过消息的空会话，否则新建。 */
+    /** New session: reuse an empty session in the current workspace that has not sent any messages yet, otherwise create a new one. */
     NEW_SESSION,
 
-    /** 打开最近会话：直接进入最近更新的会话，该工作区还没有会话时才新建。 */
+    /** Open recent session: go directly to the most recently updated session; create a new one only when this workspace has no session yet. */
     RECENT_SESSION
 }
 
 /**
- * 「偏好设置」里的用户偏好。
+ * User preferences in "Preferences".
  *
- * 目前八项：拉取模型成功后是否自动移除远端已不存在的本地模型（默认开启）、
- * 启动时进入新会话还是最近会话（默认新开会话）、首字 / 数据块间隔超时（秒）、
- * 网络请求的最大重试次数（默认 6）、回车发送、自动压缩阈值、
- * sendFile 单个文件大小上限（默认 100MB），
- * 以及移除外部本地工作区时是否一并删除其聊天记录（默认关闭）。
- * DataStore 用法与 [KeepaliveSettingsRepository] 一致。
+ * Currently eight items: whether to automatically remove local models that no longer exist remotely after a successful model fetch (enabled by default),
+ * whether to enter a new session or the recent session at startup (defaults to a new session), the first-byte / chunk-gap timeouts (seconds),
+ * the maximum number of retries for network requests (default 6), enter-to-send, the auto-compaction threshold,
+ * the sendFile per-file size limit (default 100MB),
+ * and whether removing an external local workspace also deletes its chat history (disabled by default).
+ * DataStore usage is consistent with [KeepaliveSettingsRepository].
  */
 @Singleton
 class GeneralSettingsRepository @Inject constructor(
@@ -66,23 +66,23 @@ class GeneralSettingsRepository @Inject constructor(
         val SENDFILE_MAX_SIZE_MB_KEY = intPreferencesKey("sendfile_max_size_mb")
         val DELETE_EXTERNAL_WORKSPACE_SESSIONS_KEY = booleanPreferencesKey("delete_external_workspace_sessions")
         val TODO_DISPLAY_POSITION_KEY = stringPreferencesKey("todo_display_position")
-        /** 「提示词」页使用说明公告已展示内容的哈希；无值或与当前内容哈希不一致时重新弹出。 */
+        /** Hash of the shown content of the usage-notes announcement on the "Prompts" page; shown again when there is no value or it does not match the current content hash. */
         val PROMPTS_ANNOUNCEMENT_SHOWN_HASH_KEY = stringPreferencesKey("prompts_announcement_shown_hash")
 
-        /** 首字超时默认 5 分钟，与原硬编码值一致。 */
+        /** First-byte timeout defaults to 5 minutes, matching the original hard-coded value. */
         const val DEFAULT_FIRST_BYTE_TIMEOUT_SEC = 300
 
-        /** 网络重试次数默认 6，与原硬编码值一致。 */
+        /** Network retry count defaults to 6, matching the original hard-coded value. */
         const val DEFAULT_MAX_NETWORK_RETRIES = 6
 
-        /** 自动压缩阈值默认 90%，与原硬编码值一致。 */
+        /** Auto-compaction threshold defaults to 90%, matching the original hard-coded value. */
         const val DEFAULT_COMPACTION_THRESHOLD_PERCENT = 90
 
-        /** sendFile 单个文件大小上限默认 100MB，与原硬编码值一致。 */
+        /** sendFile per-file size limit defaults to 100MB, matching the original hard-coded value. */
         const val DEFAULT_SENDFILE_MAX_SIZE_MB = 100
     }
 
-    /** 拉取模型后自动对齐本地列表的开关流；未设置时回退到 true（默认开启）。 */
+    /** Flow for the switch that automatically aligns the local list after fetching models; falls back to true (enabled by default) when not set. */
     val autoRemoveStaleModelsFlow: Flow<Boolean> =
         context.generalDataStore.data.map { it[AUTO_REMOVE_STALE_MODELS_KEY] ?: true }
 
@@ -90,7 +90,7 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[AUTO_REMOVE_STALE_MODELS_KEY] = enabled }
     }
 
-    /** 启动时会话偏好流；未设置或值无法识别时回退到 [StartupSessionMode.NEW_SESSION]。 */
+    /** Startup session preference flow; falls back to [StartupSessionMode.NEW_SESSION] when not set or the value is unrecognised. */
     val startupSessionModeFlow: Flow<StartupSessionMode> = context.generalDataStore.data.map { prefs ->
         when (prefs[STARTUP_SESSION_MODE_KEY]) {
             StartupSessionMode.RECENT_SESSION.name -> StartupSessionMode.RECENT_SESSION
@@ -102,31 +102,31 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[STARTUP_SESSION_MODE_KEY] = mode.name }
     }
 
-    /** 切换到工作区前读一次偏好，避免在会话初始化路径上多开一条收集流。 */
+    /** Read the preference once before switching to a workspace, to avoid opening an extra collection flow on the session initialisation path. */
     suspend fun startupSessionMode(): StartupSessionMode = startupSessionModeFlow.first()
 
-    /** 备份快照：当前自动对齐开关。 */
+    /** Backup snapshot: the current auto-align switch. */
     suspend fun autoRemoveStaleModelsSnapshot(): Boolean = autoRemoveStaleModelsFlow.first()
 
-    /** 备份快照：当前启动时会话偏好名。 */
+    /** Backup snapshot: the current startup session preference name. */
     suspend fun startupSessionModeSnapshot(): String = startupSessionModeFlow.first().name
 
-    /** 从备份还原自动对齐开关。 */
+    /** Restore the auto-align switch from a backup. */
     suspend fun restoreAutoRemoveStaleModels(enabled: Boolean) = setAutoRemoveStaleModels(enabled)
 
-    /** 从备份还原启动时会话偏好；旧备份无此字段（null）或值无法识别时回退新开会话。 */
+    /** Restore the startup session preference from a backup; falls back to a new session when an old backup has no such field (null) or the value is unrecognised. */
     suspend fun restoreStartupSessionMode(mode: String?) {
         setStartupSessionMode(
             StartupSessionMode.entries.firstOrNull { it.name == mode } ?: StartupSessionMode.NEW_SESSION
         )
     }
 
-    /** 首字超时（秒）；0 表示不限制，未设置时回退到 300 秒。 */
+    /** First-byte timeout (seconds); 0 means no limit, falls back to 300 seconds when not set. */
     val firstByteTimeoutSecFlow: Flow<Int> = context.generalDataStore.data.map {
         (it[FIRST_BYTE_TIMEOUT_SEC_KEY] ?: DEFAULT_FIRST_BYTE_TIMEOUT_SEC).coerceAtLeast(0)
     }
 
-    /** 流式响应相邻数据块间隔超时（秒）；0（默认）表示不限制。 */
+    /** Timeout between adjacent chunks of a streaming response (seconds); 0 (default) means no limit. */
     val streamIdleTimeoutSecFlow: Flow<Int> = context.generalDataStore.data.map {
         (it[STREAM_IDLE_TIMEOUT_SEC_KEY] ?: 0).coerceAtLeast(0)
     }
@@ -139,13 +139,13 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[STREAM_IDLE_TIMEOUT_SEC_KEY] = sec.coerceAtLeast(0) }
     }
 
-    /** 装配 provider 前读取一次首字超时（毫秒）；0 表示不限制。 */
+    /** Read the first-byte timeout once before assembling the provider (milliseconds); 0 means no limit. */
     suspend fun firstByteTimeoutMs(): Long = firstByteTimeoutSecFlow.first() * 1000L
 
-    /** 装配 provider 前读取一次数据块间隔超时（毫秒）；0 表示不限制。 */
+    /** Read the chunk-gap timeout once before assembling the provider (milliseconds); 0 means no limit. */
     suspend fun streamIdleTimeoutMs(): Long = streamIdleTimeoutSecFlow.first() * 1000L
 
-    /** 备份快照：两个超时设置（秒）。 */
+    /** Backup snapshot: the two timeout settings (seconds). */
     suspend fun firstByteTimeoutSecSnapshot(): Int = firstByteTimeoutSecFlow.first()
 
     suspend fun streamIdleTimeoutSecSnapshot(): Int = streamIdleTimeoutSecFlow.first()
@@ -154,7 +154,7 @@ class GeneralSettingsRepository @Inject constructor(
 
     suspend fun restoreStreamIdleTimeoutSec(sec: Int) = setStreamIdleTimeoutSec(sec)
 
-    /** 网络请求最大重试次数（不含首次请求）；0 表示不重试，未设置时回退到 6。 */
+    /** Maximum number of retries for network requests (excluding the first request); 0 means no retries, falls back to 6 when not set. */
     val maxNetworkRetriesFlow: Flow<Int> = context.generalDataStore.data.map {
         (it[MAX_NETWORK_RETRIES_KEY] ?: DEFAULT_MAX_NETWORK_RETRIES).coerceAtLeast(0)
     }
@@ -163,15 +163,15 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[MAX_NETWORK_RETRIES_KEY] = count.coerceAtLeast(0) }
     }
 
-    /** 装配 provider 前读取一次最大重试次数。 */
+    /** Read the maximum retry count once before assembling the provider. */
     suspend fun maxNetworkRetries(): Int = maxNetworkRetriesFlow.first()
 
-    /** 备份快照：最大重试次数。 */
+    /** Backup snapshot: the maximum retry count. */
     suspend fun maxNetworkRetriesSnapshot(): Int = maxNetworkRetriesFlow.first()
 
     suspend fun restoreMaxNetworkRetries(count: Int) = setMaxNetworkRetries(count)
 
-    /** 回车键是否直接发送消息；默认关闭（回车换行，由发送按钮发送）。 */
+    /** Whether the Enter key sends a message directly; disabled by default (Enter inserts a newline, sending is done via the send button). */
     val enterToSendFlow: Flow<Boolean> =
         context.generalDataStore.data.map { it[ENTER_TO_SEND_KEY] ?: false }
 
@@ -179,7 +179,7 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[ENTER_TO_SEND_KEY] = enabled }
     }
 
-    /** 自动压缩触发阈值（上下文窗口的百分比）；默认 90，限定 1..100。 */
+    /** Auto-compaction trigger threshold (percentage of the context window); defaults to 90, clamped to 1..100. */
     val compactionThresholdPercentFlow: Flow<Int> = context.generalDataStore.data.map {
         (it[COMPACTION_THRESHOLD_PERCENT_KEY] ?: DEFAULT_COMPACTION_THRESHOLD_PERCENT).coerceIn(1, 100)
     }
@@ -188,10 +188,10 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[COMPACTION_THRESHOLD_PERCENT_KEY] = percent.coerceIn(1, 100) }
     }
 
-    /** 压缩前读取一次触发阈值百分比。 */
+    /** Read the trigger threshold percentage once before compaction. */
     suspend fun compactionThresholdPercent(): Int = compactionThresholdPercentFlow.first()
 
-    /** 备份快照：回车发送开关与压缩阈值。 */
+    /** Backup snapshot: the enter-to-send switch and the compaction threshold. */
     suspend fun enterToSendSnapshot(): Boolean = enterToSendFlow.first()
 
     suspend fun compactionThresholdPercentSnapshot(): Int = compactionThresholdPercentFlow.first()
@@ -200,7 +200,7 @@ class GeneralSettingsRepository @Inject constructor(
 
     suspend fun restoreCompactionThresholdPercent(percent: Int) = setCompactionThresholdPercent(percent)
 
-    /** sendFile 单个文件大小上限（MB）；默认 100，下限 1，不设上限。 */
+    /** sendFile per-file size limit (MB); defaults to 100, minimum 1, no upper limit. */
     val sendFileMaxSizeMbFlow: Flow<Int> = context.generalDataStore.data.map {
         (it[SENDFILE_MAX_SIZE_MB_KEY] ?: DEFAULT_SENDFILE_MAX_SIZE_MB).coerceAtLeast(1)
     }
@@ -209,15 +209,15 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[SENDFILE_MAX_SIZE_MB_KEY] = mb.coerceAtLeast(1) }
     }
 
-    /** 执行 sendFile 前读取一次单个文件大小上限（MB）。 */
+    /** Read the per-file size limit once before executing sendFile (MB). */
     suspend fun sendFileMaxSizeMb(): Int = sendFileMaxSizeMbFlow.first()
 
-    /** 备份快照：sendFile 单个文件大小上限。 */
+    /** Backup snapshot: the sendFile per-file size limit. */
     suspend fun sendFileMaxSizeMbSnapshot(): Int = sendFileMaxSizeMbFlow.first()
 
     suspend fun restoreSendFileMaxSizeMb(mb: Int) = setSendFileMaxSizeMb(mb)
 
-    /** 移除外部本地工作区时是否一并删除其聊天记录；默认关闭（仅解除关联、保留聊天记录）。 */
+    /** Whether removing an external local workspace also deletes its chat history; disabled by default (only unlinks it, keeping the chat history). */
     val deleteExternalWorkspaceSessionsFlow: Flow<Boolean> =
         context.generalDataStore.data.map { it[DELETE_EXTERNAL_WORKSPACE_SESSIONS_KEY] ?: false }
 
@@ -225,12 +225,12 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[DELETE_EXTERNAL_WORKSPACE_SESSIONS_KEY] = enabled }
     }
 
-    /** 移除外部工作区前读取一次该偏好。 */
+    /** Read this preference once before removing an external workspace. */
     suspend fun deleteExternalWorkspaceSessions(): Boolean = deleteExternalWorkspaceSessionsFlow.first()
 
     /**
-     * 任务待办显示位置；未设置或值无法识别时回退到 [TodoDisplayPosition.ABOVE_INPUT_BAR]，
-     * 即改造前的既有位置（输入栏上方），保证老用户升级后行为不变。
+     * Task todo display position; falls back to [TodoDisplayPosition.ABOVE_INPUT_BAR] when not set or the value is unrecognised,
+     * i.e. the pre-rework existing position (above the input bar), so existing users see no behaviour change after upgrading.
      */
     val todoDisplayPositionFlow: Flow<TodoDisplayPosition> = context.generalDataStore.data.map { prefs ->
         TodoDisplayPosition.entries.firstOrNull { it.name == prefs[TODO_DISPLAY_POSITION_KEY] }
@@ -241,10 +241,10 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[TODO_DISPLAY_POSITION_KEY] = position.name }
     }
 
-    /** 备份快照：任务待办显示位置名。 */
+    /** Backup snapshot: the task todo display position name. */
     suspend fun todoDisplayPositionSnapshot(): String = todoDisplayPositionFlow.first().name
 
-    /** 从备份还原任务待办显示位置；旧备份无此字段（null）或值无法识别时回退输入栏上方。 */
+    /** Restore the task todo display position from a backup; falls back to above the input bar when an old backup has no such field (null) or the value is unrecognised. */
     suspend fun restoreTodoDisplayPosition(position: String?) {
         setTodoDisplayPosition(
             TodoDisplayPosition.entries.firstOrNull { it.name == position }
@@ -252,7 +252,7 @@ class GeneralSettingsRepository @Inject constructor(
         )
     }
 
-    /** 「提示词」页公告已展示内容的哈希；无值表示从未展示过。 */
+    /** "Prompts" page announcement shown-content hash; no value means it has never been shown. */
     val promptsAnnouncementShownHashFlow: Flow<String?> = context.generalDataStore.data.map { prefs ->
         prefs[PROMPTS_ANNOUNCEMENT_SHOWN_HASH_KEY]
     }
@@ -261,7 +261,7 @@ class GeneralSettingsRepository @Inject constructor(
         context.generalDataStore.edit { it[PROMPTS_ANNOUNCEMENT_SHOWN_HASH_KEY] = hash }
     }
 
-    /** 备份快照：外部工作区聊天记录处理偏好。 */
+    /** Backup snapshot: the external workspace chat history handling preference. */
     suspend fun deleteExternalWorkspaceSessionsSnapshot(): Boolean = deleteExternalWorkspaceSessionsFlow.first()
 
     suspend fun restoreDeleteExternalWorkspaceSessions(enabled: Boolean) = setDeleteExternalWorkspaceSessions(enabled)

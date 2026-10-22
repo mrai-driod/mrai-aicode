@@ -8,15 +8,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import org.json.JSONObject
 
-/** 更新通道：稳定版（仅正式版）/ 最新版（含预览版）。 */
+/** Update channel: Stable (official releases only) / Latest (including preview releases). */
 enum class UpdateChannel {
     STABLE, LATEST
 }
 
 /**
- * 「自动检查更新」偏好存储：开关、更新通道、上次检测日期统一存 SharedPreferences
- * （键值文件，非数据库）。上次检测日期不写数据库，但也不放 cacheDir——缓存目录可能被
- * 系统清理导致「每天一次」失效，持久化到 SharedPreferences 更可靠。
+ * "Automatic update check" preference storage: the toggle, update channel, and last check date are all stored in SharedPreferences
+ * (a key-value file, not a database). The last check date is not written to the database, but is also not placed in cacheDir -- the cache directory may be
+ * cleared by the system, which would break the "once a day" behavior, so persisting to SharedPreferences is more reliable.
  */
 @Singleton
 class UpdateCheckSettingsRepository @Inject constructor(
@@ -24,14 +24,14 @@ class UpdateCheckSettingsRepository @Inject constructor(
 ) {
     private val prefs = context.getSharedPreferences("update_check_prefs", Context.MODE_PRIVATE)
 
-    /** 自动检查更新开关，默认开启。 */
+    /** Automatic update check toggle, enabled by default. */
     var autoCheckEnabled: Boolean
         get() = prefs.getBoolean(KEY_ENABLED, true)
         set(value) {
             prefs.edit().putBoolean(KEY_ENABLED, value).apply()
         }
 
-    /** 更新通道，默认稳定版。 */
+    /** Update channel, defaults to Stable. */
     var channel: UpdateChannel
         get() = prefs.getString(KEY_CHANNEL, null)
             ?.let { runCatching { UpdateChannel.valueOf(it) }.getOrNull() }
@@ -40,18 +40,18 @@ class UpdateCheckSettingsRepository @Inject constructor(
             prefs.edit().putString(KEY_CHANNEL, value.name).apply()
         }
 
-    /** 今天是否已检测过（按记录日期判断）。 */
+    /** Whether an update check has already been done today (judged by the recorded date). */
     fun hasCheckedToday(): Boolean = prefs.getString(KEY_LAST_CHECKED, null) == today()
 
-    /** 记录今天已检测。 */
+    /** Records that an update check has been done today. */
     fun markCheckedToday() {
         prefs.edit().putString(KEY_LAST_CHECKED, today()).apply()
     }
 
     /**
-     * 把版本与更新信息写入 `~/.aicode/update-info.json`（宿主 filesDir/aicode/），
-     * 供容器内 AI 读取（当前版本、更新通道、最近检查时间、最新版本与逐版本更新日志）。
-     * 写入失败静默，不影响检测流程。
+     * Writes version and update information to `~/.aicode/update-info.json` (host filesDir/aicode/),
+     * for the AI inside the container to read (current version, update channel, last check time, latest version, and per-version changelogs).
+     * Write failures are silent and do not affect the check flow.
      */
     fun writeUpdateInfo(currentVersion: String, channel: UpdateChannel, result: UpdateCheckResult) {
         runCatching {

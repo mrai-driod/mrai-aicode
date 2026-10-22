@@ -24,10 +24,10 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.Check
 
 /**
- * 下载源选择底部弹窗：列出目录 JSON 里定义的所有源（官方/华为云/阿里云/腾讯云等），
- * 显示名由调用方按界面语言从 JSON 读取后传入，选中项高亮勾选。
+ * Download source selection bottom sheet: lists every source defined in the catalogue JSON (official/Huawei Cloud/Alibaba Cloud/Tencent Cloud, etc.),
+ * display names are read from the JSON by the caller in the UI language and passed in; the selected item is highlighted with a check.
  *
- * @param options 源 id → 显示名，保持目录 JSON 里的顺序。
+ * @param options source id → display name, in the order they appear in the catalogue JSON.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

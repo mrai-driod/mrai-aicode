@@ -10,11 +10,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 一次性把旧 Room `git_credentials` 表迁移到凭据文件，然后删表。
+ * One-time migration of the old Room `git_credentials` table to the credential file, then drops the table.
  *
- * 背景：凭证真源从 Room 迁到 `git-credentials` 文件（每主机一条）。Room 实体从 [AgentDatabase] 移除后
- * 旧表仍残留在数据库文件里（Room 不会自动删未管理表），由本类在 App 启动时读取 → 写入文件 → DROP。
- * 表不存在或已迁移过时直接跳过（幂等）。
+ * Background: the credential source of truth moved from Room to the `git-credentials` file (one per host). After the Room entity was removed from [AgentDatabase]
+ * the old table still remains in the database file (Room does not automatically drop unmanaged tables), so this class reads it at app startup → writes the file → DROPs it.
+ * If the table does not exist or was already migrated, it skips directly (idempotent).
  */
 @Singleton
 class LegacyCredentialMigrator @Inject constructor(
@@ -26,11 +26,11 @@ class LegacyCredentialMigrator @Inject constructor(
         const val TABLE = "git_credentials"
     }
 
-    /** 读旧表（每 host 取默认/首条）写入凭据文件后删表。可重复调用，表不存在/已删时幂等跳过。 */
+    /** Read the old table (for each host take the default / first entry), write it to the credential file, then drop the table. Safe to call repeatedly; idempotently skips when the table does not exist / was already dropped. */
     suspend fun migrateIfNeeded() = withContext(Dispatchers.IO) {
         try {
             val db = database.openHelper.writableDatabase
-            // SupportSQLiteDatabase 无 rawQuery，用 query 执行原生 SQL；返回的 Cursor 非 AutoCloseable，手动 close。
+            // SupportSQLiteDatabase has no rawQuery, so use query to run raw SQL; the returned Cursor is not AutoCloseable, so close it manually.
             var hasTable = false
             val tableCursor = db.query(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='$TABLE'", emptyArray()
@@ -51,7 +51,7 @@ class LegacyCredentialMigrator @Inject constructor(
                     val username = rowsCursor.getString(1) ?: continue
                     val token = rowsCursor.getString(2) ?: continue
                     if (host.isBlank() || username.isBlank()) continue
-                    // 每 host 只取第一条（默认优先，因 ORDER BY isDefault DESC）
+                    // Take only the first entry per host (default first, because of ORDER BY isDefault DESC)
                     if (rows.any { it.host == host }) continue
                     rows.add(GitCredential(id = host, host = host, username = username, token = token))
                 }
@@ -60,12 +60,12 @@ class LegacyCredentialMigrator @Inject constructor(
             }
             if (rows.isNotEmpty()) {
                 rows.forEach { fileCredentialRepository.save(it) }
-                FileLogger.i(TAG, "已从旧表迁移 ${rows.size} 条 git 凭据到文件")
+                FileLogger.i(TAG, "Migrated ${rows.size} git credentials from the old table to file")
             }
             db.execSQL("DROP TABLE IF EXISTS $TABLE")
-            FileLogger.i(TAG, "已删除旧表 $TABLE")
+            FileLogger.i(TAG, "Deleted old table $TABLE")
         } catch (e: Exception) {
-            FileLogger.w(TAG, "迁移旧 git 凭据失败（可忽略，文件为空时用户重录）: ${e.message}")
+            FileLogger.w(TAG, "Failed to migrate old git credentials (can be ignored, the user re-enters them when the file is empty): ${e.message}")
         }
     }
 }

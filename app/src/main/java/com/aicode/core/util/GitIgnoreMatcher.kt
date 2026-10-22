@@ -1,28 +1,28 @@
 package com.aicode.core.util
 
 /**
- * gitignore 风格路径匹配（适度实现，不做完整规范解析）：
- * - `*.ext`：匹配任意层级同名扩展名的文件/目录；
- * - `**` 通配前缀：任意层级开始；
- * - 多段模式（如 `build/*.log`）：在路径段序列的任意位置匹配；
- * - 前导 `/` 锚定：[anchored] 为 true 且无 `**/` 前缀时，模式必须从根路径段开始匹配；
- *   为 false 时保守地按非锚定处理（宁可多忽略，不因解析失败漏忽略）。
- * 匹配基于完整路径段序列，调用方需传入相对工作区根的路径段。
+ * Gitignore-style path matching (a moderate implementation, not a full spec parser):
+ * - `*.ext`:matches files/directories with the same extension at any level;
+ * - `**` wildcard prefix: starts at any level;
+ * - multi-segment patterns (such as `build/*.log`): match at any position in the path-segment sequence;
+ * - Leading `/` anchoring: when [anchored] is true and there is no `**/` prefix, the pattern must match starting from the root path segment;
+ *   when false, it is conservatively treated as unanchored (prefer over-ignoring rather than missing an ignore due to a parse failure).
+ * Matching is based on the full path-segment sequence; callers must pass path segments relative to the workspace root.
  */
 object GitIgnoreMatcher {
 
-    /** 任一模式命中即忽略。 */
+    /** Ignored if any pattern matches. */
     fun isIgnored(patterns: List<String>, parts: List<String>, anchored: Boolean = false): Boolean =
         patterns.any { matches(it, parts, anchored) }
 
     fun matches(pattern: String, parts: List<String>, anchored: Boolean = false): Boolean {
         var p = pattern.trim().trimEnd('/').trimStart('/')
         if (p.isEmpty()) return false
-        // 双星通配前缀：任意层级开始（此时忽略 anchored，`**/` 本身就是非锚定语义）
+        // Double-star wildcard prefix: starts at any level (anchored is ignored here, `**/` itself has unanchored semantics)
         val recursive = p.startsWith("**/")
         if (recursive) p = p.removePrefix("**/")
         if (p.isEmpty()) return false
-        // *.ext 文件模式：匹配任意层级的文件名
+        // *.ext file pattern: matches a file name at any level
         if (p.startsWith("*.") && '/' !in p) {
             val ext = p.removePrefix("*.")
             return parts.any { it.endsWith(ext) }
@@ -35,12 +35,12 @@ object GitIgnoreMatcher {
         }
     }
 
-    /** 单段匹配：`**` 与 `*` 通配段、精确段。 */
+    /** Single-segment matching: `**` and `*` wildcard segments, and exact segments. */
     private fun segMatch(pattern: String, segment: String): Boolean {
         if (pattern == "**") return true
         if ('*' !in pattern) return pattern == segment
-        // 手写转义：正则特殊字符加反斜杠，`*` 直接展开为 `.*`。
-        // （Regex.escape 在 Kotlin 2.x 返回 \Q...\E 字面量形式，无法再通过 replace 展开通配符）
+        // Manual escaping: regex special characters get a backslash, `*` expands directly to `.*`.
+        // (Regex.escape in Kotlin 2.x returns the \Q...\E literal form, so wildcards can no longer be expanded via replace)
         val escaped = buildString {
             for (ch in pattern) {
                 if (ch == '*') append(".*")

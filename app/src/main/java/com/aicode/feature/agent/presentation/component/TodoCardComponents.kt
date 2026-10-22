@@ -46,7 +46,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import androidx.compose.ui.res.stringResource
 import com.aicode.R
 
-/** 解析后的待办列表快照 */
+/** Parsed to-do list snapshot */
 internal data class ParsedTodoResult(
     val total: Int,
     val completed: Int,
@@ -62,10 +62,10 @@ internal data class ParsedTodoItem(
     val order: Int
 )
 
-/** 从工具结果的 JSON 文本中解析出待办列表 */
+/** Parse the to-do list out of a tool result's JSON text */
 internal fun parseTodoResult(content: String): ParsedTodoResult? {
     return try {
-        // 先剥掉 Success(data=...) / Error(...) 外壳
+        // First strip the Success(data=...) / Error(...) wrapper
         val s = content.withoutToolStatusPrefix()
         val jsonStr = when {
             s.startsWith("{") -> {
@@ -103,12 +103,12 @@ internal fun parseTodoResult(content: String): ParsedTodoResult? {
         }.sortedBy { it.order }
         ParsedTodoResult(total = total, completed = completed, items = items)
     } catch (_: Exception) {
-        // 解析失败时静默返回 null，UI 会 fallback 到普通文本
+        // On parse failure, silently return null and the UI falls back to plain text
         null
     }
 }
 
-/** 待办列表结构化卡片 */
+/** Structured to-do list card */
 @Composable
 internal fun TodoCard(items: List<ParsedTodoItem>) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -121,7 +121,7 @@ internal fun TodoCard(items: List<ParsedTodoItem>) {
     }
 }
 
-/** 单条待办项行：状态图标 + 标题 + 状态标签 */
+/** A single to-do item row: status icon + title + status label */
 @Composable
 internal fun TodoItemRow(item: ParsedTodoItem) {
     val isCompleted = item.status == "completed"
@@ -131,7 +131,7 @@ internal fun TodoItemRow(item: ParsedTodoItem) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 状态图标
+        // Status icon
         when {
             isCompleted -> {
                 Icon(

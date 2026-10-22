@@ -25,11 +25,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * 终端页的薄观察层。
+ * Thin observation layer for the terminal page.
  *
- * 会话的所有权在 [TerminalSessionManager]（Singleton），本 ViewModel 只转发 UI 操作并暴露其状态流，
- * **不持有也不销毁任何会话**——这正是「常驻后台」的关键：离开终端页导致本 VM onCleared 时，
- * 会话仍由管理器持有、继续在后台运行，下次回到终端页直接复用。
+ * Session ownership lies with [TerminalSessionManager] (Singleton); this ViewModel only forwards UI operations and exposes its state flows,
+ * **holds and destroys no sessions** — this is the key to "always resident in the background": when leaving the terminal page causes this VM's onCleared,
+ * sessions are still held by the manager and keep running in the background, and are reused directly next time the terminal page is opened.
  */
 @HiltViewModel
 class TerminalViewModel @Inject constructor(
@@ -45,10 +45,10 @@ class TerminalViewModel @Inject constructor(
 
     private fun isRemote() = modeHolder.currentMode() == ExecutionMode.REMOTE_SSH
 
-    /** 当前是否远程 SSH 模式（UI 据此隐藏本地容器专属入口，如环境工具）。 */
+    /** Whether currently in remote SSH mode (the UI uses this to hide local-container-only entry points, such as environment tools). */
     val isRemoteMode: Boolean get() = isRemote()
 
-    /** 容器准备阶段的整体状态：仅用于首个标签创建前的 Loading/Error 提示。 */
+    /** Overall state of the container preparation phase: only used for Loading/Error prompts before the first tab is created. */
     sealed interface PrepareState {
         data object Loading : PrepareState
         data object Ready : PrepareState
@@ -58,18 +58,18 @@ class TerminalViewModel @Inject constructor(
     private val _prepareState = MutableStateFlow<PrepareState>(PrepareState.Loading)
     val prepareState: StateFlow<PrepareState> = _prepareState.asStateFlow()
 
-    /** 正在新建标签：SSH 模式下建立 shell channel 需等服务器响应，UI 据此显示等待动画并拦截重复点击。 */
+    /** A new tab is being created: in SSH mode establishing a shell channel must wait for the server response, so the UI uses this to show a waiting animation and block duplicate taps. */
     private val _creatingTab = MutableStateFlow(false)
     val creatingTab: StateFlow<Boolean> = _creatingTab.asStateFlow()
 
-    /** 容器初始化实时进度（解压/部署/装包），Loading 阶段用它展示细粒度文案。 */
+    /** Real-time container initialization progress (extracting/deploying/installing packages); the Loading phase uses it to show fine-grained text. */
     val containerInit: StateFlow<ContainerInitState> = containerEngine.initProgress
 
     val tabs get() = if (isRemote()) remoteManager.tabs else localManager.tabs
     val activeTabId get() = if (isRemote()) remoteManager.activeTabId else localManager.activeTabId
     val revision get() = if (isRemote()) remoteManager.revision else localManager.revision
 
-    /** 额外按键行驱动的虚拟修饰键，供 TerminalView 读取。 */
+    /** Virtual modifier keys driven by the extra keys row, for TerminalView to read. */
     val modifiers = TerminalKeyModifiers()
 
     val terminalSettings: StateFlow<TerminalSettings> = terminalSettingsRepository.settingsFlow
@@ -95,7 +95,7 @@ class TerminalViewModel @Inject constructor(
         prepare()
     }
 
-    /** 进入终端页：确保至少有一个标签（首次会解压容器或连 SSH）。 */
+    /** Enter the terminal page: ensure at least one tab exists (on first entry this extracts the container or connects SSH). */
     fun prepare() {
         viewModelScope.launch {
             _prepareState.value = PrepareState.Loading
@@ -103,7 +103,7 @@ class TerminalViewModel @Inject constructor(
                 if (isRemote()) remoteManager.ensureInitialTab() else localManager.ensureInitialTab()
                 _prepareState.value = PrepareState.Ready
             } catch (e: Exception) {
-                FileLogger.e(TAG, "终端准备失败", e)
+                FileLogger.e(TAG, "Terminal preparation failed", e)
                 _prepareState.value = PrepareState.Error(e.message ?: context.getString(R.string.terminal_prepare_error_unknown))
             }
         }
@@ -116,7 +116,7 @@ class TerminalViewModel @Inject constructor(
             try {
                 if (isRemote()) remoteManager.createInteractiveTab() else localManager.createInteractiveTab()
             } catch (e: Exception) {
-                FileLogger.e(TAG, "新建标签失败", e)
+                FileLogger.e(TAG, "Failed to create new tab", e)
             } finally {
                 _creatingTab.value = false
             }
@@ -127,16 +127,16 @@ class TerminalViewModel @Inject constructor(
 
     fun closeTab(id: String) = if (isRemote()) remoteManager.closeTab(id) else localManager.closeTab(id)
 
-    /** 关闭所有终端标签（切换工作区前调用）。 */
+    /** Close all terminal tabs (called before switching workspaces). */
     fun closeAllTabs() {
         (if (isRemote()) remoteManager.tabs else localManager.tabs).value.map { it.id }.forEach { closeTab(it) }
     }
 
-    /** 向当前活动标签写入文本（额外按键行：方向键/Tab 等）。 */
+    /** Writes text to the current active tab (extra keys row: arrow keys/Tab, etc.). */
     fun write(text: String) = if (isRemote()) remoteManager.writeToActive(text) else localManager.writeToActive(text)
 
-    /** 向当前活动标签写入原始字节（发送控制字符，如 Ctrl-C=0x03、Ctrl-D=0x04）。 */
+    /** Writes raw bytes to the current active tab (sends control characters, e.g. Ctrl-C=0x03, Ctrl-D=0x04). */
     fun writeBytes(vararg bytes: Int) = if (isRemote()) remoteManager.writeBytesToActive(*bytes) else localManager.writeBytesToActive(*bytes)
 
-    // 注意：故意不在 onCleared 里销毁会话——会话归 Singleton 管理器所有，需常驻后台。
+    // Note: deliberately do not destroy sessions in onCleared — sessions are owned by the Singleton manager and must stay resident in the background.
 }

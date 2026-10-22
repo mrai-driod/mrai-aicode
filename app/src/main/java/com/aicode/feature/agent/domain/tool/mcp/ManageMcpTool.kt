@@ -178,7 +178,7 @@ class ManageMcpTool @Inject constructor(
                 else -> ToolResult.Error("Unknown action: $action")
             }
         } catch (e: Exception) {
-            FileLogger.e(TAG, "manage_mcp 执行失败: ${e.message}", e)
+            FileLogger.e(TAG, "manage_mcp execution failed: ${e.message}", e)
             ToolResult.Error("Failed to manage MCP: ${e.message}")
         }
     }

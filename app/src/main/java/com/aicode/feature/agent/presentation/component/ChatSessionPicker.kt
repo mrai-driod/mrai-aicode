@@ -36,9 +36,9 @@ import com.aicode.feature.agent.domain.model.ChatSession
 import compose.icons.FeatherIcons
 
 /**
- * 单条会话行：短按选中，长按弹出功能菜单（置顶/重命名/导出/删除）。供侧边栏历史记录列表复用。
- * 置顶会话显示浅蓝背景（primaryContainer）。
- * [trailing] 用于行尾额外控件（如子代理展开箭头），它自己的点击不应触发整行选中。
+ * A single session row: tap to select, long-press for the action menu (pin / rename / export / delete). Reused by the drawer's history list.
+ * Pinned sessions show a pale-blue background (primaryContainer).
+ * [trailing] is for extra trailing controls (such as the sub-agent expand arrow); its own clicks must not trigger selection of the whole row.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -79,7 +79,7 @@ fun ChatSessionRow(
             Spacer(Modifier.width(Spacing.xs))
         }
         if (awaitingPermission) {
-            // 等待用户授权：橙色常亮圆点，优先级高于执行中的绿色脉冲，提示该会话已挂起待处理。
+            // Awaiting user permission: a solid orange dot, taking priority over the green executing pulse, signalling that this session is paused pending action.
             Box(
                 modifier = Modifier
                     .size(8.dp)

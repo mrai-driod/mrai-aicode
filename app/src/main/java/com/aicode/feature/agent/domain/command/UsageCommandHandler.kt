@@ -4,8 +4,8 @@ import com.aicode.R
 import javax.inject.Inject
 
 /**
- * /usage —— 查看今日与累计的调用次数、token 用量与预估费用（全局统计，跨会话）。
- * 结果以 Markdown 表格作为 AI 气泡输出。
+ * /usage - views today's and cumulative call counts, token usage and estimated cost (global statistics, across sessions).
+ * The result is output as an AI bubble in the form of a Markdown table.
  */
 class UsageCommandHandler @Inject constructor() : ActionCommandHandler {
     override val name = "usage"

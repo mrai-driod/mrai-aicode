@@ -76,8 +76,8 @@ import compose.icons.feathericons.Plus
 import compose.icons.feathericons.User
 
 /**
- * 凭据与署名独立页：底部悬浮 tab 切换「署名」与「凭据」两个标签页。
- * 顶栏「+」新增凭据，编辑/新增态用 [CredentialEditorSheet] 弹出。
+ * Standalone page for credentials and identity: a floating tab bar at the bottom switches between the "Identity" and "Credentials" tabs.
+ * The "+" in the top bar adds a credential; edit / add states are shown with [CredentialEditorSheet].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,10 +88,10 @@ fun CredentialScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // 每次进入重新读署名：用户可能在终端改过项目级/全局署名，避免回显陈旧空值。
+    // Re-read the identity on every entry: the user may have changed the project-level / global identity in the terminal, so avoid echoing a stale empty value.
     LaunchedEffect(Unit) { viewModel.refreshIdentity() }
 
-    // toast → Snackbar 一次性消费。
+    // toast → Snackbar, consumed once.
     LaunchedEffect(state.toast) {
         state.toast?.let {
             snackbarHostState.showSnackbar(it)
@@ -99,7 +99,7 @@ fun CredentialScreen(
         }
     }
 
-    // 两个标签页的滚动状态提升到页面层，聚合出「是否正在滚动」用于底部 tab 栏滚动弱化。
+    // The scroll states of both tabs are hoisted to the page level and combined into "is scrolling" to fade the bottom tab bar while scrolling.
     val identityScrollState = rememberScrollState()
     val credentialListState = rememberLazyListState()
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
@@ -109,7 +109,7 @@ fun CredentialScreen(
         }
     }
 
-    // editingCredential != null -> 编辑现有；editingCredential == null && isAddingCredential -> 新增；否则列表态。
+    // editingCredential != null -> edit existing; editingCredential == null && isAddingCredential -> add new; otherwise the list state.
     var editingCredential by remember { mutableStateOf<GitCredential?>(null) }
     var isAddingCredential by remember { mutableStateOf(false) }
 
@@ -147,8 +147,8 @@ fun CredentialScreen(
                             .fillMaxSize()
                             .verticalScroll(identityScrollState)
                             .padding(horizontal = Spacing.lg)
-                            // 底部留出悬浮 tab 栏高度：滚动时内容可滚过 tab 区域被蒙版渐隐，
-                            // 滚到底时最后一项停在 tab 上方不被遮挡。
+                            // Leave space at the bottom for the floating tab bar height: while scrolling, content can scroll past the tab area and be faded by the mask,
+                            // and when scrolled to the bottom the last item stops above the tab bar without being covered.
                             .padding(bottom = 70.dp)
                     ) {
                         GitUserIdentityCard(
@@ -246,7 +246,7 @@ fun CredentialScreen(
         )
     }
 
-    // 远程模式下首次进入该服务器：询问是否需要 aicode 自动注入凭证
+    // In remote mode, first entry to this server: ask whether aicode should automatically inject credentials
     if (state.showAutoInjectPrompt) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissAutoInjectPrompt(false) },
@@ -280,7 +280,7 @@ private fun CredentialItem(
             modifier = Modifier.padding(horizontal = Spacing.lg, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧图标方块：与容器/远程连接行一致，图标按 host 显示平台 logo（github/gitee），其余回退 Key。
+            // Left icon block: consistent with container / remote connection rows; the icon shows the platform logo by host (github/gitee), otherwise falls back to Key.
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -318,7 +318,7 @@ private fun CredentialItem(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            // 右侧大于号：与远程连接/MCP 行一致，整行点击编辑。
+            // Right chevron: consistent with remote connection / MCP rows; the whole row is clickable to edit.
             Icon(
                 imageVector = FeatherIcons.ChevronRight,
                 contentDescription = stringResource(R.string.common_edit),
@@ -330,8 +330,8 @@ private fun CredentialItem(
 }
 
 /**
- * 平台图标：按 host 显示对应 Git 托管服务 logo（目前支持 GitHub / Gitee），
- * 其余回退通用钥匙图标。单色 tint，与容器/镜像页系统 logo 一致。
+ * Platform icon: shows the corresponding Git hosting service logo by host (currently supports GitHub / Gitee),
+ * otherwise falls back to a generic key icon. Single-colour tint, consistent with the system logos on the container / image pages.
  */
 @Composable
 private fun PlatformIcon(host: String, modifier: Modifier = Modifier) {
@@ -346,7 +346,7 @@ private fun PlatformIcon(host: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** 远程主机品牌徽章：按 host 识别常见 Git 托管服务并显示品牌名，未知取 host 首段域名。 */
+/** Remote host brand badge: identifies common Git hosting services by host and shows the brand name; for unknown hosts, takes the first domain segment of the host. */
 @Composable
 private fun HostBadge(host: String) {
     val label = remember(host) { hostBadgeLabel(host) }

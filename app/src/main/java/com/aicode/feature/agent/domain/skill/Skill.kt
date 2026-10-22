@@ -1,13 +1,13 @@
 package com.aicode.feature.agent.domain.skill
 
 /**
- * 解析后的单个 Skill 模型。
+ * A single parsed Skill model.
  *
- * @param name 技能名称（供大模型调用的唯一标识）
- * @param description 技能描述（何时使用该技能）
- * @param requiredTools 该技能所需的专属工具列表（可选）
- * @param dirPath 技能所在目录的容器路径（本地/远程统一视角，如 `~/workspace/.aicode/skills/foo`）
- * @param instructions 技能指令正文（剥离 Frontmatter 后的内容）
+ * @param name skill name (the unique identifier the model uses to invoke it)
+ * @param description skill description (when this skill should be used)
+ * @param requiredTools the dedicated tools this skill requires (optional)
+ * @param dirPath container path of the skill's directory (a unified local/remote view, e.g. `~/workspace/.aicode/skills/foo`)
+ * @param instructions the skill instruction body (the content after stripping the frontmatter)
  */
 data class Skill(
     val name: String,
@@ -17,26 +17,26 @@ data class Skill(
     val instructions: String
 )
 
-/** 设置页新建/编辑技能时提交的表单快照。 */
+/** Snapshot of the form submitted when creating/editing a skill on the settings page. */
 data class SkillForm(
     val name: String,
     val description: String,
     val instructions: String,
-    /** 手写技能里的 `required_tools`，编辑页不暴露但原样写回，避免保存后丢字段。 */
+    /** The `required_tools` from a hand-written skill; the edit page does not expose it but writes it back verbatim so saving does not drop the field. */
     val requiredTools: List<String> = emptyList()
 )
 
-/** 保存技能失败的原因。 */
+/** Reason a skill failed to save. */
 enum class SkillSaveError {
-    /** 名称为空、过长或含不能做目录名的字符。 */
+    /** The name is empty, too long, or contains characters that cannot be used in a directory name. */
     INVALID_NAME,
 
-    /** 指令正文为空：这种技能加载出来对 AI 没有任何指导价值。 */
+    /** The instruction body is empty: a skill loaded like this gives the AI no guidance value. */
     EMPTY_INSTRUCTIONS,
 
-    /** 同作用域已有同名技能。 */
+    /** A skill with the same name already exists in the same scope. */
     NAME_CONFLICT,
 
-    /** 写盘失败。 */
+    /** Writing to disk failed. */
     IO_FAILED
 }

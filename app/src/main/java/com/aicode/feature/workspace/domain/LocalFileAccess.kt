@@ -13,10 +13,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * [FileAccessProvider] 的本地实现：包一层 [WorkspacePathMapper]，走 java.io.File 直读。
+ * Local implementation of [FileAccessProvider]: wraps a layer of [WorkspacePathMapper] and reads directly via java.io.File.
  *
- * 本地模式下文件工具的原行为零变化——仅把原先散落在各工具里的 pathMapper.toHostFile + File 操作
- * 集中到此处，统一经由接口调用。
+ * In local mode the original behaviour of the file tools is completely unchanged -- only the pathMapper.toHostFile + File operations formerly scattered across the tools
+ * are centralised here and called uniformly through the interface.
  */
 @Singleton
 class LocalFileAccess @Inject constructor(
@@ -34,8 +34,8 @@ class LocalFileAccess @Inject constructor(
     override fun readLines(path: String): Sequence<String> {
         val file = resolve(path)
         if (!file.exists()) throw NoSuchFileException(file)
-        // 惰性 Sequence：每次迭代才读下一行，大文件不整份载入；迭代结束后随 use 关闭 reader。
-        // 单行封顶 64K 字符，避免单个超长行把内存顶爆。
+        // Lazy Sequence: reads the next line only on each iteration, so large files are not loaded whole; the reader is closed via use when iteration ends.
+        // A single line is capped at 64K characters, to avoid one over-long line blowing up memory.
         return boundedLines { file.bufferedReader() }
     }
 
@@ -44,9 +44,9 @@ class LocalFileAccess @Inject constructor(
         if (file.exists() && !overwrite) throw FileAlreadyExistsException(file)
         file.parentFile?.mkdirs()
         val bytes = content.toByteArray(encoding)
-        // fsync + 回读长度校验：writeText 只写入 page cache，延迟分配下的写回错误
-        // （磁盘已满 ENOSPC、存储异常）不会报给调用方，会变成“工具返回 success 但文件没变”。
-        // sync 把错误提前成 IOException，让工具报真实失败，而不是静默丢掉改动。
+        // fsync + read-back length check: writeText only writes to the page cache, and write-back errors under delayed allocation
+        // (disk full ENOSPC, storage anomalies) are not reported to the caller and would become "the tool returns success but the file did not change".
+        // sync surfaces the error early as an IOException, so the tool reports the real failure instead of silently dropping the change.
         FileOutputStream(file).use { out ->
             out.write(bytes)
             out.flush()
@@ -56,7 +56,7 @@ class LocalFileAccess @Inject constructor(
         if (actual != bytes.size.toLong()) {
             throw IOException("write verification failed: ${file.absolutePath} expected ${bytes.size} bytes, found $actual")
         }
-        FileLogger.i(TAG, "写入: '$path' -> ${file.absolutePath} (${bytes.size} 字节)")
+        FileLogger.i(TAG, "Write: '$path' -> ${file.absolutePath} (${bytes.size} bytes)")
     }
 
     override fun exists(path: String): Boolean = resolve(path).exists()
@@ -115,7 +115,7 @@ class LocalFileAccess @Inject constructor(
         val file = resolve(path)
         if (file.exists() && !overwrite) throw FileAlreadyExistsException(file)
         file.parentFile?.mkdirs()
-        // 与 writeFile 相同的 fsync + 回读长度校验，避免“报告成功但文件没写全”。
+        // Same fsync + read-back length check as writeFile, to avoid "reporting success but the file was not fully written".
         FileOutputStream(file).use { out ->
             out.write(bytes)
             out.flush()
@@ -125,7 +125,7 @@ class LocalFileAccess @Inject constructor(
         if (actual != bytes.size.toLong()) {
             throw IOException("write verification failed: ${file.absolutePath} expected ${bytes.size} bytes, found $actual")
         }
-        FileLogger.i(TAG, "写入: '$path' -> ${file.absolutePath} (${bytes.size} 字节)")
+        FileLogger.i(TAG, "Write: '$path' -> ${file.absolutePath} (${bytes.size} bytes)")
     }
 
     override fun writeStream(path: String, input: InputStream, overwrite: Boolean): Long {
@@ -135,7 +135,7 @@ class LocalFileAccess @Inject constructor(
         return try {
             FileOutputStream(file).use { out -> input.copyTo(out) }
         } catch (e: Exception) {
-            // 写入中途失败（如源流读取出错、空间不足）会留下半截文件，清掉再抛出
+            // A mid-write failure (e.g. source stream read error, insufficient space) leaves a partial file behind; delete it before rethrowing
             file.delete()
             throw e
         }
@@ -205,7 +205,7 @@ class LocalFileAccess @Inject constructor(
             false
         }
         if (moved) return
-        // 回退：复制后删除源（复制中断时源保留，下次重试安全）。
+        // Fallback: copy then delete the source (if the copy is interrupted the source is kept, so retrying is safe).
         if (source.isDirectory) {
             source.copyRecursively(target, overwrite = false)
         } else {

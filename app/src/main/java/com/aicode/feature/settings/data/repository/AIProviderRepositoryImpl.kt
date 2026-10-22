@@ -39,7 +39,7 @@ class AIProviderRepositoryImpl @Inject constructor(
             if (raw.isBlank()) emptyMap()
             else runCatching { json.decodeFromString<Map<String, String>>(raw) }.getOrDefault(emptyMap())
 
-        /** 解析多 Key 存储串：每行 `值|权重`；旧数据无 `|` 时权重取默认值。 */
+        /** Parses the multi-key storage string: each line is `value|weight`; legacy data without `|` uses the default weight. */
         private fun parseProviderKeys(raw: String): List<ProviderKey> =
             raw.split("\n").mapNotNull { line ->
                 val trimmed = line.trim()
@@ -64,46 +64,46 @@ class AIProviderRepositoryImpl @Inject constructor(
     }
 
     /**
-     * 保存提供商。排序值以数据库当前值为准（重排可能异步持久化，UI 传入的
-     * sortOrder 可能陈旧，直接使用会撤销刚完成的排序）；新提供商取最大排序 +1。
+     * Saves a provider. The sort value uses the current database value (reordering may persist asynchronously, so the sortOrder passed in from the UI
+     * may be stale and using it directly would undo a just-completed reorder); a new provider takes max sort +1.
      */
     override suspend fun saveProvider(provider: AIProviderConfig) {
         agentDatabase.withTransaction {
             val current = aiProviderDao.getProviderById(provider.id)
             val sortOrder = current?.sortOrder ?: (aiProviderDao.getMaxSortOrder() + 1)
-            FileLogger.i(TAG, "保存提供商 id=${provider.id} name=${provider.name} sortOrder=$sortOrder")
+            FileLogger.i(TAG, "Save provider id=${provider.id} name=${provider.name} sortOrder=$sortOrder")
             aiProviderDao.insertProvider(provider.copy(sortOrder = sortOrder).sanitized().toEntity())
         }
     }
 
     /**
-     * 按传入顺序重排提供商。只写 id + sortOrder 两列，
-     * 避免整行 REPLACE 覆盖并发修改的其它字段（如 apiKey/模型列表）。
+     * Reorders providers in the given order. Writes only the id + sortOrder columns,
+     * avoiding a whole-row REPLACE overwriting other fields changed concurrently (e.g. apiKey/model list).
      */
     override suspend fun reorderProviders(providers: List<AIProviderConfig>) {
-        FileLogger.d(TAG, "重排提供商 共 ${providers.size} 个")
+        FileLogger.d(TAG, "Reorder providers, ${providers.size} total")
         agentDatabase.withTransaction {
             providers.forEachIndexed { index, p -> aiProviderDao.updateSortOrder(p.id, index) }
         }
     }
 
     override suspend fun deleteProvider(id: String) {
-        FileLogger.i(TAG, "删除提供商 id=$id")
+        FileLogger.i(TAG, "Delete provider id=$id")
         aiProviderDao.deleteProvider(id)
     }
 
     override suspend fun setSelectedModel(id: String, model: String) {
-        FileLogger.i(TAG, "切换模型 provider=$id model=$model")
+        FileLogger.i(TAG, "Switch model provider=$id model=$model")
         aiProviderDao.setSelectedModel(id, model)
     }
 
     override suspend fun updateModels(id: String, models: List<String>) {
-        FileLogger.d(TAG, "更新模型列表 provider=$id 共 ${models.size} 个")
+        FileLogger.d(TAG, "Update model list provider=$id, ${models.size} total")
         aiProviderDao.setModels(id, models.joinToString("\n"))
     }
 
     override suspend fun setProviderEnabled(id: String, isEnabled: Boolean) {
-        FileLogger.i(TAG, "设置提供商状态 provider=$id isEnabled=$isEnabled")
+        FileLogger.i(TAG, "Set provider state provider=$id isEnabled=$isEnabled")
         aiProviderDao.setProviderEnabled(id, isEnabled)
     }
 

@@ -41,15 +41,15 @@ private val Context.workspaceDataStore by preferencesDataStore(
 )
 
 /**
- * 管理 App 内的"工作区/项目"。
+ * Manages "workspaces/projects" within the app.
  *
- * **本地模式**：所有项目放在内部私有目录 `filesDir/projects/<name>` 下——ext4 真实路径，
- * [java.io.File] 工具与 PRoot 容器挂载都能直接使用，无需运行时存储权限，且支持 symlink。
+ * **Local mode**: all projects are placed in the internal private directory `filesDir/projects/<name>` -- a real ext4 path that
+ * [java.io.File] tools and PRoot container mounts can both use directly, with no runtime storage permission required, and with symlink support.
  *
- * **远程模式**：工作区 = 远程 SSH 服务器上 `remoteWorkspacePath` 下的子文件夹。
- * 列表/新建/删除通过 SFTP 操作远程目录，[Workspace.path] 为远程绝对路径。
+ * **Remote mode**: a workspace is a subfolder under `remoteWorkspacePath` on a remote SSH server.
+ * Listing/creating/deleting operate on remote directories via SFTP, and [Workspace.path] is the remote absolute path.
  *
- * 当前选中的工作区名持久化在 DataStore 中，重启后保留（本地/远程共用同一份名字）。
+ * The name of the currently selected workspace is persisted in DataStore and retained after restart (local/remote share the same name).
  */
 @Singleton
 class WorkspaceRepository @Inject constructor(
@@ -60,11 +60,11 @@ class WorkspaceRepository @Inject constructor(
     private val sessionUseCase: SessionUseCase,
     private val generalSettingsRepository: GeneralSettingsRepository
 ) {
-    /** 校验失败时给 UI 的提示文案（如目录不可写/无法解析），消费后置 null。 */
+    /** Message text shown to the UI when validation fails (e.g. directory not writable / unresolvable); set to null after consumption. */
     private val _addError = MutableStateFlow<String?>(null)
     val addError: StateFlow<String?> = _addError.asStateFlow()
 
-    /** UI 消费添加失败提示后调用，清除待展示的文案。 */
+    /** Called by the UI after consuming the add-failure message, to clear the text pending display. */
     fun consumeAddError() {
         _addError.value = null
     }
@@ -74,7 +74,7 @@ class WorkspaceRepository @Inject constructor(
         private const val DEFAULT_WORKSPACE = "default"
         private val json = Json { ignoreUnknownKeys = true }
 
-        /** 外部工作区记录 → 工作区列表；[isDir] 判定目录当前是否存在，决定 available。 */
+        /** External workspace records -> workspace list; [isDir] determines whether the directory currently exists, deciding available. */
         internal fun mapExternalWorkspaces(
             records: List<ExternalWorkspaceRecord>,
             isDir: (String) -> Boolean
@@ -87,7 +87,7 @@ class WorkspaceRepository @Inject constructor(
             )
         }
 
-        /** 生成不与现有工作区重名的目录名，冲突时追加 " (n)" 后缀。 */
+        /** Generate a directory name that does not duplicate an existing workspace; on conflict append a " (n)" suffix. */
         internal fun uniqueName(base: String, existing: Set<String>): String {
             if (base !in existing) return base
             var i = 2
@@ -105,15 +105,15 @@ class WorkspaceRepository @Inject constructor(
         context.workspaceDataStore.edit { it[externalWarningDismissedKey] = dismissed }
     }
 
-    /** 外部本地工作区列表（用户所选设备目录），JSON 序列化持久化，重启保留。 */
+    /** External local workspace list (device directories chosen by the user), persisted as JSON and retained after restart. */
     private val externalWorkspacesKey = stringPreferencesKey("external_workspaces")
 
     /**
-     * 所有项目的父目录，固定用内部 filesDir（app 私有 ext4）。
+     * Parent directory of all projects, always using the internal filesDir (app-private ext4).
      *
-     * 必须是 ext4：外部私有目录（getExternalFilesDir）落在 emulated/FUSE 存储，内核拒绝
-     * symlink()，npm/pnpm/yarn/git 建软链时会 `EACCES symlink` 而失败。filesDir 是 ext4，
-     * symlink 原生可用，所有工具链零配置即可跑。对外可见性由 DocumentsProvider 暴露，不依赖物理位置。
+     * It must be ext4: the external private directory (getExternalFilesDir) sits on emulated/FUSE storage, where the kernel rejects
+     * symlink(), so npm/pnpm/yarn/git fail with `EACCES symlink` when creating symlinks. filesDir is ext4,
+     * symlinks work natively and every toolchain runs with zero configuration. External visibility is exposed by DocumentsProvider and does not depend on the physical location.
      */
     private val projectsRoot: File by lazy {
         File(context.filesDir, "projects").apply { mkdirs() }
@@ -122,33 +122,33 @@ class WorkspaceRepository @Inject constructor(
     private val _workspaces = MutableStateFlow<List<Workspace>>(emptyList())
     val workspaces: StateFlow<List<Workspace>> = _workspaces.asStateFlow()
 
-    /** 移除外部本地工作区时是否一并删除其聊天记录（供删除确认文案判断）。 */
+    /** Whether deleting an external local workspace also deletes its chat history (used to decide the delete-confirmation text). */
     val deleteExternalWorkspaceSessionsFlow: Flow<Boolean> =
         generalSettingsRepository.deleteExternalWorkspaceSessionsFlow
 
     private val _current = MutableStateFlow<Workspace?>(null)
     val current: StateFlow<Workspace?> = _current.asStateFlow()
 
-    /** 远程工作区初始化失败（根路径/默认工作区创建失败）的提示文案；UI 消费后置 null。 */
+    /** Message text for remote workspace initialisation failure (root path / default workspace creation failed); set to null after the UI consumes it. */
     private val _initError = MutableStateFlow<String?>(null)
     val initError: StateFlow<String?> = _initError.asStateFlow()
 
-    /** UI 消费错误提示后调用，清除待展示的文案。 */
+    /** Called by the UI after consuming the error message, to clear the text pending display. */
     fun consumeInitError() {
         _initError.value = null
     }
 
-    /** 扫描并恢复上次选中的工作区；首次启动本地模式会创建默认工作区。应在 App/ViewModel 启动时调用一次。 */
+    /** Scan and restore the previously selected workspace; on first launch in local mode, creates the default workspace. Should be called once at App/ViewModel startup. */
     suspend fun initialize() = withContext(Dispatchers.IO) {
-        // 远程模式：等 SSH 连接就绪后再列工作区，避免启动时序竞争
+        // Remote mode: wait until the SSH connection is ready before listing workspaces, to avoid a startup timing race
         if (!isLocal()) {
             waitForConnection()
             ensureRemoteWorkspaceRoot()
         }
         refreshWorkspaces()
 
-        // 没有可用工作区时创建默认工作区（本地/远程一致），保证 AI 始终有可用目录；
-        // 全部工作区失联（如唯一外部目录被删除）也走这里，避免 currentPath 回退到父目录。
+        // When no workspace is available, create the default workspace (same for local/remote), ensuring AI always has a usable directory;
+        // this path is also taken when all workspaces are disconnected (e.g. the sole external directory was deleted), to avoid currentPath falling back to the parent directory.
         if (_workspaces.value.none { it.available }) {
             val created = if (isLocal()) createLocalFallbackWorkspace() else {
                 val fallbackName = uniqueName(DEFAULT_WORKSPACE, _workspaces.value.map { it.name }.toSet())
@@ -168,12 +168,12 @@ class WorkspaceRepository @Inject constructor(
             _initError.value = target?.let {
                 context.getString(R.string.workspace_unavailable_fallback, saved.name, it.name)
             } ?: context.getString(R.string.workspace_unavailable_current, saved.name)
-            FileLogger.w(TAG, "上次工作区不可用，回退: ${saved.name} -> ${target?.name}")
+            FileLogger.w(TAG, "Previous workspace unavailable, falling back: ${saved.name} -> ${target?.name}")
         }
         _current.value = target
         val location = if (isLocal()) projectsRoot.absolutePath else remoteSshConnection.config?.remoteWorkspacePath ?: ""
-        FileLogger.i(TAG, "工作区初始化完成，当前: ${target?.name}，根目录: $location")
-        // 远程模式：选中工作区后更新符号链接，让 Bash 的 ~/workspace 指向当前工作区
+        FileLogger.i(TAG, "Workspace initialisation complete, current: ${target?.name}, root directory: $location")
+        // Remote mode: after selecting a workspace, update the symlink so that Bash's ~/workspace points to the current workspace
         if (!isLocal() && target != null) {
             remoteSshConnection.updateWorkspaceSymlink(target.path)
         }
@@ -182,19 +182,19 @@ class WorkspaceRepository @Inject constructor(
     private fun isLocal(): Boolean =
         executionModeHolder.currentMode() != ExecutionMode.REMOTE_SSH
 
-    /** 远程模式下等待 SSH 连接就绪（最多 5 秒），避免启动时序竞争。 */
-    /** 远程模式下挂起等待 SSH 连接就绪（CONNECTED）；连接失败（FAILED）则提前返回，保持空工作区。 */
+    /** In remote mode, wait for the SSH connection to be ready (at most 5 seconds), to avoid a startup timing race. */
+    /** In remote mode, suspend until the SSH connection is ready (CONNECTED); if the connection fails (FAILED), return early and keep the workspace empty. */
     private suspend fun waitForConnection() {
         val state = remoteSshConnection.connectionState.first {
             it == ConnectionState.CONNECTED || it == ConnectionState.FAILED
         }
         if (state == ConnectionState.FAILED) {
-            FileLogger.w(TAG, "SSH 连接失败，工作区保持空")
+            FileLogger.w(TAG, "SSH connection failed, workspace stays empty")
         }
     }
 
-    /** 远程模式：确保 remoteWorkspacePath 存在（用户填写的路径可能尚不存在），不存在则 mkdir -p 创建。
-     *  @return 是否成功；连接不可用时不提示直接返回 false。 */
+    /** Remote mode: ensure remoteWorkspacePath exists (the path entered by the user may not exist yet); create it with mkdir -p if missing.
+     *  @return Whether it succeeded; when the connection is unavailable, return false directly without prompting. */
     private suspend fun ensureRemoteWorkspaceRoot(): Boolean {
         val cfg = remoteSshConnection.config ?: return false
         if (!remoteSshConnection.isConnected()) return false
@@ -202,27 +202,27 @@ class WorkspaceRepository @Inject constructor(
         if (wsRoot.isEmpty()) return false
         val exit = execRemoteExit("mkdir -p ${shellQuote(wsRoot)}")
         if (exit != 0) {
-            FileLogger.w(TAG, "创建远程工作区根目录失败: $wsRoot (exit=$exit)")
+            FileLogger.w(TAG, "Failed to create remote workspace root directory: $wsRoot (exit=$exit)")
             _initError.value = context.getString(R.string.workspace_remote_root_create_failed)
             return false
         }
         return true
     }
 
-    /** 重新扫描工作区可用性（打开面板、拔插存储后调用），失联项置灰并在必要时回退当前工作区。 */
+    /** Rescan workspace availability (called when opening the panel or after storage is plugged/unplugged); disconnected items are greyed out and the current workspace falls back if necessary. */
     suspend fun refreshAvailability() = withContext(Dispatchers.IO) {
         refreshWorkspaces()
     }
 
-    /** 重新读取工作区目录列表。本地扫 projectsRoot + 外部本地工作区，远程 exec ls remoteWorkspacePath。 */
+    /** Re-read the workspace directory list. Local scans projectsRoot + external local workspaces; remote execs ls on remoteWorkspacePath. */
     private suspend fun refreshWorkspaces() {
         _workspaces.value = if (isLocal()) refreshLocalWorkspaces() else refreshRemoteWorkspaces()
         ensureCurrentReachable()
     }
 
     /**
-     * 刷新后校验当前工作区：已被移除或不可用（目录被移动/删除）时回退到第一个可用工作区，
-     * 并在实际发生切换时通过 [_initError] 提示用户。
+     * After a refresh, validate the current workspace: when it has been removed or is unavailable (directory moved/deleted), fall back to the first available workspace,
+     * and notify the user via [_initError] when a switch actually occurs.
      */
     private suspend fun ensureCurrentReachable() {
         val current = _current.value ?: return
@@ -239,7 +239,7 @@ class WorkspaceRepository @Inject constructor(
         if (fallback != null && fallback.name != current.name) {
             _initError.value = context.getString(R.string.workspace_unavailable_fallback, current.name, fallback.name)
         }
-        FileLogger.w(TAG, "当前工作区不可用，回退: ${current.name} -> ${fallback?.name}")
+        FileLogger.w(TAG, "Current workspace unavailable, falling back: ${current.name} -> ${fallback?.name}")
     }
 
     private suspend fun createLocalFallbackWorkspace(): Workspace? {
@@ -255,32 +255,32 @@ class WorkspaceRepository @Inject constructor(
             ?.sortedBy { it.name.lowercase() }
             ?.map { Workspace(name = it.name, path = it.absolutePath) }
             ?: emptyList()
-        // 外部本地工作区：失联（目录被移动/删除）时保留记录并标记不可用，目录恢复后自动重新可用
+        // External local workspaces: when disconnected (directory moved/deleted), keep the record and mark it unavailable; it becomes available again automatically when the directory returns
         val external = mapExternalWorkspaces(readExternalWorkspaces()) { File(it).isDirectory }
         return internal + external
     }
 
-    /** exec 列出 remoteWorkspacePath 下的子目录作为工作区（不用 SFTP，避免 sshj Buffer bug）。 */
+    /** List the subdirectories under remoteWorkspacePath via exec as workspaces (not SFTP, to avoid the sshj Buffer bug). */
     private suspend fun refreshRemoteWorkspaces(): List<Workspace> {
         val cfg = remoteSshConnection.config ?: run {
-            FileLogger.w(TAG, "远程工作区列表失败：SSH 未配置")
+            FileLogger.w(TAG, "Remote workspace listing failed: SSH not configured")
             return emptyList()
         }
         val wsRoot = pathHomeResolver.expandHome(cfg.remoteWorkspacePath.trimEnd('/'))
         return runCatching {
-            // ls -d */ 列出子目录，取基名
+            // ls -d */ lists subdirectories; take the basename
             val output = execRemote("ls -d ${wsRoot}/*/ 2>/dev/null | xargs -n1 basename 2>/dev/null")
             if (output.isBlank()) emptyList()
             else output.lines().filter { it.isNotBlank() }
                 .sortedBy { it.lowercase() }
                 .map { Workspace(name = it.trim(), path = "$wsRoot/${it.trim()}", type = WorkspaceType.REMOTE) }
         }.getOrElse {
-            FileLogger.w(TAG, "远程工作区列表失败: $wsRoot", it)
+            FileLogger.w(TAG, "Remote workspace listing failed: $wsRoot", it)
             emptyList()
         }
     }
 
-    /** 同步执行远程命令并返回 stdout（供工作区列表/新建/删除用）。 */
+    /** Execute a remote command synchronously and return stdout (used for workspace listing/creation/deletion). */
     private suspend fun execRemote(command: String): String =
         withContext(Dispatchers.IO) {
             val session = remoteSshConnection.startExecSession(command)
@@ -294,7 +294,7 @@ class WorkspaceRepository @Inject constructor(
             }
         }
 
-    /** 同步执行远程命令并返回退出码。 */
+    /** Execute a remote command synchronously and return the exit code. */
     private suspend fun execRemoteExit(command: String): Int =
         withContext(Dispatchers.IO) {
             val session = remoteSshConnection.startExecSession(command)
@@ -308,41 +308,41 @@ class WorkspaceRepository @Inject constructor(
             }
         }
 
-    /** 切换当前工作区并持久化。 */
+    /** Switch the current workspace and persist it. */
     suspend fun selectWorkspace(name: String) = withContext(Dispatchers.IO) {
         val target = _workspaces.value.firstOrNull { it.name == name && it.available } ?: return@withContext
         _current.value = target
         context.workspaceDataStore.edit { it[currentNameKey] = name }
-        FileLogger.i(TAG, "切换工作区: $name")
-        // 远程模式：切换后更新符号链接指向新工作区
+        FileLogger.i(TAG, "Switch workspace: $name")
+        // Remote mode: after switching, update the symlink to point to the new workspace
         if (!isLocal()) {
             remoteSshConnection.updateWorkspaceSymlink(target.path)
         }
     }
 
     /**
-     * 新建工作区目录。名称会被清洗为安全的文件夹名。
-     * 本地模式 mkdirs projectsRoot/name；远程模式 SFTP mkdirs remoteWorkspacePath/name。
-     * @return 创建成功的 [Workspace]；名称非法或已存在返回 null。
+     * Create a new workspace directory. The name is sanitised to a safe folder name.
+     * Local mode mkdirs projectsRoot/name; remote mode SFTP mkdirs remoteWorkspacePath/name.
+     * @return The successfully created [Workspace]; returns null when the name is invalid or already exists.
      */
     suspend fun createWorkspace(rawName: String): Workspace? = withContext(Dispatchers.IO) {
         val name = sanitize(rawName)
         if (name.isEmpty()) {
-            FileLogger.w(TAG, "新建工作区失败：名称非法 '$rawName'")
+            FileLogger.w(TAG, "Failed to create workspace: invalid name '$rawName'")
             return@withContext null
         }
         if (isLocal()) {
             val dir = File(projectsRoot, name)
             if (dir.exists() || _workspaces.value.any { it.name == name }) {
-                FileLogger.w(TAG, "新建工作区失败：已存在 '$name'")
+                FileLogger.w(TAG, "Failed to create workspace: already exists '$name'")
                 return@withContext null
             }
             if (!dir.mkdirs()) {
-                FileLogger.e(TAG, "新建工作区失败：无法创建目录 ${dir.absolutePath}")
+                FileLogger.e(TAG, "Failed to create workspace: cannot create directory ${dir.absolutePath}")
                 return@withContext null
             }
             refreshWorkspaces()
-            FileLogger.i(TAG, "新建工作区: $name")
+            FileLogger.i(TAG, "Created workspace: $name")
             Workspace(name = name, path = dir.absolutePath)
         } else {
             val cfg = remoteSshConnection.config ?: return@withContext null
@@ -350,24 +350,24 @@ class WorkspaceRepository @Inject constructor(
             val remotePath = "$wsRoot/$name"
             runCatching {
                 if (execRemoteExit("test -d ${shellQuote(remotePath)}") == 0) {
-                    FileLogger.w(TAG, "新建工作区失败：已存在 '$name'")
+                    FileLogger.w(TAG, "Failed to create workspace: already exists '$name'")
                     return@withContext null
                 }
                 execRemoteExit("mkdir -p ${shellQuote(remotePath)}")
             }.getOrElse {
-                FileLogger.e(TAG, "远程新建工作区失败: $remotePath", it)
+                FileLogger.e(TAG, "Failed to create remote workspace: $remotePath", it)
                 return@withContext null
             }
             refreshWorkspaces()
-            FileLogger.i(TAG, "新建工作区(远程): $name")
+            FileLogger.i(TAG, "Created workspace (remote): $name")
             Workspace(name = name, path = remotePath, type = WorkspaceType.REMOTE)
         }
     }
 
     /**
-     * 注册用户所选设备目录为外部本地工作区（双向直读该目录，不复制）。
-     * 校验：能解析为真实路径、是目录、可写。与现有工作区同名时自动加后缀。
-     * @return 注册成功的 [Workspace]；校验失败返回 null（同时通过 [addError] 给出提示文案）。
+     * Register a device directory chosen by the user as an external local workspace (read that directory directly in both directions, no copying).
+     * Validation: it resolves to a real path, is a directory, and is writable. When it has the same name as an existing workspace, a suffix is added automatically.
+     * @return The successfully registered [Workspace]; returns null on validation failure (with the message text also provided via [addError]).
      */
     suspend fun addExternalWorkspace(uri: Uri): Workspace? = withContext(Dispatchers.IO) {
         val uriFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -375,14 +375,14 @@ class WorkspaceRepository @Inject constructor(
         val path = UriPathResolver.toFilePath(context, uri)
         if (path == null) {
             _addError.value = context.getString(R.string.workspace_external_unresolvable)
-            FileLogger.w(TAG, "添加本地工作区失败：无法解析 uri")
+            FileLogger.w(TAG, "Failed to add local workspace: cannot resolve uri")
             releaseUriGrant(uri, uriFlags)
             return@withContext null
         }
-        // 实际读写走 targetSdk 28 的 legacy storage + java.io.File；SAF grant 仅记录目录选择授权，不是文件后端。
+        // Actual reads/writes use targetSdk 28 legacy storage + java.io.File; the SAF grant only records the directory-selection authorisation and is not the file backend.
         if (path.contains(':')) {
             _addError.value = context.getString(R.string.workspace_external_unsupported_path)
-            FileLogger.w(TAG, "添加本地工作区失败：路径包含不支持的冒号 $path")
+            FileLogger.w(TAG, "Failed to add local workspace: path contains an unsupported colon $path")
             releaseUriGrant(uri, uriFlags)
             return@withContext null
         }
@@ -390,12 +390,12 @@ class WorkspaceRepository @Inject constructor(
         val existing = readExternalWorkspaces()
         if (existing.any { it.path == path }) {
             _addError.value = context.getString(R.string.workspace_external_exists)
-            FileLogger.w(TAG, "添加本地工作区失败：目录已是工作区 $path")
+            FileLogger.w(TAG, "Failed to add local workspace: directory is already a workspace $path")
             return@withContext null
         }
         if (!dir.isDirectory) {
             _addError.value = context.getString(R.string.workspace_external_invalid)
-            FileLogger.w(TAG, "添加本地工作区失败：不是目录 $path")
+            FileLogger.w(TAG, "Failed to add local workspace: not a directory $path")
             releaseUriGrant(uri, uriFlags)
             return@withContext null
         }
@@ -412,7 +412,7 @@ class WorkspaceRepository @Inject constructor(
         }.getOrDefault(false)
         if (!writable) {
             _addError.value = context.getString(R.string.workspace_external_unwritable)
-            FileLogger.w(TAG, "添加本地工作区失败：目录不可写 $path")
+            FileLogger.w(TAG, "Failed to add local workspace: directory not writable $path")
             releaseUriGrant(uri, uriFlags)
             return@withContext null
         }
@@ -422,7 +422,7 @@ class WorkspaceRepository @Inject constructor(
         writeExternalWorkspaces(existing + ExternalWorkspaceRecord(name, path, uri.toString()))
         refreshWorkspaces()
         val created = _workspaces.value.firstOrNull { it.path == path }
-        FileLogger.i(TAG, "添加本地工作区: $name ($path)")
+        FileLogger.i(TAG, "Added local workspace: $name ($path)")
         created
     }
 
@@ -430,9 +430,9 @@ class WorkspaceRepository @Inject constructor(
         runCatching { context.contentResolver.releasePersistableUriPermission(uri, flags) }
     }
 
-    /** 删除工作区。内部/远程工作区连同文件与会话记录删除；外部本地工作区只解除关联，不删除物理目录，
-     *  其会话记录是否一并删除由「偏好设置」中的开关决定。
-     *  若删的是当前工作区，则自动切到剩余的第一个。 */
+    /** Delete a workspace. Internal/remote workspaces are deleted together with their files and session records; an external local workspace only has its association removed, without deleting the physical directory,
+     *  and whether its session records are also deleted is decided by the toggle in "Preferences".
+     *  If the deleted workspace is the current one, switch automatically to the first remaining one. */
     suspend fun deleteWorkspace(name: String) = withContext(Dispatchers.IO) {
         val target = _workspaces.value.firstOrNull { it.name == name }
         if (isLocal() && target?.type == WorkspaceType.EXTERNAL_LOCAL) {
@@ -451,7 +451,7 @@ class WorkspaceRepository @Inject constructor(
             if (generalSettingsRepository.deleteExternalWorkspaceSessions()) {
                 sessionUseCase.deleteSessionsByWorkspace(target.path)
             }
-            FileLogger.i(TAG, "移除外部工作区关联: $name")
+            FileLogger.i(TAG, "Removed external workspace association: $name")
         } else if (isLocal()) {
             File(projectsRoot, name).deleteRecursively()
             target?.let { sessionUseCase.deleteSessionsByWorkspace(it.path) }
@@ -460,15 +460,15 @@ class WorkspaceRepository @Inject constructor(
             if (cfg != null) {
                 val remotePath = "${pathHomeResolver.expandHome(cfg.remoteWorkspacePath).trimEnd('/')}/$name"
                 runCatching { execRemoteExit("rm -rf ${shellQuote(remotePath)}") }
-                    .onFailure { FileLogger.e(TAG, "远程删除工作区失败: $remotePath", it) }
+                    .onFailure { FileLogger.e(TAG, "Failed to delete remote workspace: $remotePath", it) }
             }
             target?.let { sessionUseCase.deleteSessionsByWorkspace(it.path) }
         }
         refreshWorkspaces()
-        FileLogger.i(TAG, "删除工作区: $name")
+        FileLogger.i(TAG, "Deleted workspace: $name")
     }
 
-    /** 外部本地工作区持久化记录。 */
+    /** Persistence record for an external local workspace. */
     @Serializable
     internal data class ExternalWorkspaceRecord(
         val name: String,
@@ -480,7 +480,7 @@ class WorkspaceRepository @Inject constructor(
         val raw = context.workspaceDataStore.data.first()[externalWorkspacesKey] ?: return emptyList()
         return runCatching { json.decodeFromString<List<ExternalWorkspaceRecord>>(raw) }
             .getOrElse {
-                FileLogger.w(TAG, "外部工作区记录解析失败，已忽略", it)
+                FileLogger.w(TAG, "Failed to parse external workspace records, ignored", it)
                 emptyList()
             }
     }
@@ -489,12 +489,12 @@ class WorkspaceRepository @Inject constructor(
         context.workspaceDataStore.edit { it[externalWorkspacesKey] = json.encodeToString(list) }
     }
 
-    /** 单引号转义，保证 shell 命令安全。 */
+    /** Single-quote escaping, to keep shell commands safe. */
     private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
-    /** 当前工作区的路径，供 projectRoot / 命令执行目录使用。
-     * 本地模式返回宿主工作区绝对路径；远程模式返回选中工作区的远程绝对路径（命令 cd 到此）。
-     * 无选中时本地回退到项目根目录，远程回退到配置的 remoteWorkspacePath。 */
+    /** Path of the current workspace, used for projectRoot / the command execution directory.
+     * Local mode returns the host workspace absolute path; remote mode returns the selected workspace's remote absolute path (commands cd there).
+     * When nothing is selected, local falls back to the project root directory and remote falls back to the configured remoteWorkspacePath. */
     fun currentPath(): String {
         if (!isLocal()) {
             return _current.value?.path
@@ -506,7 +506,7 @@ class WorkspaceRepository @Inject constructor(
         return _current.value?.path ?: projectsRoot.absolutePath
     }
 
-    /** 仅保留字母数字、下划线、连字符、点和空格，去掉路径分隔符等危险字符。 */
+    /** Keep only letters, digits, underscores, hyphens, dots and spaces; remove dangerous characters such as path separators. */
     private fun sanitize(raw: String): String =
         raw.trim()
             .replace(Regex("[^A-Za-z0-9 ._\\u4e00-\\u9fa5-]"), "")

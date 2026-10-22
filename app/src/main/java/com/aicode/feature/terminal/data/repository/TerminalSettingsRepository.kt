@@ -20,19 +20,19 @@ private val Context.terminalDataStore by preferencesDataStore(
     corruptionHandler = preferencesCorruptionHandler
 )
 
-/** 终端配置模型。 */
+/** Terminal configuration model. */
 data class TerminalSettings(
     val themeId: String = TerminalThemePreset.TERMIUS_DARK.id,
     val fontSizeSp: Int = 12,
     val cursorStyle: Int = 0, // 0=Block, 1=Underline, 2=Bar
-    /** 字体标识：空=系统等宽，TerminalFontManager.BUILTIN_PATH=内置 JetBrains Mono NL，其余为导入字体的绝对路径。 */
+    /** Font identifier: empty = system monospace, TerminalFontManager.BUILTIN_PATH = built-in JetBrains Mono NL, otherwise the absolute path of an imported font. */
     val fontPath: String = TerminalFontManager.BUILTIN_PATH
 ) {
     val theme: TerminalThemePreset
         get() = TerminalThemePreset.findById(themeId)
 }
 
-/** 终端个性化配置持久化仓库（DataStore）。 */
+/** Persistence repository for terminal personalization settings (DataStore). */
 @Singleton
 class TerminalSettingsRepository @Inject constructor(
     @param:ApplicationContext private val context: Context
@@ -49,7 +49,7 @@ class TerminalSettingsRepository @Inject constructor(
             themeId = prefs[THEME_ID_KEY] ?: TerminalThemePreset.TERMIUS_DARK.id,
             fontSizeSp = prefs[FONT_SIZE_SP_KEY]?.coerceIn(5, 22) ?: 12,
             cursorStyle = prefs[CURSOR_STYLE_KEY] ?: 0,
-            // 未设过字体的用户给内置字体；显式选过“系统等宽”（空串）的保持原样；导入字体被删时回落内置
+            // Users who have never set a font get the built-in font; those who explicitly chose "system monospace" (empty string) keep it as-is; if an imported font has been deleted, fall back to the built-in one
             fontPath = when (val saved = prefs[FONT_PATH_KEY]) {
                 null -> TerminalFontManager.BUILTIN_PATH
                 "", TerminalFontManager.BUILTIN_PATH -> saved

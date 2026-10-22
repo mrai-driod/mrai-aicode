@@ -26,37 +26,37 @@ class WorkspaceViewModel @Inject constructor(
     val workspaces: StateFlow<List<Workspace>> = repository.workspaces
     val current: StateFlow<Workspace?> = repository.current
 
-    /** 本地执行模式（非远程 SSH）：本地模式下才可添加外部本地目录工作区。 */
+    /** Local execution mode (not remote SSH): external local directory workspaces can only be added in local mode. */
     val isLocalMode: StateFlow<Boolean> = executionModeHolder.mode
         .map { it != ExecutionMode.REMOTE_SSH }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
-    /** 远程工作区初始化失败提示（根路径/默认工作区创建失败）。 */
+    /** Remote workspace initialization failure hint (root path / default workspace creation failed). */
     val initError: StateFlow<String?> = repository.initError
 
-    /** 添加外部本地工作区失败提示（目录不可写/无法解析等）。 */
+    /** Failure hint for adding an external local workspace (directory not writable / cannot be resolved, etc.). */
     val addError: StateFlow<String?> = repository.addError
     val externalWarningDismissed: StateFlow<Boolean> = repository.externalWarningDismissed
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    /** 移除外部本地工作区时是否一并删除其聊天记录（用于删除确认文案）。 */
+    /** Whether removing an external local workspace also deletes its chat history (used in the delete confirmation text). */
     val deleteExternalWorkspaceSessions: StateFlow<Boolean> = repository.deleteExternalWorkspaceSessionsFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    /** 消费初始化错误提示，避免重复弹 Toast。 */
+    /** Consumes the initialization error hint, to avoid showing the Toast repeatedly. */
     fun consumeInitError() {
         repository.consumeInitError()
     }
 
-    /** 消费添加外部工作区失败提示，避免重复弹 Toast。 */
+    /** Consumes the add-external-workspace failure hint, to avoid showing the Toast repeatedly. */
     fun consumeAddError() {
         repository.consumeAddError()
     }
 
     init {
         viewModelScope.launch { runCatching { repository.initialize() } }
-        // 模式切换后重新加载工作区列表（本地 File.listFiles ↔ 远程 SFTP ls）。
-        // drop(1) 跳过首帧（init 已调 initialize），仅响应后续切换。
+        // Reload the workspace list after a mode switch (local File.listFiles ↔ remote SFTP ls).
+        // drop(1) skips the first emission (init already called initialize); only respond to later switches.
         viewModelScope.launch {
             executionModeHolder.mode.drop(1).distinctUntilChanged().collect {
                 runCatching { repository.initialize() }
@@ -73,7 +73,7 @@ class WorkspaceViewModel @Inject constructor(
         onResult(ws)
     }
 
-    /** 打开面板前刷新外部工作区可用性（存储卡拔插后列表与当前选中及时更新）。 */
+    /** Refreshes external workspace availability before opening the panel (so the list and current selection update promptly after storage is inserted/removed). */
     fun refreshAvailability() = viewModelScope.launch {
         runCatching { repository.refreshAvailability() }
     }
@@ -82,7 +82,7 @@ class WorkspaceViewModel @Inject constructor(
         runCatching { repository.setExternalWarningDismissed(dismissed) }
     }
 
-    /** 注册用户所选设备目录为外部本地工作区，不自动切换；切换由调用方走确认流程。 */
+    /** Registers a device directory chosen by the user as an external local workspace, without switching automatically; switching goes through the caller's confirmation flow. */
     fun addExternalWorkspace(uri: Uri, onResult: (Workspace?) -> Unit = {}) = viewModelScope.launch {
         val ws = runCatching { repository.addExternalWorkspace(uri) }.getOrNull()
         onResult(ws)

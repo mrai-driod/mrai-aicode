@@ -20,17 +20,17 @@ import javax.inject.Singleton
 private const val TAG = "GitRepository"
 
 /**
- * 在容器内执行 git 命令并解析输出。
+ * Runs git commands inside the container and parses their output.
  *
- * 命令经 [GitCommandEngine] 下发——它确保 git 永远跑在有 git 二进制的完整环境里
- * （本地容器，或远程 Linux；真机 ROOT 通道会自动回退到本地容器，因为 Android 系统不带 git）。
- * 不经 agent 工具链 / 权限引擎——Git 页是用户主动操作。所有输出解析为纯领域模型。
+ * Commands are dispatched via [GitCommandEngine] -- it ensures git always runs in a complete environment that has a git binary
+ * (the local container, or a remote Linux host; the device ROOT channel automatically falls back to the local container, because Android does not ship git).
+ * It does not go through the agent toolchain / permission engine -- the Git page is a user-initiated action. All output is parsed into pure domain models.
  *
- * 命令经 [shellQuote] 逐参数转义后拼成单条 `git ...` 字符串交给 `/bin/sh -c`，故格式串里的
- * `|`、`%(...)`、含空格的路径都能安全传递。
+ * Each command argument is escaped with [shellQuote] and the arguments are joined into a single `git ...` string handed to `/bin/sh -c`, so format strings containing
+ * `|`, `%(...)`, and paths with spaces are all passed safely.
  *
- * 所有命令带 `-c core.quotepath=false`：git 默认把路径里的非 ASCII 字节转成八进制转义
- * （`中文` → `\344\270\255\346\226\207`），关掉后直接输出 UTF-8 原文，中文目录/文件名不再乱码。
+ * Every command carries `-c core.quotepath=false`: by default git converts non-ASCII bytes in paths into octal escapes
+ * (e.g. a three-byte UTF-8 character becomes `\344\270\255`-style sequences); disabling it makes git emit raw UTF-8, so non-ASCII directory/file names are no longer garbled.
  */
 @Singleton
 class GitRepository @Inject constructor(
@@ -38,28 +38,28 @@ class GitRepository @Inject constructor(
     private val workspaceRepository: WorkspaceRepository
 ) {
     private companion object {
-        /** 提交拓扑图每页加载条数。首批与每次「加载更多」都取这么多条，超过的需滚到底再拉。 */
+        /** Number of commits loaded per page for the topology graph. The first batch and each "load more" fetch this many; any more require scrolling to the bottom to load further. */
         const val GRAPH_PAGE_SIZE = 100
 
-        /** diff 允许读取的单侧文件字节上限：超过则不拉内容，直接降级为「文件过大」。 */
+        /** Maximum byte size for one side of a diff: beyond this, contents are not fetched and the result degrades directly to "file too large". */
         const val MAX_DIFF_FILE_BYTES = 2L * 1024 * 1024
     }
     /**
-     * 执行一条 `git` 子命令，返回合并后的 stdout+stderr 文本。仅用于只读命令（status/branches/log/remote 等）：
-     * 这些靠输出解析、容错，git 非零退出码不会让 UI 误判（解析得空罢了）。凭据由 `credential.helper=store`
-     * 经凭据文件自动注入（见 [com.aicode.feature.credentials.data.repository.FileCredentialRepository]），
-     * 不在此按命令塞 `http.extraHeader`。
-     * 每条参数经 [shellQuote] 单引号转义，含空格/特殊字符的值（提交消息、含空格路径等）安全传递。
+     * Runs a single `git` subcommand and returns the combined stdout+stderr text. For read-only commands only (status/branches/log/remote, etc.):
+     * these rely on output parsing and are fault-tolerant -- a non-zero git exit code does not mislead the UI (parsing simply yields empty). Credentials are auto-injected from the credential file via `credential.helper=store`
+     * (see [com.aicode.feature.credentials.data.repository.FileCredentialRepository]),
+     * so no per-command `http.extraHeader` is added here.
+     * Each argument is single-quote escaped with [shellQuote], so values with spaces/special characters (commit messages, paths with spaces, etc.) are passed safely.
      */
     private suspend fun git(
         vararg args: String
     ): String = gitRaw(args)
 
     /**
-     * 执行一条 `git` **写**子命令，据退出码判成败：非零（真实失败）抛 [GitCommandFailureException]
-     * 携带 git 输出文本，上层 [com.aicode.feature.git.presentation.GitViewModel.runAction] 据此如实显示
-     * 「失败 + 原因」而非误报成功。代表场景：未配置署名提交、未授权推送、合并冲突。空退出码（超时/异常）
-     * 同样按失败抛，避免静默成功。
+     * Runs a single `git` **write** subcommand and judges success by exit code: non-zero (a real failure) throws [GitCommandFailureException]
+     * carrying the git output text, so the caller [com.aicode.feature.git.presentation.GitViewModel.runAction] can truthfully show
+     * "failure + reason" instead of a false success. Typical cases: committing without a configured identity, unauthorized push, merge conflict. An empty exit code (timeout/exception)
+     * is likewise thrown as a failure, avoiding a silent false success.
      */
     private suspend fun gitChecked(
         vararg args: String
@@ -69,41 +69,41 @@ class GitRepository @Inject constructor(
         timeoutMs: Long,
         vararg args: String
     ): String {
-        // 用不限幅执行：diff 内容/文件内容可能远超 AI 工具链路的 4 万字符限幅，
-        // 截断占位符会混入 diff 数据流被 UI 渲染成伪 diff 行。
+        // Run unbounded: diff contents / file contents can far exceed the AI toolchain's 40k-character cap,
+        // and a truncation placeholder mixed into the diff stream would be rendered by the UI as fake diff lines.
         val result = engine.runCommandSyncUnbounded(buildGitCommand(args), workspaceRepository.currentPath(), timeoutMs)
         if (result.outputTruncated) throw GitOutputTooLargeException()
         if (result.exitCode == 0) return result.output
-        throw GitCommandFailureException(result.output.ifBlank { "git 退出码 ${result.exitCode}" })
+        throw GitCommandFailureException(result.output.ifBlank { "git exit code ${result.exitCode}" })
     }
 
-    /** 拼命令并跑（不判退出码），[git] 与 [gitChecked] 复用。 */
+    /** Builds the command and runs it (without checking the exit code); shared by [git] and [gitChecked]. */
     private suspend fun gitRaw(args: Array<out String>): String {
         val result = engine.runCommandSyncUnbounded(buildGitCommand(args), workspaceRepository.currentPath())
         if (result.outputTruncated) throw GitOutputTooLargeException()
         return result.output
     }
 
-    /** 拼成交给 `/bin/sh -c` 的单条命令字符串，逐参数 [shellQuote] 转义。 */
+    /** Builds the single command string handed to `/bin/sh -c`, escaping each argument with [shellQuote]. */
     private fun buildGitCommand(args: Array<out String>): String = buildString {
         append("git -c core.quotepath=false")
         args.forEach { append(' '); append(shellQuote(it)) }
     }
 
-    /** 当前工作区是否处于一个 git 工作树内。SSH 未连接等异常时返回 false 而非抛出，避免 UI 崩溃。 */
+    /** Whether the current workspace is inside a git work tree. Returns false rather than throwing on errors such as SSH not connected, to avoid crashing the UI. */
     suspend fun isRepo(): Boolean {
         return runCatching { git("rev-parse", "--is-inside-work-tree").trim() == "true" }
             .getOrElse { false }
     }
 
-    /** 容器是否就绪可执行 git 命令；未就绪时返回引导文案（供 Git 页在刷新前提示用户去终端页初始化）。 */
+    /** Whether the container is ready to run git commands; when not ready, returns guidance text (for the Git page to prompt the user to initialize it on the Terminal page before refreshing). */
     fun notReadyHint(): String? = engine.notReadyHint()
 
     /**
-     * 在当前工作区初始化 git 仓库。
+     * Initializes a git repository in the current workspace.
      *
-     * 默认分支优先使用现代标准的 `main`（Git 2.28+ 支持 `git init -b main`），
-     * 若环境 Git 版本较低不支持 `-b` 参数，降级为先 `git init` 再将未初始化的 HEAD 指向 `refs/heads/main`。
+     * The default branch prefers the modern standard `main` (Git 2.28+ supports `git init -b main`);
+     * if the environment's Git is too old to support `-b`, it degrades to `git init` first, then pointing the unborn HEAD at `refs/heads/main`.
      */
     suspend fun initRepo(): String {
         return runCatching { gitChecked("init", "-b", "main") }
@@ -114,14 +114,14 @@ class GitRepository @Inject constructor(
             }
     }
 
-    /** 克隆远程仓库到当前工作区根目录（`git clone <url> .`）。据退出码判成败，失败抛 [GitCommandFailureException]。 */
+    /** Clones a remote repository into the current workspace root (`git clone <url> .`). Judged by exit code; failure throws [GitCommandFailureException]. */
     suspend fun cloneRepo(url: String): String =
         gitCheckedWithTimeout(600_000L, "clone", url.trim(), ".")
 
-    /** 是否已配置至少一个远程仓库（`git remote` 输出非空）。拉取/推送前据此门控。 */
+    /** Whether at least one remote is configured (`git remote` output is non-empty). Used to gate pull/push. */
     suspend fun hasRemote(): Boolean = git("remote").trim().isNotEmpty()
 
-    /** `git status` 聚合视图。 */
+    /** Aggregated view of `git status`. */
     suspend fun status(): GitStatus {
         val raw = git("status", "--porcelain=v1", "-b")
         val lines = raw.split('\n').map { it.removeSuffix("\r") }
@@ -163,14 +163,14 @@ class GitRepository @Inject constructor(
             val x = line[0]
             val y = line[1]
             val rawPath = line.substring(3)
-            // 重命名形如 "old -> new"，展示新路径。
+            // A rename looks like "old -> new"; show the new path.
             val path = unquoteGitPath(rawPath.substringAfter(" -> ").trim())
 
             if (x == '?' && y == '?') {
                 untracked.add(path)
                 continue
             }
-            // 未合并冲突（Unmerged）：UU, AA, DD, AU, UD, UA, DU 等
+            // Unmerged conflicts: UU, AA, DD, AU, UD, UA, DU, etc.
             val isConflict = x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D')
             if (isConflict) {
                 conflicted.add(GitFileChange(path, "$x$y", staged = false))
@@ -187,12 +187,12 @@ class GitRepository @Inject constructor(
         return GitStatus(branch, ahead, behind, staged, unstaged, untracked, conflicted, isMerging, upstream, isDetached)
     }
 
-    /** 本地 + 远程分支列表，当前分支高亮。 */
+    /** Local + remote branch list, with the current branch highlighted. */
     suspend fun branches(): List<GitBranch> = loadAllRefs().branches
 
     /**
-     * 仅拉本地分支的 refs-by-commit 映射（`for-each-ref refs/heads`，大仓库亚秒级），
-     * 供首屏轻量快照的 graph 标注当前分支位置。远程分支与标签标注延迟到 BRANCHES tab 全量加载。
+     * Fetches only the refs-by-commit map for local branches (`for-each-ref refs/heads`, sub-second even for large repos),
+     * so the lightweight first-screen snapshot graph can mark the current branch position. Remote branch and tag labels are deferred to the full load on the BRANCHES tab.
      */
     suspend fun localRefsOnly(): Map<String, List<GitGraphRef>> = withContext(Dispatchers.Default) {
         val raw = runCatching {
@@ -212,7 +212,7 @@ class GitRepository @Inject constructor(
         result
     }
 
-    /** 最近 [limit] 条提交。 */
+    /** The most recent [limit] commits. */
     suspend fun log(limit: Int = 50): List<GitCommit> {
         val raw = git("log", "--pretty=format:%H%x1f%h%x1f%an%x1f%ar%x1f%s", "-n", limit.toString())
         if (raw.isBlank() || raw.startsWith("fatal:")) return emptyList()
@@ -224,18 +224,18 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 拓扑图视图：提交（含父哈希）+ 引用（分支/标签）+ 泳道布局。
+     * Topology graph view: commits (with parent hashes) + refs (branches/tags) + lane layout.
      *
-     * `git log --pretty=format:...%P` 在常规字段后追加父哈希列表（空格分隔，多个即合并提交）；
-     * `git for-each-ref` 一次拿全部分支/标签及其指向的提交哈希与是否 HEAD。提交与引用解析后，
-     * 在 [Dispatchers.Default] 上跑纯 Kotlin 泳道分配算法（见 [GitGraphBuilder]），产出 [GitGraph]。
-     * 失败（非仓库/无提交）返回 [GitGraph.EMPTY]，不抛——UI 据空图显示空态。
+     * `git log --pretty=format:...%P` appends the parent hash list after the regular fields (space-separated; multiple entries mean a merge commit);
+     * `git for-each-ref` fetches all branches/tags, the commit hash each points at, and whether it is HEAD, in one call. After commits and refs are parsed,
+     * the pure-Kotlin lane assignment algorithm runs on [Dispatchers.Default] (see [GitGraphBuilder]) to produce a [GitGraph].
+     * On failure (not a repo / no commits) returns [GitGraph.EMPTY] without throwing -- the UI shows an empty state for an empty graph.
      *
-     * 首批加载取 [GRAPH_PAGE_SIZE] 条；[hasMore] 按本批返回条数是否达到页大小判定，UI 滚到底据此
-     * 触发 [graphAppend] 追加下一页。提交数不足页大小时 hasMore=false，UI 不再显示加载更多。
+     * The first batch loads [GRAPH_PAGE_SIZE] entries; [hasMore] is decided by whether this batch returned a full page, and the UI uses it when scrolled to the bottom
+     * to trigger [graphAppend] for the next page. When there are fewer commits than a page, hasMore=false and the UI no longer offers load-more.
      *
-     * [refs] 为外部传入的 refs-by-commit 映射（来自 [loadAllRefs]），避免 graph 内部重复拉全量 refs。
-     * 为空时 graph 不标注任何 ref（首屏轻量快照场景：只拉本地分支，远程/标签标注延迟到 BRANCHES tab）。
+     * [refs] is the refs-by-commit map passed in from outside (from [loadAllRefs]), avoiding a duplicate full ref fetch inside graph.
+     * When empty, the graph labels no refs (lightweight first-screen snapshot case: only local branches are fetched; remote/tag labels are deferred to the BRANCHES tab).
      */
     suspend fun graph(
         limit: Int = GRAPH_PAGE_SIZE,
@@ -244,15 +244,15 @@ class GitRepository @Inject constructor(
         graphAppend(emptyList(), refs, limit)
 
     /**
-     * 分页加载下一批提交并整体重算泳道布局。
+     * Loads the next batch of commits page by page and recomputes the lane layout for the whole graph.
      *
-     * 从已加载数量处 `git log --skip=<existingCommits.size> -n <limit>` 取下一批提交，与 [existingCommits]
-     * 合并为完整列表后整体调 [GitGraphBuilder] 重算布局——泳道分配依赖全局子父顺序，父提交可能跨批次
-     * 指向已加载提交，单算新批次会让列号与旧布局冲突导致连线断裂，故必须整图重算。重算开销 O(已加载数)，
-     * 移动端纯内存 Kotlin 计算毫秒级，可接受。
+     * Fetches the next batch from the already-loaded count via `git log --skip=<existingCommits.size> -n <limit>`, merges it with [existingCommits]
+     * into a complete list, then recomputes the layout with [GitGraphBuilder] as a whole -- lane assignment depends on the global parent-child order, and a parent may point across batches
+     * at an already-loaded commit, so computing only the new batch would make column numbers clash with the old layout and break lines; the whole graph must be recomputed. Recomputation cost is O(loaded count),
+     * and pure in-memory Kotlin computation on mobile takes milliseconds, which is acceptable.
      *
-     * 返回含全部已加载提交（旧+新）的完整 [GitGraph]，ViewModel 直接整体替换 state.graph；UI 的 LazyColumn
-     * 因 `item(key=...)` 机制只增量重组新行不闪烁。[hasMore] = 新批次返回条数达到页大小（未到则历史末尾）。
+     * Returns a complete [GitGraph] containing all loaded commits (old + new); the ViewModel replaces state.graph wholesale; the UI's LazyColumn
+     * only incrementally recomposes new rows via its `item(key=...)` mechanism, without flicker. [hasMore] = whether the new batch returned a full page (otherwise the end of history).
      */
     suspend fun graphAppend(
         existingCommits: List<GraphCommit>,
@@ -270,20 +270,20 @@ class GitRepository @Inject constructor(
         val newCommits = GitGraphBuilder.parseGraphCommits(logRaw)
         if (newCommits.isEmpty() && existingCommits.isEmpty()) return@withContext GitGraph.EMPTY
 
-        // 合并去重：新批次理论上不会与已加载重复（--skip 跳过已加载数量），但防御性按 hash 去重保顺序。
+        // Merge with dedup: in theory the new batch cannot overlap the loaded commits (--skip skips the loaded count), but defensively dedup by hash while preserving order.
         val existingHashes = existingCommits.mapTo(HashSet()) { it.hash }
         val merged = existingCommits + newCommits.filter { it.hash !in existingHashes }
         GitGraphBuilder.buildGraph(merged, refs, hasMore = newCommits.size >= limit)
     }
 
     /**
-     * 一次拉取全部分支/标签及其指向的提交哈希，解析为三份切面：[AllRefs.branches] 列表、[AllRefs.tags] 列表、
-     * [AllRefs.refsByCommit] 映射。`branches()`、`listTags()`、graph 的 refs 标注共用此一次调用，
-     * 消除原先三条独立 `for-each-ref`/`tag` 命令（大仓库各 8-20s）。
+     * Fetches all branches/tags and the commit hash each points at in one call, parsed into three views: the [AllRefs.branches] list, the [AllRefs.tags] list,
+     * and the [AllRefs.refsByCommit] map. `branches()`, `listTags()`, and the graph's ref labels share this single call,
+     * eliminating the previous three separate `for-each-ref`/`tag` commands (8-20s each on large repos).
      *
-     * `%(refname:short)` 短名、`%(objectname)` 指向的完整哈希、`%(HEAD)` 标记当前分支（输出 `*` 或空）。
-     * 本地分支（refs/heads）isRemote=false，远程分支（refs/remotes）isRemote=true，标签（refs/tags）isBranch=false。
-     * 标签按 refname 倒序（纯字符串比较，不读对象内容），避免 `--sort=-creatordate` 遍历所有 tag 对象的 8s 开销。
+     * `%(refname:short)` is the short name, `%(objectname)` the full hash pointed at, and `%(HEAD)` marks the current branch (outputs `*` or empty).
+     * Local branches (refs/heads) have isRemote=false, remote branches (refs/remotes) isRemote=true, and tags (refs/tags) isBranch=false.
+     * Tags are reversed by refname (pure string comparison, without reading object contents), avoiding the 8s cost of `--sort=-creatordate` traversing every tag object.
      */
     data class AllRefs(
         val branches: List<GitBranch>,
@@ -323,19 +323,19 @@ class GitRepository @Inject constructor(
             if (isBranch) {
                 branches.add(GitBranch(name, current = isHead && !isRemote, remote = isRemote, upstream = upstream, ahead = ahead, behind = behind))
             } else {
-                // 标签：objectname 取短哈希（前 7 位）与原 listTags 行为一致。
+                // Tag: objectname uses the short hash (first 7 chars), consistent with the original listTags behaviour.
                 tags.add(GitTag(name, hash.take(7)))
             }
         }
-        // for-each-ref 默认按 refname 排序（本地分支、远程分支、标签各自有序），标签再倒序与原行为对齐。
+        // for-each-ref sorts by refname by default (local branches, remote branches, and tags are each ordered); tags are then reversed to match the original behaviour.
         tags.reverse()
         AllRefs(branches, tags, refsByCommit)
     }
 
     /**
-     * 某次提交改动的文件清单。用 `diff-tree --root` 以兼容无父的根提交；`--no-renames` 让重命名
-     * 退化为「删除旧 + 新增新」，状态码取首字符即可复用 [com.aicode.feature.git.domain.model.GitFileChange]。
-     * 返回空列表表示该提交无文件改动（如空提交）。
+     * The list of files changed by a commit. Uses `diff-tree --root` to support root commits with no parent; `--no-renames` degrades a rename
+     * to "delete old + add new", so taking the first character of the status code reuses [com.aicode.feature.git.domain.model.GitFileChange].
+     * An empty list means the commit changed no files (e.g. an empty commit).
      */
     suspend fun commitFiles(hash: String): List<GitFileChange> {
         val raw = git("diff-tree", "--no-commit-id", "-r", "--root", "--name-status", "--no-renames", hash)
@@ -362,8 +362,8 @@ class GitRepository @Inject constructor(
         else gitChecked("commit", "-m", message)
 
     /**
-     * 获取用于 AI 生成提交信息的差异文本。
-     * 优先获取暂存区差异（`git diff --cached`）；如果暂存区为空，则获取工作区差异（`git diff`）。
+     * Gets the diff text used by AI to generate a commit message.
+     * Prefers the staged diff (`git diff --cached`); if the staging area is empty, falls back to the worktree diff (`git diff`).
      */
     suspend fun diffForCommitMessage(): String {
         val staged = gitRaw(arrayOf("diff", "--cached", "--no-color", "--no-ext-diff"))
@@ -373,17 +373,17 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 回退单个文件的未暂存改动：把工作区还原成暂存区内容（`git checkout -- <path>`），
-     * 被删除的文件由此重新出现。用 `checkout` 而非 `restore`——后者需 git 2.23+，
-     * 远程 SSH 模式下服务器 git 可能更老。
+     * Reverts the unstaged changes of a single file: restores the worktree to the index contents (`git checkout -- <path>`),
+     * so a deleted file reappears. Uses `checkout` rather than `restore` -- the latter needs git 2.23+,
+     * and in remote SSH mode the server's git may be older.
      */
     suspend fun revertWorktree(path: String): String = gitChecked("checkout", "--", path)
 
     /**
-     * 回退单个文件的全部改动（已暂存 + 未暂存），还原到上次提交：先 `reset` 让索引回到 HEAD，
-     * 再从索引还原工作区。文件在 HEAD 中不存在时（新增文件）reset 已让它退回未跟踪，
-     * 此时跳过 checkout——否则 git 会以 `pathspec did not match` 失败。
-     * 仓库尚无任何提交时无 HEAD 可比，只能 `rm --cached` 退回未跟踪。
+     * Reverts all changes (staged + unstaged) of a single file back to the last commit: first `reset` returns the index to HEAD,
+     * then the worktree is restored from the index. When the file does not exist in HEAD (a newly added file), reset has already returned it to untracked,
+     * so checkout is skipped -- otherwise git would fail with `pathspec did not match`.
+     * When the repo has no commits yet there is no HEAD to compare against, so only `rm --cached` can return it to untracked.
      */
     suspend fun revertToHead(path: String): String {
         if (!hasHead()) return gitChecked("rm", "-q", "--cached", "--", path)
@@ -392,20 +392,20 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 回退全部未暂存改动。pathspec `:/` 指仓库根，工作区是仓库子目录时也能覆盖全仓库改动
-     * （`--  .` 只作用于当前目录）。已暂存的内容不受影响。
+     * Reverts all unstaged changes. The pathspec `:/` denotes the repo root, so when the worktree is a subdirectory of the repo it still covers changes across the whole repo
+     * (`--  .` only applies to the current directory). Staged contents are unaffected.
      */
     suspend fun revertAllWorktree(): String = gitChecked("checkout", "--", ":/")
 
     /**
-     * 删除未跟踪的文件或目录（`git clean -f -d`）。`-d` 覆盖 status 折叠成一行的新目录；
-     * 不带 `-x`，被 .gitignore 忽略的文件保持不动。这些文件从未进入版本库，删除后 git 无法恢复。
+     * Deletes an untracked file or directory (`git clean -f -d`). `-d` covers new directories that status collapses into one line;
+     * without `-x`, files ignored by .gitignore are left untouched. These files were never in version control, so git cannot restore them after deletion.
      */
     suspend fun deleteUntracked(path: String): String = gitChecked("clean", "-f", "-d", "--", path)
 
     /**
-     * 某个未跟踪目录下的未跟踪文件清单。`git status` 默认把新目录折叠成 `dir/` 一行，
-     * 里面的文件不单独列出；UI 展开该目录时按需调用此方法，避免 `-uall` 在大目录下一次列出上千条。
+     * Lists the untracked files under an untracked directory. `git status` collapses a new directory into a single `dir/` line by default,
+     * without listing the files inside individually; the UI calls this on demand when expanding such a directory, avoiding `-uall` listing thousands of entries in a large directory at once.
      */
     suspend fun untrackedFilesIn(dir: String): List<String> {
         val raw = git("ls-files", "--others", "--exclude-standard", "--", dir)
@@ -414,31 +414,31 @@ class GitRepository @Inject constructor(
             .map { unquoteGitPath(it) }
     }
 
-    /** 仓库是否已有提交（HEAD 可解析）。空仓库里 `reset HEAD` / `ls-tree HEAD` 都会失败。 */
+    /** Whether the repo already has commits (HEAD resolves). In an empty repo, `reset HEAD` / `ls-tree HEAD` both fail. */
     private suspend fun hasHead(): Boolean =
         runCatching { git("rev-parse", "--verify", "HEAD").trim() }
             .getOrDefault("")
             .let { it.isNotBlank() && !it.startsWith("fatal") }
 
-    /** 指定路径在 HEAD 提交中是否存在。 */
+    /** Whether the given path exists in the HEAD commit. */
     private suspend fun existsInHead(path: String): Boolean =
         runCatching { git("ls-tree", "HEAD", "--", path).trim() }
             .getOrDefault("")
             .let { it.isNotBlank() && !it.startsWith("fatal") }
 
     /**
-     * 拉取：直接 `git pull`，凭据由容器 `credential.helper` 链自动注入——`store` 命中已有凭据秒过，
-     * 未命中时自定义 helper 经文件 IPC 触发 app 弹窗回填，git 自动续跑（见 [CredentialRequestBridge]）。
-     * 故不再在此预查 host 凭据：三端（UI/终端/AI）共用同一 helper 兜底，逻辑单一来源。remote 不存在
-     * 或真实失败由 [gitChecked] 据退出码抛 [GitCommandFailureException]，上层 toast。
+     * Pull: runs `git pull` directly; credentials are auto-injected by the container `credential.helper` chain -- a `store` hit passes instantly with existing credentials,
+     * and on a miss a custom helper triggers an app dialog via file IPC to fill them in, after which git resumes automatically (see [CredentialRequestBridge]).
+     * So host credentials are no longer pre-checked here: all three surfaces (UI/terminal/AI) share the same helper fallback, a single source of logic. A missing remote
+     * or a real failure is thrown by [gitChecked] as a [GitCommandFailureException] based on the exit code, for the caller to toast.
      */
     suspend fun pull(): String = gitChecked("pull")
 
     /**
-     * 推送：有上游则 `git push`；当前分支无上游时自动 `git push --set-upstream <remote> <branch>` 首推建关联，
-     * 仿 Win/Mac git 客户端「首次推送自动建上游」体验，避免用户撞到 `fatal: has no upstream branch` 原始报错。
-     * remote 取 `git remote` 首个（多 remote 默认第一；无 remote 已被上层 hasRemote 门控挡掉）；
-     * 分支取 `git rev-parse --abbrev-ref HEAD`。凭据仍由容器 credential.helper 链兜底注入。
+     * Push: with an upstream, runs `git push`; when the current branch has no upstream, automatically runs `git push --set-upstream <remote> <branch>` for the first push to create the association,
+     * mimicking the "first push creates the upstream automatically" experience of Win/Mac git clients, so the user does not hit the raw `fatal: has no upstream branch` error.
+     * The remote is the first entry of `git remote` (the first by default with multiple remotes; no remote is already blocked upstream by the hasRemote gate);
+     * the branch comes from `git rev-parse --abbrev-ref HEAD`. Credentials are still injected by the container credential.helper chain as a fallback.
      */
     suspend fun push(): String {
         val hasUpstream = runCatching { git("rev-parse", "--abbrev-ref", "@{upstream}").trim() }
@@ -446,16 +446,16 @@ class GitRepository @Inject constructor(
             .takeIf { it.isNotBlank() && it != "HEAD" && !it.startsWith("fatal") } != null
         if (hasUpstream) return gitChecked("push")
         val remote = git("remote").split('\n').firstOrNull { it.removeSuffix("\r").isNotBlank() }?.removeSuffix("\r")?.trim()
-            ?: throw GitCommandFailureException("未配置远程仓库")
+            ?: throw GitCommandFailureException("No remote repository configured")
         val branch = git("rev-parse", "--abbrev-ref", "HEAD").removeSuffix("\r").trim()
             .takeIf { it.isNotBlank() && it != "HEAD" }
-            ?: throw GitCommandFailureException("无法确定当前分支（处于 detached HEAD）")
+            ?: throw GitCommandFailureException("Cannot determine the current branch (detached HEAD)")
         return gitChecked("push", "--set-upstream", remote, branch)
     }
 
     /**
-     * 当前是否为 master 分支的首次推送（即当前分支为 master 且尚未建立 upstream 跟踪关系）。
-     * 供 UI 弹窗询问用户是否重命名为现代通用的 main 分支。
+     * Whether this is the first push of a master branch (i.e. the current branch is master and no upstream tracking relation exists yet).
+     * Used by the UI to ask the user in a dialog whether to rename it to the modern, common main branch.
      */
     suspend fun isFirstPushOfMaster(): Boolean {
         val hasUpstream = runCatching { git("rev-parse", "--abbrev-ref", "@{upstream}").trim() }
@@ -466,19 +466,19 @@ class GitRepository @Inject constructor(
         return branch == "master"
     }
 
-    /** 将当前 master 分支重命名为 main 并执行首次推送。 */
+    /** Renames the current master branch to main and performs the first push. */
     suspend fun renameMasterToMainAndPush(): String {
         renameBranch("master", "main")
         return push()
     }
 
-    /** 本地标签列表，按创建时间倒序（最新在前）。 */
+    /** Local tag list, ordered by creation time descending (newest first). */
     suspend fun listTags(): List<GitTag> = loadAllRefs().tags
 
     /**
-     * 创建新分支。name 为新分支名；startPoint 为基准分支名（null/空 → 从当前 HEAD）；
-     * checkout=true 则创建并切换（`git checkout -b`），否则仅创建不切换（`git branch`）。
-     * 起点不存在或分支名非法时由 [gitChecked] 据退出码抛 [GitCommandFailureException]，上层 toast。
+     * Creates a new branch. name is the new branch name; startPoint is the base branch name (null/empty -> from the current HEAD);
+     * checkout=true creates and switches (`git checkout -b`); otherwise it only creates without switching (`git branch`).
+     * A missing start point or an invalid branch name is thrown by [gitChecked] as a [GitCommandFailureException] based on the exit code, for the caller to toast.
      */
     suspend fun createBranch(name: String, startPoint: String?, checkout: Boolean): String {
         return if (checkout) {
@@ -491,62 +491,62 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 安全删除本地分支（`git branch -d`）：仅删除已合并到上游的分支，未合并时 git 报错
-     * 由 [gitChecked] 据退出码抛 [GitCommandFailureException]，上层 toast。当前分支不可删（git 自身拦截）。
+     * Safely deletes a local branch (`git branch -d`): only deletes branches already merged into their upstream; when unmerged, git errors
+     * and [gitChecked] throws a [GitCommandFailureException] based on the exit code, for the caller to toast. The current branch cannot be deleted (git itself blocks it).
      */
     suspend fun deleteBranch(name: String): String = gitChecked("branch", "-d", name)
 
     /**
-     * 重命名本地分支（`git branch -m <old> <new>`）。当前分支也可重命名：传单参数 `git branch -m <new>`
-     * 重命名当前分支；这里统一用双参数形式，由上层保证 oldName 非空。名字非法或已存在时由 [gitChecked]
-     * 据退出码抛 [GitCommandFailureException]，上层 toast。
+     * Renames a local branch (`git branch -m <old> <new>`). The current branch can also be renamed: the single-argument form `git branch -m <new>`
+     * renames the current branch; here the two-argument form is used uniformly, with the caller guaranteeing oldName is non-empty. An invalid or already-existing name is thrown by [gitChecked]
+     * as a [GitCommandFailureException] based on the exit code, for the caller to toast.
      */
     suspend fun renameBranch(oldName: String, newName: String): String =
         gitChecked("branch", "-m", oldName, newName)
 
     /**
-     * 创建轻量标签（`git tag <name>`），指向当前 HEAD 或指定提交。
+     * Creates a lightweight tag (`git tag <name>`), pointing at the current HEAD or a specified commit.
      */
     suspend fun createTag(name: String, commitHash: String? = null): String =
         if (commitHash.isNullOrBlank()) gitChecked("tag", name)
         else gitChecked("tag", name, commitHash)
 
     /**
-     * 重置当前分支到指定提交。
-     * [mode] 可以是 "soft" 或 "mixed"。
+     * Resets the current branch to the specified commit.
+     * [mode] can be "soft" or "mixed".
      */
     suspend fun resetToCommit(commitHash: String, mode: String = "mixed"): String =
         gitChecked("reset", "--$mode", commitHash)
 
     /**
-     * 将忽略规则追加到工作区的 .gitignore 文件中。
-     * 无论 .gitignore 是否已存在均可自动创建与追加；通过 engine 执行以同时兼容本地与远程模式。
+     * Appends an ignore rule to the workspace's .gitignore file.
+     * Creates and appends automatically whether or not .gitignore already exists; runs via the engine to support both local and remote modes.
      */
     suspend fun addToGitignore(pattern: String): String {
         val normalized = pattern.trim()
         if (normalized.isBlank()) return ""
-        // 先检查 .gitignore 是否已有该规则
+        // First check whether .gitignore already has this rule
         val checkCmd = "grep -F -x -- ${shellQuote(normalized)} .gitignore"
         val checkResult = engine.runCommandSyncUnbounded(checkCmd, workspaceRepository.currentPath())
-        if (checkResult.exitCode == 0) return normalized // 已存在，无需重复追加
+        if (checkResult.exitCode == 0) return normalized // Already exists; no need to append again
 
-        // 不存在则通过 printf 安全追加（如果文件不存在则自动创建）
+        // Otherwise append safely via printf (creates the file automatically if it does not exist)
         val appendCmd = "printf '%s\\n' ${shellQuote(normalized)} >> .gitignore"
         val appendResult = engine.runCommandSyncUnbounded(appendCmd, workspaceRepository.currentPath())
         if (appendResult.exitCode != 0) {
-            throw GitCommandFailureException(appendResult.output.ifBlank { "写入 .gitignore 失败" })
+            throw GitCommandFailureException(appendResult.output.ifBlank { "Failed to write .gitignore" })
         }
         return normalized
     }
 
     /**
-     * 删除本地标签（`git tag -d <name>`）。不存在时由 [gitChecked] 据退出码抛 [GitCommandFailureException]，上层 toast。
+     * Deletes a local tag (`git tag -d <name>`). A missing tag is thrown by [gitChecked] as a [GitCommandFailureException] based on the exit code, for the caller to toast.
      */
     suspend fun deleteTag(name: String): String = gitChecked("tag", "-d", name)
 
     /**
-     * 删除远程分支（`git push <remote> --delete <branch>`）。ref 形如 `origin/feature`，拆出 remote 与分支名；
-     * 无 remote 前缀时按 `origin` 兜底。会改远端，失败由 [gitChecked] 抛 [GitCommandFailureException]。
+     * Deletes a remote branch (`git push <remote> --delete <branch>`). ref looks like `origin/feature`; the remote and branch name are split out;
+     * with no remote prefix it falls back to `origin`. This mutates the remote; failure is thrown by [gitChecked] as a [GitCommandFailureException].
      */
     suspend fun deleteRemoteBranch(ref: String): String {
         val remote = ref.substringBefore('/', "origin")
@@ -554,15 +554,15 @@ class GitRepository @Inject constructor(
         return gitChecked("push", remote, "--delete", branch)
     }
 
-    /** 是否正在处于未完成的合并状态（MERGE_HEAD 存在）。 */
+    /** Whether an unfinished merge is in progress (MERGE_HEAD exists). */
     private suspend fun hasMergeHead(): Boolean =
         runCatching { git("rev-parse", "-q", "--verify", "MERGE_HEAD").trim() }
             .getOrDefault("")
             .let { it.isNotBlank() && !it.startsWith("fatal") }
 
     /**
-     * 切换到指定分支或标签。branch 可以是本地分支名、远程分支名或 tag 名。
-     * 远程分支用 `git checkout -b <local> <remote>` 创建本地跟踪分支，去掉远程前缀（如 origin/）。
+     * Switches to the specified branch or tag. branch can be a local branch name, a remote branch name, or a tag name.
+     * A remote branch creates a local tracking branch with `git checkout -b <local> <remote>`, stripping the remote prefix (e.g. origin/).
      */
     suspend fun checkout(branch: String, isRemote: Boolean): String {
         return if (isRemote) {
@@ -574,10 +574,10 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 合并指定分支到当前分支。
-     * [branch] 为目标分支名。
-     * [noFf] 为 true 时即使可快进也强制生成合并提交（`--no-ff`）。
-     * 遇到冲突或脏工作区时由 [gitChecked] 抛 [GitCommandFailureException]。
+     * Merges the specified branch into the current branch.
+     * [branch] is the target branch name.
+     * [noFf] when true, forces a merge commit even when a fast-forward is possible (`--no-ff`).
+     * A conflict or a dirty worktree is thrown by [gitChecked] as a [GitCommandFailureException].
      */
     suspend fun mergeBranch(branch: String, noFf: Boolean = false): String {
         return if (noFf) gitChecked("merge", "--no-ff", branch)
@@ -585,12 +585,12 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 中止当前进行中的合并（`git merge --abort`）。
+     * Aborts the merge currently in progress (`git merge --abort`).
      */
     suspend fun abortMerge(): String = gitChecked("merge", "--abort")
 
     /**
-     * 列出所有储藏记录。
+     * Lists all stash entries.
      */
     suspend fun stashList(): List<GitStash> = withContext(Dispatchers.Default) {
         val raw = runCatching { git("stash", "list", "--pretty=format:%gd%x1f%s%x1f%ar") }
@@ -606,8 +606,8 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 储藏工作区改动。
-     * [message] 可选说明；[includeUntracked] 为 true 时包含未跟踪文件（`-u`）。
+     * Stashes worktree changes.
+     * [message] is an optional note; [includeUntracked] when true also includes untracked files (`-u`).
      */
     suspend fun stashSave(message: String? = null, includeUntracked: Boolean = false): String {
         val args = mutableListOf("stash", "push")
@@ -620,100 +620,100 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 弹出指定储藏（应用并删除），默认为最近的一条 `stash@{0}`。
+     * Pops the specified stash (applies and deletes it), defaulting to the most recent one, `stash@{0}`.
      */
     suspend fun stashPop(index: String = "stash@{0}"): String =
         gitChecked("stash", "pop", index)
 
     /**
-     * 应用指定储藏（保留记录），默认为最近的一条 `stash@{0}`。
+     * Applies the specified stash (keeping the entry), defaulting to the most recent one, `stash@{0}`.
      */
     suspend fun stashApply(index: String = "stash@{0}"): String =
         gitChecked("stash", "apply", index)
 
     /**
-     * 丢弃指定储藏，默认为 `stash@{0}`。
+     * Drops the specified stash, defaulting to `stash@{0}`.
      */
     suspend fun stashDrop(index: String = "stash@{0}"): String =
         gitChecked("stash", "drop", index)
 
     /**
-     * 清空所有储藏记录。
+     * Clears all stash entries.
      */
     suspend fun stashClear(): String = gitChecked("stash", "clear")
 
     /**
-     * 写入提交署名，**优先项目级**：当前工作区（~/workspace/.git/config）已有项目级署名时写 local，
-     * 否则写 global（容器 `GIT_CONFIG_GLOBAL=/root/.aicode/.gitconfig`，持久挂载，跨 rootfs 升级不丢）作默认。
-     * 这样 UI 与终端 `git config user.name` 读到的同一份——优先项目级、无则退全局，对齐 git 自身解析顺序。
-     * 空值跳过对应项不动现有配置。由 UI 在用户保存身份时显式调用。
+     * Writes the commit identity, **preferring project scope**: when the current workspace (~/workspace/.git/config) already has a project-level identity it writes local,
+     * otherwise it writes global (the container's `GIT_CONFIG_GLOBAL=/root/.aicode/.gitconfig`, a persistent mount that survives rootfs upgrades) as the default.
+     * This way the UI and the terminal's `git config user.name` read the same value -- project scope first, global as fallback, matching git's own resolution order.
+     * Empty values skip the corresponding item without touching existing config. Called explicitly by the UI when the user saves their identity.
      */
     suspend fun setUserIdentity(name: String, email: String) {
         if (name.isNotBlank()) gitChecked("config", if (hasLocalConfig("user.name")) "--local" else "--global", "user.name", name)
         if (email.isNotBlank()) gitChecked("config", if (hasLocalConfig("user.email")) "--local" else "--global", "user.email", email)
     }
 
-    /** 当前工作区是否有项目级（`--local`）配置值。非 git 仓库或无值时返回 false。 */
+    /** Whether the current workspace has a project-level (`--local`) config value. Returns false when not a git repo or when there is no value. */
     private suspend fun hasLocalConfig(key: String): Boolean =
         runCatching { git("config", "--local", "--get", key).trim() }.getOrDefault("").isNotBlank()
 
-    /** 读取 git 当前实际生效的 user.name（按 git 解析顺序：local→global→system），UI 回显与提交按钮判空用。失败返回空串。 */
+    /** Reads the user.name currently in effect for git (in git resolution order: local->global->system); used for UI display and for the commit button's empty check. Returns an empty string on failure. */
     suspend fun getUserName(): String =
         runCatching { git("config", "--get", "user.name").trim() }.getOrDefault("").removeSuffix("\r")
 
-    /** 读取 git 当前实际生效的 user.email（local→global→system），UI 回显与编辑框初值。失败返回空串。 */
+    /** Reads the user.email currently in effect for git (local->global->system); used for UI display and as the edit field's initial value. Returns an empty string on failure. */
     suspend fun getUserEmail(): String =
         runCatching { git("config", "--get", "user.email").trim() }.getOrDefault("").removeSuffix("\r")
 
     /**
-     * 写入仓库地址 remote.origin.url，**仅写项目级**：remote.origin.url 是单个仓库的远端地址，
-     * 与 user.name/email 这种「身份默认值」不同——它绝不该写 global。一旦写进 global，后续 `git clone`
-     * 任何新仓库时，git 会同时解析出全局与 clone 写入的 local 两个 origin.url，导致 fetch 走全局旧值、
-     * push 出现多条指向不同仓库的条目（实测复现），clone 下来的仓库 fetch 到的是错误仓库。
+     * Writes the repository URL remote.origin.url, **local scope only**: remote.origin.url is a single repository's remote address,
+     * unlike an "identity default" such as user.name/email -- it must never be written to global. Once in global, every later `git clone`
+     * of a new repository would resolve both the global value and the local value written by clone, making fetch use the stale global value
+     * and push show multiple entries pointing at different repositories (reproduced in practice), so a cloned repo would fetch from the wrong repository.
      *
-     * 故此处始终写 `--local`（当前工作区须是 git 仓库），非仓库时抛 [GitCommandFailureException] 提示用户，
-     * 不再退到 global 兑底。同时顺手清掉全局可能残留的 remote.origin.url（历史版本误写下的），一次性消除污染。
+     * So this always writes `--local` (the current workspace must be a git repo); when not a repo it throws a [GitCommandFailureException] to inform the user,
+     * instead of falling back to global. It also clears any remote.origin.url left in global (written by mistake in an earlier version), eliminating the pollution in one pass.
      */
     suspend fun setRepoUrl(url: String) {
         if (url.isNotBlank()) {
             gitChecked("config", "--local", "remote.origin.url", url)
         } else {
-            // 空值删除 local 的 remote.origin.url，git config --unset 对不存在的 key 返回非零但不影响其它配置
+            // An empty value deletes the local remote.origin.url; git config --unset returns non-zero for a missing key but does not affect other config
             runCatching { gitChecked("config", "--local", "--unset", "remote.origin.url") }
         }
-        // 清除全局残留的 remote.origin.url（历史误写），避免污染后续 git clone 等命令。
+        // Clear any remote.origin.url left in global (written by mistake historically), to avoid polluting later commands such as git clone.
         runCatching { git("config", "--global", "--unset", "remote.origin.url") }
     }
 
-    /** 读取 git 当前实际生效的 remote.origin.url（local→global→system），UI 回显与编辑框初值。失败返回空串。 */
+    /** Reads the remote.origin.url currently in effect for git (local->global->system); used for UI display and as the edit field's initial value. Returns an empty string on failure. */
     suspend fun getRepoUrl(): String =
         runCatching { git("config", "--get", "remote.origin.url").trim() }.getOrDefault("").removeSuffix("\r")
 
     /**
-     * 读取指定 ref（提交/分支/标签）下某文件的完整内容（`git show <ref>:<path>`）。
-     * 用于提交文件 diff：取 `<hash>^:<path>`（改动前）与 `<hash>:<path>`（改动后）对比。
-     * 文件在指定 ref 不存在时（如新增文件的首个提交）git 报错输出 `fatal:`，此处检测到即返回空串，
-     * 上层据空串判定为「新增/删除」，整个文件按全增或全删呈现。
+     * Reads the full contents of a file at a given ref (commit/branch/tag) (`git show <ref>:<path>`).
+     * Used for commit file diffs: compares `<hash>^:<path>` (before the change) against `<hash>:<path>` (after the change).
+     * When the file does not exist at that ref (e.g. the first commit that adds the file), git outputs `fatal:`; detecting that here returns an empty string,
+     * and the caller treats an empty string as "added/deleted", presenting the whole file as fully added or fully deleted.
      */
     suspend fun showFileContent(ref: String, path: String): String {
         if (refBlobSize("$ref:$path") > MAX_DIFF_FILE_BYTES) throw GitOutputTooLargeException()
         val out = git("show", "$ref:$path")
-        // git show 对不存在的路径输出 fatal 到 stderr，runCommandSync 合并了 stdout+stderr。
-        // 检测到 fatal 前缀视为该版本无此文件，返回空串让 diff 按全增/全删处理。
+        // git show outputs fatal to stderr for a missing path, and runCommandSync merges stdout+stderr.
+        // A fatal prefix is treated as "this version has no such file", returning an empty string so the diff handles it as fully added/deleted.
         return if (out.startsWith("fatal:") || out.startsWith("error:")) "" else out
     }
 
-    /** 指定 ref 下文件（`<ref>:<path>` / `:<path>`）的字节数；取不到（不存在/非法 ref）时返回 0。 */
+    /** The byte size of a file at the given ref (`<ref>:<path>` / `:<path>`); returns 0 when it cannot be obtained (missing / invalid ref). */
     private suspend fun refBlobSize(spec: String): Long =
         runCatching { git("cat-file", "-s", spec).trim().toLong() }.getOrDefault(0L)
 
     /**
-     * 读取工作区当前文件内容。用于工作区改动 diff：与 `HEAD:<path>` 对比看出未暂存的改动。
-     * 文件不存在或读取失败返回空串。
+     * Reads the current contents of a worktree file. Used for worktree-change diffs: compared against `HEAD:<path>` to show unstaged changes.
+     * Returns an empty string when the file does not exist or reading fails.
      *
-     * 本地模式工作区就在 app 私有目录，直接用 [java.io.File] 读最快；远程 SSH 模式下
-     * [WorkspaceRepository.currentPath] 是远端绝对路径，本地 File 读不到（会静默变空串，
-     * diff 显示成整文件删除），故退回在执行后端里 `cat` 取内容。
+     * In local mode the workspace is in the app's private directory, so reading directly with [java.io.File] is fastest; in remote SSH mode
+     * [WorkspaceRepository.currentPath] is a remote absolute path that a local File cannot read (it would silently become an empty string,
+     * making the diff look like a whole-file deletion), so it falls back to fetching the contents with `cat` on the execution backend.
      */
     suspend fun worktreeFileContent(path: String): String {
         val local = withContext(Dispatchers.IO) {
@@ -736,7 +736,7 @@ class GitRepository @Inject constructor(
         return if (result.exitCode == 0) result.output else ""
     }
 
-    /** 读取暂存区当前文件内容（index）。文件尚未暂存时返回空串。 */
+    /** Reads the current contents of a file in the staging area (index). Returns an empty string when the file is not staged yet. */
     suspend fun indexFileContent(path: String): String {
         if (refBlobSize(":$path") > MAX_DIFF_FILE_BYTES) throw GitOutputTooLargeException()
         val out = git("show", ":$path")
@@ -744,9 +744,9 @@ class GitRepository @Inject constructor(
     }
 
     /**
-     * 对单个 shell 参数做单引号转义。含「安全字符」之外的字符（空格、`|`、`$`、反引号、`*` 等）时
-     * 整体包单引号，内嵌单引号用 `'\''` 关闭-转义-重开。格式串（带 `|`、`%(...)`）、含空格路径、
-     * 提交消息均由此安全传递。注意 `|` 是 shell 管道符，**不可**列入安全集。
+     * Single-quote escapes a single shell argument. When it contains characters outside the "safe set" (spaces, `|`, `$`, backticks, `*`, etc.),
+     * the whole value is wrapped in single quotes, with an embedded single quote closed-escaped-reopened as `'\''`. Format strings (with `|`, `%(...)`), paths with spaces,
+     * and commit messages are all passed safely this way. Note `|` is the shell pipe character and must **not** be in the safe set.
      */
     private fun shellQuote(arg: String): String {
         if (arg.isEmpty()) return "''"
@@ -756,12 +756,12 @@ class GitRepository @Inject constructor(
 }
 
 /**
- * porcelain v1 / ls-files / diff-tree 对含引号、反斜杠、空格或控制字符的路径会整体加引号并做
- * C 风格转义（如 `"a\"b.txt"`、`"a\tb.txt"`、八进制 `\NNN`），这里做反向解析还原真实路径。
- * 未加引号的普通路径原样返回。
+ * porcelain v1 / ls-files / diff-tree quote paths containing quotes, backslashes, spaces, or control characters as a whole and apply
+ * C-style escaping (e.g. `"a\"b.txt"`, `"a\tb.txt"`, octal `\NNN`); this reverses that parsing to restore the real path.
+ * An ordinary unquoted path is returned unchanged.
  *
- * 八进制转义是**逐字节**的：一个汉字三个字节会转成三段 `\NNN`，逐段 `toChar()` 只能得到
- * 三个 Latin-1 字符（即乱码），故连续的 `\NNN` 先攒成字节序列再整体按 UTF-8 解码。
+ * Octal escapes are **per byte**: one three-byte UTF-8 character becomes three `\NNN` segments, and decoding each segment with `toChar()` alone would yield
+ * three Latin-1 characters (i.e. mojibake), so consecutive `\NNN` segments are first collected into a byte sequence and then decoded as UTF-8 as a whole.
  */
 internal fun unquoteGitPath(raw: String): String {
     if (!raw.startsWith("\"")) return raw

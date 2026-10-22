@@ -32,7 +32,7 @@ class ModelMetadataService @Inject constructor(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** 统一拉取器：模型元数据从独立数据分支拉取，避免每日机器产物污染 main。 */
+    /** Unified fetcher: model metadata is fetched from a separate data branch, to avoid daily machine-generated output polluting main. */
     private val repoFetcher = RepoDataFetcher(context, branch = MODELS_BRANCH)
 
     @Volatile
@@ -59,12 +59,12 @@ class ModelMetadataService @Inject constructor(
         }
 
     /**
-     * 应用「上下文窗口统一高级设置」：一旦开启，忽略该模型自身的窗口数值，
-     * 全部模型统一使用用户配置的值——这样自动压缩阈值、输出预留都按同一把尺子算。
+     * Apply the "unified context window advanced setting": once enabled, ignore the model's own window values
+     * and use the user-configured value uniformly for all models — so the auto-compaction threshold and output reservation are all calculated with the same ruler.
      *
-     * 输入窗口留空时置为 null（而非沿用模型的旧值），交由
-     * [com.aicode.feature.settings.domain.model.ModelContextPolicy.effectiveInputBudget] 按
-     * 「总窗口 - 输出预留」推导；否则模型的旧上限会把用户放大的总窗口重新卡回去，等于没生效。
+     * When the input window is left empty it is set to null (rather than keeping the model's old value), leaving
+     * [com.aicode.feature.settings.domain.model.ModelContextPolicy.effectiveInputBudget] to derive it from
+     * "total window - output reservation"; otherwise the model's old cap would clamp the user's enlarged total window back down, making it have no effect.
      */
     private suspend fun applyGlobalOverride(
         meta: ModelMetadata,
@@ -79,14 +79,14 @@ class ModelMetadataService @Inject constructor(
         )
     }
 
-    /** 自定义元数据优先于自动解析（拉取/内置）结果；providerId 为空（未关联配置）时跳过合并。 */
+    /** Custom metadata takes priority over automatically resolved (fetched/built-in) results; the merge is skipped when providerId is empty (not associated with a configuration). */
     private suspend fun mergeCustom(providerId: String, modelId: String, auto: ModelMetadata): ModelMetadata {
         if (providerId.isBlank()) return auto
         val custom = customModelMetadataStore.get(providerId, modelId)
         return mergeModelMetadata(modelId, auto, custom)
     }
 
-    /** 启动时统一调用：经统一拉取器从本仓库刷新模型目录（12h 缓存，失败静默）。 */
+    /** Called uniformly at startup: refreshes the model catalog from this repository via the unified fetcher (12h cache, silent on failure). */
     suspend fun refreshFromNetworkIfStale() {
         if (refreshAttemptedThisProcess) return
         refreshAttemptedThisProcess = true
@@ -100,11 +100,11 @@ class ModelMetadataService @Inject constructor(
             if (body.isBlank()) return@withContext
             runCatching { parseCatalog(json.parseToJsonElement(body)) }
                 .onSuccess { cached = it }
-                .onFailure { FileLogger.w(TAG, "解析模型元数据失败", it) }
+                .onFailure { FileLogger.w(TAG, "Failed to parse model metadata", it) }
         }
     }
 
-    /** 纯只读链路：内存 → 本仓库磁盘缓存 → 内置 assets → 空目录（由调用方回退默认值），绝不发网络请求。 */
+    /** Purely read-only chain: memory → this repository's disk cache → built-in assets → empty catalog (the caller falls back to defaults); never issues a network request. */
     private fun loadCatalog(): Catalog {
         cached?.let { return it }
 
@@ -128,7 +128,7 @@ class ModelMetadataService @Inject constructor(
         parseCatalog(json.parseToJsonElement(body))
     }.getOrNull()
 
-    /** 目录中匹配不到模型时的兜底：统一视为文本模型，128k 输入 / 64k 输出。 */
+    /** Fallback when no model matches in the catalog: uniformly treated as a text model, 128k input / 64k output. */
     private fun default(type: ProviderType, modelId: String): ModelMetadata = ModelMetadata(
         id = modelId,
         providerId = type.name.lowercase(),
@@ -143,7 +143,7 @@ class ModelMetadataService @Inject constructor(
     )
 
     companion object {
-        /** 从 models.dev 的 reasoning_options 数组中提取 effort 类型的档位 values；无 effort 档位时返回空列表。 */
+        /** Extract the values of the effort type from the models.dev reasoning_options array; returns an empty list when there is no effort entry. */
         fun parseReasoningOptions(reasoningOptions: JsonElement?): List<String> =
             reasoningOptions?.takeIf { it !is JsonNull }?.jsonArray
                 ?.mapNotNull { it.jsonObject }
@@ -153,8 +153,8 @@ class ModelMetadataService @Inject constructor(
                 .orEmpty()
 
         /**
-         * 解析后的模型目录：[byProvider] 保留目录里的原始 id 大小写；[lowerByProvider] 结构相同但键统一小写
-         * （复用同一批 [ModelMetadata] 实例），用于大小写不敏感匹配。
+         * The parsed model catalog: [byProvider] preserves the original id casing from the catalog; [lowerByProvider] has the same structure but with keys uniformly lowercased
+         * (reusing the same batch of [ModelMetadata] instances), for case-insensitive matching.
          */
         internal data class Catalog(
             val byProvider: Map<String, Map<String, ModelMetadata>>,
@@ -185,8 +185,8 @@ class ModelMetadataService @Inject constructor(
                         outputTokens = limit?.get("output")?.jsonPrimitive?.intOrNull,
                         supportsTools = model["tool_call"]?.jsonPrimitive?.booleanOrNull == true,
                         supportsVision = "image" in inputModalities || "video" in inputModalities || "pdf" in inputModalities,
-                        // 图像输出能力：models.dev 的 modalities.output 标注，或 Nano Banana 系 id 后缀兜底
-                        // （内置快照缺 output 模态时也能识别 gemini-*-image 模型）。
+                        // Image output capability: the models.dev modalities.output annotation, or a Nano Banana family id suffix fallback
+                        // (so gemini-*-image models can still be recognised when the built-in snapshot lacks the output modality).
                         supportsImageOutput = "image" in outputModalities ||
                             (model["id"]?.jsonPrimitive?.content.orEmpty().endsWith("-image")),
                         supportsReasoning = model["reasoning"]?.jsonPrimitive?.booleanOrNull == true,
@@ -209,8 +209,8 @@ class ModelMetadataService @Inject constructor(
         }
 
         /**
-         * 模型 id 匹配：每轮完整名称（精确 → 忽略大小写）优先于已知后缀候选，再逐级剥离 vendor 前缀重试；
-         * 所有候选落空后才去掉最后一个连字符后缀一次，每次查找都先偏好 provider，再退到全目录。
+         * Model id matching: each round the full name (exact → case-insensitive) takes priority over known-suffix candidates, then retries by stripping the vendor prefix level by level;
+         * only after all candidates miss is the last hyphen suffix removed once; every lookup prefers the provider first, then falls back to the whole catalog.
          */
         internal fun findMetadata(
             catalog: Catalog,
@@ -249,7 +249,7 @@ class ModelMetadataService @Inject constructor(
             ProviderType.GEMINI -> listOf("google", "google-vertex")
         }
 
-        /** 在 [catalog]（键大小写已由调用方对齐）里按候选顺序查找：先偏好 provider，再全目录同名键。 */
+        /** Look up in [catalog] (key casing already aligned by the caller) in candidate order: prefer the provider first, then the same-named key across the whole catalog. */
         private fun lookup(
             catalog: Map<String, Map<String, ModelMetadata>>,
             preferred: List<String>,
@@ -265,8 +265,8 @@ class ModelMetadataService @Inject constructor(
         }
 
         /**
-         * 逐级剥离 vendor 前缀后的候选（`z-ai/glm-5.3-flash` → `glm-5.3-flash`，
-         * `@cf/zai-org/glm-5.3-flash` → `zai-org/glm-5.3-flash` → `glm-5.3-flash`）。
+         * Candidates after stripping the vendor prefix level by level (`z-ai/glm-5.3-flash` → `glm-5.3-flash`,
+         * `@cf/zai-org/glm-5.3-flash` → `zai-org/glm-5.3-flash` → `glm-5.3-flash`).
          */
         private fun vendorStrippedCandidates(modelId: String): List<String> {
             val candidates = mutableListOf<String>()
@@ -280,7 +280,7 @@ class ModelMetadataService @Inject constructor(
             return candidates
         }
 
-        /** 生成匹配候选：原始 id 在前，随后迭代剥离常见后缀（-thinking/-preview/-high/-low 及括号形式），可连续剥离多层。 */
+        /** Generate matching candidates: the original id first, then iteratively strip common suffixes (-thinking/-preview/-high/-low and the parenthesised forms); multiple layers can be stripped consecutively. */
         private fun strippedCandidates(modelId: String): List<String> {
             val candidates = mutableListOf(modelId)
             var current = modelId
@@ -302,18 +302,18 @@ class ModelMetadataService @Inject constructor(
         const val TAG = "ModelMetadataService"
         const val ASSET_FILE_NAME = "api.official.json"
 
-        /** 承载 models.dev 全量快照的独立数据分支（CI 每日同步，main 只保留人工提交）。 */
+        /** The separate data branch carrying the full models.dev snapshot (synced daily by CI; main keeps only manual commits). */
         const val MODELS_BRANCH = "data"
 
-        /** 统一拉取器中的仓库相对路径：本仓库维护的 models.dev 全量快照（CI 每日同步至 [MODELS_BRANCH]）。 */
+        /** Repository-relative path in the unified fetcher: the full models.dev snapshot maintained by this repository (synced daily by CI to [MODELS_BRANCH]). */
         const val MODELS_REPO_PATH = "data/models.json"
         const val DEFAULT_CONTEXT_TOKENS = 128_000
         const val DEFAULT_OUTPUT_TOKENS = 64_000
 
-        /** Gemini 风格的模型 id 前缀（`models/gemini-2.5-pro`），匹配前剥离，忽略大小写。 */
+        /** Gemini-style model id prefix (`models/gemini-2.5-pro`), stripped before matching, case-insensitive. */
         private const val MODELS_PREFIX = "models/"
 
-        /** 兜底模糊匹配：依次尝试剥离的模型 id 后缀。 */
+        /** Fallback fuzzy matching: model id suffixes to try stripping in order. */
         private val MODEL_SUFFIXES = listOf(
             "-thinking", "-preview", "-high", "-low",
             "(thinking)", "(xhigh)", "(high)", "(low)"

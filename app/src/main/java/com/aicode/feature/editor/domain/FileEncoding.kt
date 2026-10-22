@@ -6,16 +6,19 @@ import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
 
 /**
- * 文本文件的字符编码检测：把「字节 → 字符串」的编码歧义收敛到单一实现，
- * 供编辑器读文件、Git diff 读工作区文件统一使用。
+ * Character encoding detection for text files: consolidates the "bytes -> string" encoding
+ * ambiguity into a single implementation, used uniformly by the editor when reading files
+ * and by Git diff when reading workspace files.
  *
- * 检测规则（按优先级）：
- * 1. 带 UTF-8 / UTF-16 BOM → 按 BOM 解码（并剥掉 BOM）；
- * 2. 否则严格 UTF-8 解码（[CodingErrorAction.REPORT]）成功 → UTF-8；
- * 3. 仍失败 → 按 GBK 解码（GBK 是常见的中文 Windows 传统编码，覆盖绝大多数乱码场景）。
+ * Detection rules (in priority order):
+ * 1. With a UTF-8 / UTF-16 BOM -> decode according to the BOM (and strip the BOM);
+ * 2. Otherwise, strict UTF-8 decoding ([CodingErrorAction.REPORT]) succeeds -> UTF-8;
+ * 3. Still fails -> decode as GBK (GBK is a common legacy Chinese Windows encoding,
+ *    covering the vast majority of mojibake cases).
  *
- * 写侧约定：读入时记住检测到的 [FileEncoding.charset]，保存时用同一编码写回，
- * 避免「GBK 文件被静默转成 UTF-8」破坏原文件。
+ * Write-side convention: remember the detected [FileEncoding.charset] when reading,
+ * and write back using the same encoding when saving, to avoid silently converting
+ * a GBK file to UTF-8 and corrupting the original file.
  */
 enum class FileEncoding(val charset: Charset, val bom: ByteArray?) {
     UTF_8(Charsets.UTF_8, byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())),
@@ -23,7 +26,7 @@ enum class FileEncoding(val charset: Charset, val bom: ByteArray?) {
     UTF_16_BE(Charsets.UTF_16BE, byteArrayOf(0xFE.toByte(), 0xFF.toByte())),
     GBK(Charset.forName("GBK"), null);
 
-    /** 展示名，供状态栏等 UI 显示。 */
+    /** Display name, for display in UI such as the status bar. */
     val displayName: String
         get() = when (this) {
             UTF_8 -> "UTF-8"
@@ -34,7 +37,7 @@ enum class FileEncoding(val charset: Charset, val bom: ByteArray?) {
 
     companion object {
         /**
-         * 检测字节流编码并解码为字符串。空输入返回 UTF-8 空串。
+         * Detects the byte stream encoding and decodes it to a string. Empty input returns an empty UTF-8 string.
          */
         fun decode(bytes: ByteArray): DecodedText {
             if (bytes.isEmpty()) return DecodedText("", UTF_8)
@@ -54,7 +57,7 @@ enum class FileEncoding(val charset: Charset, val bom: ByteArray?) {
             return null
         }
 
-        /** 无 BOM 时：严格 UTF-8 成功即 UTF-8，否则 GBK。 */
+        /** Without a BOM: strict UTF-8 success means UTF-8, otherwise GBK. */
         private fun detectBomless(bytes: ByteArray): FileEncoding {
             val decoder = Charsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
@@ -69,5 +72,5 @@ enum class FileEncoding(val charset: Charset, val bom: ByteArray?) {
     }
 }
 
-/** 解码结果：字符串 + 检测到的编码（写回时用）。 */
+/** Decoding result: string + detected encoding (used when writing back). */
 data class DecodedText(val text: String, val encoding: FileEncoding)

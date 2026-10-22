@@ -6,16 +6,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * LLM 调用费用估算。单价经 [ModelMetadataService] 按「渠道自定义元数据 → models.dev → 内置」三级回退解析，
- * 所以必须带上渠道（providerId + type），只按模型算会取不到渠道自定义单价。
+ * LLM invocation cost estimation. Unit prices are resolved via [ModelMetadataService] with a three-level fallback of "provider custom metadata -> models.dev -> built-in",
+ * so the provider (providerId + type) must be included; calculating by model alone cannot retrieve provider-custom unit prices.
  */
 @Singleton
 class ModelCostCalculator @Inject constructor(
     private val modelMetadataService: ModelMetadataService
 ) {
     /**
-     * 一组 token 用量的预估费用（USD）；模型无单价返回 null。
-     * 缓存读价缺失时按输入价 [CACHE_READ_DISCOUNT] 倍估算，缓存写价缺失时按输入价 [CACHE_WRITE_MARKUP] 倍估算。
+     * Estimated cost (USD) for a set of token usage; returns null when the model has no unit price.
+     * When the cache-read price is missing, it is estimated at [CACHE_READ_DISCOUNT] times the input price; when the cache-write price is missing, it is estimated at [CACHE_WRITE_MARKUP] times the input price.
      */
     suspend fun costUsd(
         providerId: String,
@@ -37,10 +37,10 @@ class ModelCostCalculator @Inject constructor(
     }
 
     companion object {
-        /** 缓存读价缺失时按输入价的折扣估算。 */
+        /** Discount applied to the input price to estimate the cost when the cache-read price is missing. */
         const val CACHE_READ_DISCOUNT = 0.1
 
-        /** 缓存写入单价缺失时相对输入价的倍率（Anthropic 官方为 1.25×）。 */
+        /** Multiplier relative to the input price when the cache-write unit price is missing (Anthropic's official value is 1.25x). */
         const val CACHE_WRITE_MARKUP = 1.25
     }
 }

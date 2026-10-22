@@ -97,11 +97,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 容器镜像二级页：所有容器（含内置 Alpine）统一管理——列表单选切换、编辑、重置、左滑删除；
- * 删光后空态可一键恢复内置 Alpine。内置 Alpine 首次启动自动写入列表，不享受特殊待遇。
+ * Container image secondary page: all containers (including the built-in Alpine) are managed uniformly — single-select switching in the list, edit, reset, swipe-to-delete;
+ * when all are deleted, the empty state can restore the built-in Alpine with one tap. The built-in Alpine is automatically written to the list on first launch and receives no special treatment.
  *
- * 选中某个 profile 时按其 [ContainerProfile.mode] 同步切全局执行模式——本地镜像走 PRoot 容器，
- * 远程 SSH 镜像走 SSH exec/SFTP。
+ * When a profile is selected, the global execution mode is switched in sync according to its [ContainerProfile.mode] — local images use the PRoot container,
+ * remote SSH images use SSH exec/SFTP.
  */
 @Composable
 internal fun ContainerSection(
@@ -118,7 +118,7 @@ internal fun ContainerSection(
     onDeleteProfile: (ContainerProfile) -> Unit,
     onSwitchConfirmed: () -> Unit = {},
     onResetProfile: (ContainerProfile) -> Unit = {},
-    /** 非 null 说明正在重置，界面弹不可取消的进度框直到删完。 */
+    /** Non-null means a reset is in progress; the UI shows a non-cancellable progress dialog until deletion completes. */
     resetState: ContainerResetUiState? = null,
     onRestoreBuiltin: () -> Unit = {},
     remoteConnections: List<RemoteConnection> = emptyList()
@@ -215,7 +215,7 @@ internal fun ContainerSection(
             onReset = { pendingReset = editing },
             onConfirm = { profile, setDefault ->
                 onEditCustom(profile.copy(id = editing.id))
-                // 本地镜像才可作默认容器；关闭默认时若原本就是默认则回退内置 Alpine。
+                // Only a local image can be the default container; when turning off default, if it was originally the default, fall back to the built-in Alpine.
                 if (profile.mode == ExecutionMode.LOCAL_PROOT) {
                     if (setDefault) {
                         onSetDefaultContainer(editing.id)
@@ -276,7 +276,7 @@ internal fun ContainerSection(
         )
     }
 
-    // 大容器删一遍要几十秒：删完前用不可取消的进度框占住界面，避免用户以为卡住或重复点。
+    // Deleting a large container takes tens of seconds: before deletion completes, occupy the UI with a non-cancellable progress dialog to avoid the user thinking it is stuck or tapping repeatedly.
     resetState?.let { state ->
         AlertDialog(
             onDismissRequest = {},
@@ -293,14 +293,14 @@ internal fun ContainerSection(
     }
 }
 
-/** 删除确认的补充说明：内置可恢复、自定义本地清 rootfs、远程 SSH 无额外说明。 */
+/** Additional note for the delete confirmation: built-in can be restored, custom local clears the rootfs, remote SSH has no additional note. */
 private fun deleteHint(context: Context, profile: ContainerProfile): String = when {
     profile.isBuiltin -> context.getString(R.string.container_builtin_restorable)
     profile.mode == ExecutionMode.REMOTE_SSH -> ""
     else -> context.getString(R.string.container_rootfs_will_be_cleared)
 }
 
-/** 系统 logo 映射：已识别的系统返回对应单色图标，未知/未识别返回 null（调用方回退通用图标）。 */
+/** System logo mapping: a recognized system returns the corresponding monochrome icon, unknown/unrecognized returns null (the caller falls back to a generic icon). */
 @Composable
 private fun osLogo(osId: String?): Painter? = when (osId) {
     "alpine" -> painterResource(R.drawable.logo_alpine)
@@ -311,8 +311,8 @@ private fun osLogo(osId: String?): Painter? = when (osId) {
 }
 
 /**
- * 单个容器行：分组内白底行，左侧图标方块 + 名称（内置带徽章）/副标题，右侧选中勾选 + 编辑/重置按钮，左滑删除。
- * 行主体点击切换镜像（未选中时弹确认）。
+ * Single container row: a white row inside a group, with an icon block on the left + name (with a badge for built-in) / subtitle, a selection checkmark + edit/reset buttons on the right, swipe-to-delete.
+ * Tapping the row body switches the image (shows a confirmation when not selected).
  */
 @Composable
 private fun ContainerRow(
@@ -337,7 +337,7 @@ private fun ContainerRow(
                 .padding(horizontal = Spacing.lg, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧图标方块
+            // Left icon block
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -370,7 +370,7 @@ private fun ContainerRow(
 
             Spacer(modifier = Modifier.width(Spacing.md))
 
-            // 中间：名称（内置徽章）+ 副标题
+            // Middle: name (built-in badge) + subtitle
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -417,7 +417,7 @@ private fun ContainerRow(
                 )
             }
 
-            // 选中勾选
+            // Selection checkmark
             if (active) {
                 Spacer(modifier = Modifier.width(Spacing.sm))
                 Icon(
@@ -428,7 +428,7 @@ private fun ContainerRow(
                 )
             }
 
-            // 编辑入口（所有容器）：行尾铅笔，点击进入编辑弹窗（行主体点击是切换）
+            // Edit entry (all containers): pencil at the end of the row, tap to enter the edit dialog (tapping the row body switches)
             IconButton(onClick = onEdit) {
                 Icon(
                     imageVector = FeatherIcons.Edit3,
@@ -441,7 +441,7 @@ private fun ContainerRow(
     }
 }
 
-/** 来源徽章：主题色浅底胶囊小字，按来源类型传入不同颜色。 */
+/** Source badge: small text in a capsule with a light theme-color background; different colors are passed in by source type. */
 @Composable
 private fun SourceBadge(text: String, color: Color) {
     Box(
@@ -457,7 +457,7 @@ private fun SourceBadge(text: String, color: Color) {
     }
 }
 
-/** 镜像列表项副标题：本地镜像（内置/自定义）统一显示生效 shell，不区分来源；远程 SSH 显示通道名。 */
+/** Image list item subtitle: local images (built-in/custom) uniformly show the effective shell, without distinguishing the source; remote SSH shows the channel name. */
 private fun profileSubtitle(context: Context, profile: ContainerProfile, connections: List<RemoteConnection>): String {
     if (profile.mode == ExecutionMode.REMOTE_SSH) {
         val ssh = profile.rootfsSource as? RootfsSource.RemoteSsh
@@ -469,10 +469,10 @@ private fun profileSubtitle(context: Context, profile: ContainerProfile, connect
 }
 
 /**
- * 添加/编辑镜像的 ModalBottomSheet：顶部标签切换本地镜像 / 远程 SSH。
- * 本地镜像分支：名称、shell 路径、额外绑定、额外参数、选 tar.gz 文件。
- * 远程 SSH 分支：名称、下拉选工作区已配置的 SFTP 通道、远程工作区路径。
- * 编辑内置 Alpine 时镜像来源保持内置（可选导入新文件覆盖，导入后转为自定义容器）。
+ * ModalBottomSheet for adding/editing an image: top tabs switch between local image / remote SSH.
+ * Local image branch: name, shell path, extra bindings, extra arguments, select a tar.gz file.
+ * Remote SSH branch: name, dropdown to select an SFTP channel configured in the workspace, remote workspace path.
+ * When editing the built-in Alpine, the image source stays built-in (optionally import a new file to overwrite; after importing it becomes a custom container).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -492,16 +492,16 @@ private fun ProfileEditSheet(
     val remoteScrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     var importing by remember { mutableStateOf(false) }
-    // SFTP 通道才适合 SSH exec（FTP/LOCAL 不走 sshj）
+    // Only SFTP channels are suitable for SSH exec (FTP/LOCAL do not use sshj)
     val sshConnections = remoteConnections.filter { it.protocol == RemoteProtocol.SFTP }
-    // 编辑内置 Alpine 时保持 Asset 来源（可选导入覆盖）
+    // When editing the built-in Alpine, keep the Asset source (optionally import to overwrite)
     val initialAsset = initial?.rootfsSource as? RootfsSource.Asset
 
     var mode by remember { mutableStateOf(initial?.mode ?: ExecutionMode.LOCAL_PROOT) }
     var name by remember { mutableStateOf(initial?.name ?: "") }
-    // 是否设为默认容器（仅本地镜像生效；默认容器是远程模式下本地 MCP 等服务的运行容器）
+    // Whether to set as the default container (only effective for local images; the default container is the runtime container for local MCP and other services in remote mode)
     var setAsDefault by remember { mutableStateOf(initial?.id == defaultContainerId) }
-    // 本地镜像字段
+    // Local image fields
     var shellPath by remember { mutableStateOf(initial?.shellPath ?: "/bin/sh") }
     val bindingsList = remember {
         mutableStateListOf<Pair<String, String>>().apply {
@@ -529,7 +529,7 @@ private fun ProfileEditSheet(
     val pickLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> if (uri != null) pickedUri = uri.toString() }
-    // 远程 SSH 字段
+    // Remote SSH fields
     val initialSsh = (initial?.rootfsSource as? RootfsSource.RemoteSsh)
     var selectedConnId by remember { mutableStateOf(initialSsh?.connectionId ?: sshConnections.firstOrNull()?.id ?: "") }
     var remotePath by remember { mutableStateOf(initialSsh?.remoteWorkspacePath ?: "") }
@@ -552,7 +552,7 @@ private fun ProfileEditSheet(
                 .navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 顶部：居中标题 + 右上角重置（编辑态）
+            // Top: centered title + reset in the top-right corner (edit state)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -586,7 +586,7 @@ private fun ProfileEditSheet(
                 }
             }
 
-            // 本地镜像 / 远程 SSH 切换：与侧边栏共用同一份滑块分段控件
+            // Local image / remote SSH switch: shares the same slider segmented control as the sidebar
             val modes = listOf(ExecutionMode.LOCAL_PROOT, ExecutionMode.REMOTE_SSH)
             SegmentedTabs(
                 selected = modes.indexOf(mode).coerceAtLeast(0),
@@ -597,7 +597,7 @@ private fun ProfileEditSheet(
                 onSelect = { mode = modes[it] }
             )
 
-            // 中间可滚动表单区域：通过 weight(1f) 撑满剩余高度，杜绝左右 tab 切换时高度跳动
+            // Middle scrollable form area: fills the remaining height via weight(1f), preventing height jumps when switching between tabs
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -650,7 +650,7 @@ private fun ProfileEditSheet(
                             addText = stringResource(R.string.container_add_env_var)
                         )
 
-                        // 内置镜像固定为内置来源，不支持导入覆盖，隐藏文件选择
+                        // The built-in image is fixed to the built-in source and does not support import overwrite, so file selection is hidden
                         if (initial?.rootfsSource !is RootfsSource.Asset) {
                             Spacer(modifier = Modifier.size(Spacing.xs))
                             Surface(
@@ -681,7 +681,7 @@ private fun ProfileEditSheet(
                             }
                         }
 
-                        // 设为默认容器：远程工作区模式下本地 MCP 等服务的运行容器
+                        // Set as default container: the runtime container for local MCP and other services in remote workspace mode
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -829,7 +829,7 @@ private fun ProfileEditSheet(
     }
 }
 
-/** 字符串列表编辑器：标题 + 逐项卡片（输入框 + 删除）+ 底部「添加」按钮，样式对齐 MCP 弹窗的参数编辑。 */
+/** String list editor: title + per-item cards (input field + delete) + an "Add" button at the bottom, styled to match the parameter editing in the MCP dialog. */
 @Composable
 private fun StringListEditor(
     title: String,
@@ -916,7 +916,7 @@ private fun StringListEditor(
     }
 }
 
-/** 挂载编辑器：每项卡片「本地目录 + 容器目录」两个输入框与删除按钮，保存时拼成 `本地:容器`。 */
+/** Mount editor: each item card has two input fields, "local directory + container directory", and a delete button; on save they are joined as `local:container`. */
 @Composable
 private fun MountListEditor(
     title: String,
@@ -1007,7 +1007,7 @@ private fun MountListEditor(
     }
 }
 
-/** 键值对列表编辑器：每项卡片含「变量名 + 变量值」与删除按钮，样式对齐 MCP 弹窗的环境变量编辑。 */
+/** Key-value list editor: each item card contains "variable name + variable value" and a delete button, styled to match the environment variable editing in the MCP dialog. */
 @Composable
 private fun PairListEditor(
     title: String,
@@ -1103,8 +1103,8 @@ private fun PairListEditor(
 }
 
 /**
- * 据表单状态构造 ContainerProfile；校验不通过返回 null（按钮已 disabled，此处再兜底）。
- * 本地镜像：选了文件 → 导入的自定义容器（isBuiltin=false）；未选文件且原为内置 → 保持内置 Asset 来源（isBuiltin=true）。
+ * Constructs a ContainerProfile from the form state; returns null if validation fails (the button is already disabled, this is a fallback).
+ * Local image: if a file is selected → an imported custom container (isBuiltin=false); if no file is selected and it was originally built-in → keep the built-in Asset source (isBuiltin=true).
  */
 private fun buildProfile(
     initial: ContainerProfile?,
@@ -1123,12 +1123,12 @@ private fun buildProfile(
             val assetSource = initial?.rootfsSource as? RootfsSource.Asset
             val rootfsSource = if (pickedUri != null) RootfsSource.LocalFile(pickedUri) else assetSource ?: return null
             ContainerProfile(
-                id = "", // 由调用方覆写
+                id = "", // Overwritten by the caller
                 name = name,
                 rootfsSource = rootfsSource,
                 shellPath = shellPath.ifBlank { null },
                 extraBindings = bindings,
-                // 本地导入镜像默认注入 proot 参数；与用户手动添加走同一路径（extraArgs），拼接位置一致。
+                // Locally imported images inject proot arguments by default; they follow the same path as user-added ones (extraArgs), with a consistent joining position.
                 extraArgs = if (args.isEmpty() && rootfsSource is RootfsSource.LocalFile)
                     ContainerProfile.DEFAULT_PROOT_ARGS else args,
                 env = env,
@@ -1140,7 +1140,7 @@ private fun buildProfile(
         ExecutionMode.REMOTE_SSH -> {
             if (selectedConnId.isBlank()) return null
             ContainerProfile(
-                id = "", // 由调用方覆写
+                id = "", // Overwritten by the caller
                 name = name,
                 rootfsSource = RootfsSource.RemoteSsh(selectedConnId, remotePath),
                 shellPath = null,
@@ -1149,12 +1149,12 @@ private fun buildProfile(
             )
         }
 
-        // 真机 ROOT 不是镜像类型，编辑对话框不会出现此分支
+        // Physical-device ROOT is not an image type; this branch will not appear in the edit dialog
         ExecutionMode.DEVICE_ROOT -> null
     }
 }
 
-/** 保存按钮可用条件：本地镜像需选了文件（编辑内置时保持内置也可保存），远程 SSH 需选了通道。 */
+/** Conditions for the save button to be enabled: a local image requires a file to be selected (when editing built-in, keeping built-in can also save), remote SSH requires a channel to be selected. */
 private fun canConfirm(
     mode: ExecutionMode,
     pickedUri: String?,
@@ -1164,13 +1164,13 @@ private fun canConfirm(
 ): Boolean = when (mode) {
     ExecutionMode.LOCAL_PROOT -> pickedUri != null || initialAsset != null
     ExecutionMode.REMOTE_SSH -> sshConnections.isNotEmpty() && selectedConnId.isNotBlank()
-    // 真机 ROOT 不是镜像类型，编辑对话框不会出现此分支
+    // Physical-device ROOT is not an image type; this branch will not appear in the edit dialog
     ExecutionMode.DEVICE_ROOT -> false
 }
 
 /**
- * 把所选镜像文件复制一份到 App 私有目录（rootfs_images/）保存副本，返回副本 file uri；
- * 已是 file uri（私有副本或历史数据）时不复制直接返回原值；复制失败返回 null（调用方回退原 uri）。
+ * Copies the selected image file to the App private directory (rootfs_images/) to save a copy, and returns the copy's file uri;
+ * if it is already a file uri (private copy or historical data), returns the original value without copying; on copy failure returns null (the caller falls back to the original uri).
  */
 private fun copyImageToPrivate(context: Context, uriString: String, profileId: String?): String? {
     if (uriString.startsWith("file://")) return uriString
@@ -1187,9 +1187,9 @@ private fun copyImageToPrivate(context: Context, uriString: String, profileId: S
 }
 
 /**
- * 删除 profile 时清理其私有目录镜像副本（仅清理 rootfs_images/ 下的 file uri 副本）。
- * 跳过 `download_` 前缀的副本——那是「下载镜像」页下载的镜像文件，删除容器不应连带清掉，
- * 否则下载页记录还在但文件没了；手动导入的副本（import_*）照旧清理。
+ * When deleting a profile, cleans up its private-directory image copy (only cleans file uri copies under rootfs_images/).
+ * Skips copies with the `download_` prefix — those are image files downloaded on the "Download Image" page, and deleting a container should not also clear them,
+ * otherwise the download page record would remain but the file would be gone; manually imported copies (import_*) are still cleaned up as before.
  */
 private fun deleteImageCopy(profile: ContainerProfile) {
     val src = profile.rootfsSource as? RootfsSource.LocalFile ?: return
@@ -1200,7 +1200,7 @@ private fun deleteImageCopy(profile: ContainerProfile) {
     }
 }
 
-/** 查询所选镜像文件的显示名：content uri 用 OpenableColumns，file uri 回退路径末段。 */
+/** Queries the display name of the selected image file: for a content uri uses OpenableColumns, for a file uri falls back to the last path segment. */
 private fun queryImageDisplayName(context: Context, uriString: String): String? {
     val uri = Uri.parse(uriString)
     if (uri.scheme == "content") {
@@ -1213,10 +1213,10 @@ private fun queryImageDisplayName(context: Context, uriString: String): String? 
 }
 
 /**
- * 本文件统一的输入框样式：圆角 + 定制 colors + 全宽。
- * 历史上有 19 处整块复制，抽成此组件消除重复；需要 readOnly/placeholder/trailingIcon 的场景也走这里。
+ * Unified input field style for this file: rounded corners + custom colors + full width.
+ * Historically there were 19 whole-block copies; extracted into this component to eliminate duplication; scenarios needing readOnly/placeholder/trailingIcon also go through here.
  */
-/** 统一使用全局 AppTextField 组件。 */
+/** Uniformly uses the global AppTextField component. */
 @Composable
 private fun ContainerField(
     value: String,

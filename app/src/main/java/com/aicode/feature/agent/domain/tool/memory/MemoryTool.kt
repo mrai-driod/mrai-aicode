@@ -41,7 +41,7 @@ class MemoryTool @Inject constructor(
     override val description =
         "Manage the AI's long-term memory (read/save/local edit/delete/list). Proactively record new user preferences, project conventions, or architecture decisions when you discover them."
 
-    /** edits 数组单个元素的结构，供 function-calling 的 items schema，语义与 editFile 一致。 */
+    /** The structure of one element of the edits array, for the function-calling items schema; semantics match editFile. */
     private val editItemSchema: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
@@ -125,7 +125,7 @@ class MemoryTool @Inject constructor(
                 else -> ToolResult.Error("Unsupported operation: $action", "UNSUPPORTED_ACTION")
             }
         } catch (e: Exception) {
-            FileLogger.e(TAG, "Memory 工具执行失败: ${e.message}", e)
+            FileLogger.e(TAG, "Memory tool execution failed: ${e.message}", e)
             ToolResult.Error("Memory operation failed: ${e.message}")
         }
     }
@@ -141,7 +141,7 @@ class MemoryTool @Inject constructor(
     private fun handleRead(name: String?, projectRoot: String?): ToolResult {
         if (name.isNullOrEmpty()) return ToolResult.Error("Missing required parameter for read operation: name", "MISSING_NAME")
         val content = memoryRepository.loadContent(name, projectRoot)
-            ?: return ToolResult.Error("Memory 「$name」 not found", "MEMORY_NOT_FOUND")
+            ?: return ToolResult.Error("Memory '$name' not found", "MEMORY_NOT_FOUND")
         return ToolResult.Success(JsonPrimitive(content))
     }
 
@@ -158,7 +158,7 @@ class MemoryTool @Inject constructor(
 
         val success = memoryRepository.saveMemory(name, description, content, scope, projectRoot)
         return if (success) {
-            ToolResult.Success(JsonPrimitive("Saved memory 「$name」 to the ${scope.name.lowercase()} scope. Its summary will be injected automatically when the next session starts. To use it immediately in the current session, read it with the read operation."))
+            ToolResult.Success(JsonPrimitive("Saved memory '$name' to the ${scope.name.lowercase()} scope. Its summary will be injected automatically when the next session starts. To use it immediately in the current session, read it with the read operation."))
         } else {
             ToolResult.Error("Failed to save memory; see the logs.", "SAVE_FAILED")
         }
@@ -176,9 +176,9 @@ class MemoryTool @Inject constructor(
 
         return when (val result = memoryRepository.editMemory(name, edits, scope, projectRoot)) {
             is MemoryEditResult.Success ->
-                ToolResult.Success(JsonPrimitive("Edited the body of memory 「$name」 (${scope.name.lowercase()} scope)."))
+                ToolResult.Success(JsonPrimitive("Edited the body of memory '$name' (${scope.name.lowercase()} scope)."))
             is MemoryEditResult.NotFound ->
-                ToolResult.Error("Memory 「${result.name}」 not found; create it with save first, or check that the name and scope are correct.", "MEMORY_NOT_FOUND")
+                ToolResult.Error("Memory '${result.name}' not found; create it with save first, or check that the name and scope are correct.", "MEMORY_NOT_FOUND")
             is MemoryEditResult.Error ->
                 ToolResult.Error(result.message, result.code)
         }
@@ -201,9 +201,9 @@ class MemoryTool @Inject constructor(
         
         val success = memoryRepository.deleteMemory(name, scope, projectRoot)
         return if (success) {
-            ToolResult.Success(JsonPrimitive("Deleted memory 「$name」 from the ${scope.name.lowercase()} scope."))
+            ToolResult.Success(JsonPrimitive("Deleted memory '$name' from the ${scope.name.lowercase()} scope."))
         } else {
-            ToolResult.Error("Delete failed; memory 「$name」 may not exist in this scope.", "DELETE_FAILED")
+            ToolResult.Error("Delete failed; memory '$name' may not exist in this scope.", "DELETE_FAILED")
         }
     }
 }

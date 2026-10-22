@@ -18,17 +18,17 @@ import com.aicode.feature.git.presentation.component.GitScreen
 import com.aicode.feature.terminal.presentation.TerminalViewModel
 import com.aicode.feature.terminal.presentation.component.TerminalScreen
 
-/** 大屏右栏（工作台）当前承载的内容。 */
+/** The content currently hosted in the large-screen right pane (workbench). */
 internal enum class WorkbenchPaneKind { NONE, EDITOR, TERMINAL, GIT, BROWSER }
 
 /**
- * 大屏下与聊天并排的右栏内容。
+ * The content of the right pane shown alongside chat on large screens.
  *
- * 三个页面本身就是「参数 + 回调」的独立组件，这里只是把它们的返回动作接成「关闭右栏」；
- * 窄窗下这些页面仍走 NavHost 全屏路由，两条路径共用同一份 UI 代码。
+ * The pages themselves are standalone "parameters + callbacks" components; here we simply wire their back action to "close the right pane";
+ * in narrow windows these pages still use the full-screen NavHost routes, and both paths share the same UI code.
  *
- * ViewModel 挂在聊天页的 NavBackStackEntry 上，右栏在几种内容间切换不会销毁它们——
- * 终端会话本身归单例 TerminalSessionManager 所有，与这里的作用域无关。
+ * The ViewModels are attached to the chat page's NavBackStackEntry, so switching the right pane between its content types does not destroy them -
+ * the terminal session itself is owned by the singleton TerminalSessionManager and is unrelated to this scope.
  */
 @Composable
 internal fun WorkbenchPaneContent(
@@ -60,7 +60,7 @@ internal fun WorkbenchPaneContent(
             }
 
             WorkbenchPaneKind.GIT -> {
-                // 凭据页留在右栏内部翻一层，而不是跳全屏路由，否则大屏下会从双栏突然变成整屏。
+                // The credentials page pushes one level inside the right pane instead of using a full-screen route, otherwise on large screens the layout would suddenly jump from two panes to full screen.
                 var showCredentials by rememberSaveable { mutableStateOf(false) }
                 if (showCredentials) {
                     val credentialViewModel: CredentialViewModel = hiltViewModel()

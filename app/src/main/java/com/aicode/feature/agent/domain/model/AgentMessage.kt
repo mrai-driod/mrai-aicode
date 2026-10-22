@@ -18,15 +18,15 @@ sealed class AgentMessage {
         val id: String = java.util.UUID.randomUUID().toString(),
         val content: String,
         val toolCalls: List<ToolCall> = emptyList(),
-        /** 本轮模型的思考过程（对应 OpenAI/DeepSeek 的 reasoning_content）。回传上下文时需要原样发回，否则 DeepSeek 思考模式会报 400 错误。 */
+        /** The reasoning process of the model this turn (corresponding to OpenAI/DeepSeek reasoning_content). It must be sent back verbatim when returning context, otherwise DeepSeek thinking mode reports a 400 error. */
         val reasoning: String = "",
-        /** Anthropic extended thinking 的加密签名。与 [reasoning] 一起原样回传（工具循环必须），否则 400。其他 provider 为空串。 */
+        /** The encrypted signature for Anthropic extended thinking. Sent back verbatim together with [reasoning] (required in the tool loop), otherwise 400. Empty string for other providers. */
         val signature: String = "",
-        /** Anthropic thinking / redacted_thinking 内容块的原样快照（JSON 数组文本），回传时需保持原样与原序。其他 provider 为空串。 */
+        /** Verbatim snapshot of the Anthropic thinking / redacted_thinking content blocks (JSON array text); when sent back it must be kept verbatim and in the original order. Empty string for other providers. */
         val thinkingBlocksJson: String = "",
         /**
-         * 本轮模型直接生成的图片（Gemini 图像模型）。内存态下 base64Data 可为空、path 指向容器文件，
-         * 回放时按 path 重建 base64 喂模型；落库只存附件路径不存 base64（见 [MessagePersistenceUseCase]）。
+         * Images generated directly by the model this turn (Gemini image models). In the in-memory state base64Data may be empty and path points to a container file;
+         * on replay, the base64 is rebuilt from path and fed to the model; when persisted, only the attachment path is stored, not the base64 (see [MessagePersistenceUseCase]).
          */
         val images: List<AgentImage> = emptyList(),
         val inputTokens: Int = 0
@@ -38,7 +38,7 @@ sealed class AgentMessage {
         val toolName: String,
         val result: String,
         val images: List<AgentImage> = emptyList(),
-        /** 仅喂模型的精简结果文本；null 时回退用 [result]。UI 与持久化仍用 result。 */
+        /** The streamlined result text fed only to the model; when null, falls back to [result]. The UI and persistence still use result. */
         val modelResult: String? = null,
         val messageId: String = "tool_$id"
     ) : AgentMessage()
@@ -68,18 +68,18 @@ data class AgentContext(
     val language: String?,
     val history: List<AgentMessage> = emptyList(),
     val inputImages: List<AgentImage> = emptyList(),
-    /** 当前会话 id：用于把本轮所有 AI 请求/响应落到该会话的日志文件（[com.aicode.core.util.AILogger]）。 */
+    /** The current session id: used to write all AI requests/responses of this turn to the log file of that session ([com.aicode.core.util.AILogger]). */
     val sessionId: String? = null,
     val inputMessageId: String = java.util.UUID.randomUUID().toString(),
     val lastInputTokens: Int = 0,
     val mode: AgentMode = AgentMode.BUILD,
-    /** 进入 PLAN 前的模式（BUILD/ASK）：退出 PLAN 时恢复到它，null 视为 BUILD。 */
+    /** The mode before entering PLAN (BUILD/ASK): restored to it when leaving PLAN, null is treated as BUILD. */
     val modeBeforePlan: AgentMode? = null,
-    /** 思考强度（"low"/"medium"/"high"），随每次 LLM 请求传给支持的 provider。 */
+    /** Reasoning effort ("low"/"medium"/"high"), passed with each LLM request to providers that support it. */
     val reasoningEffort: String? = null,
     /**
-     * 本会话绑定的自定义子代理定义；非空表示这是一个按定义运行的子代理会话，
-     * 系统提示词与工具集都按其配置组装（见 [com.aicode.feature.agent.domain.prompt.SystemPromptProvider]）。
+     * The custom sub-agent definition bound to this session; non-null means this is a sub-agent session running according to a definition,
+     * and both the system prompt and the tool set are assembled from its configuration (see [com.aicode.feature.agent.domain.prompt.SystemPromptProvider]).
      */
     val agentDefinition: AgentDefinition? = null
 )

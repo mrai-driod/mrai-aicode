@@ -11,37 +11,37 @@ import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
 /**
- * 日志等级，由低到高。[NONE] 用作阈值时关闭一切输出（没有任何等级 ≥ NONE）。
+ * Log level, from low to high. When [NONE] is used as the threshold it disables all output (no level is >= NONE).
  *
- * 顺序即严重程度：阈值 [FileLogger.minLevel] 之下的日志（logcat 与落盘）都会被丢弃。
+ * The order is the severity: logs below the [FileLogger.minLevel] threshold (both logcat and disk) are discarded.
  */
 enum class LogLevel {
     VERBOSE, DEBUG, INFO, WARN, ERROR, NONE
 }
 
 /**
- * 把日志落盘到 App 的内部存储，方便在没有连接 adb 的情况下调试。
+ * Writes logs to the app's internal storage, for debugging without an adb connection.
  *
- * 日志写到外部私有目录 `getExternalFilesDir/logs/` 下（不可用时回退到内部 `filesDir/logs/`），
- * 按天分文件（log-yyyy-MM-dd.txt）。外部私有目录可通过文件管理器在
- * `/storage/emulated/0/Android/data/<包名>/files/logs/` 直接查看，无需 root。
- * 所有写入都串行化到单线程后台执行，避免阻塞主线程与多线程交错。同时镜像一份到 [android.util.Log]。
+ * Logs are written under the external private directory `getExternalFilesDir/logs/` (falling back to the internal `filesDir/logs/` when unavailable),
+ * split into one file per day (log-yyyy-MM-dd.txt). The external private directory can be viewed in a file manager at
+ * `/storage/emulated/0/Android/data/<package name>/files/logs/` directly, without root.
+ * All writes are serialised onto a single background thread, avoiding blocking the main thread and multi-thread interleaving. A copy is also mirrored to [android.util.Log].
  *
- * 支持按等级过滤：低于 [minLevel] 的日志（含 logcat 镜像与落盘）一律跳过。等级由
- * `LogSettingsRepository` 持久化、`AIEditorApp` 在启动与设置变更时通过 [setMinLevel] 同步。
- * 开发期默认 [LogLevel.VERBOSE]（全量记录）。
+ * Supports filtering by level: logs below [minLevel] (including the logcat mirror and disk write) are all skipped. The level is
+ * persisted by `LogSettingsRepository`, and `AIEditorApp` syncs it via [setMinLevel] on startup and when settings change.
+ * Defaults to [LogLevel.VERBOSE] during development (full logging).
  *
- * 使用前需在 [Application.onCreate] 调用一次 [init]。
+ * Call [init] once in [Application.onCreate] before use.
  */
 object FileLogger {
 
     private const val TAG = "FileLogger"
     private const val MAX_AGE_DAYS = 7
-    private const val MAX_FILE_BYTES = 5 * 1024 * 1024 // 单个日志文件上限 5MB（VERBOSE 下增长较快）
-    /** 合并 flush 的延迟：一批日志写完静默这么久即落盘。ERROR 级不等延迟，立即落。 */
+    private const val MAX_FILE_BYTES = 5 * 1024 * 1024 // Per-log-file limit 5MB (grows quickly under VERBOSE)
+    /** Coalesced flush delay: after a batch of logs has been quiet for this long it is flushed to disk. ERROR level does not wait for the delay and flushes immediately. */
     private const val FLUSH_DELAY_MS = 500L
 
-    /** 单线程串行执行全部落盘动作，同时用作延迟合并 flush 的调度器。 */
+    /** Runs all disk writes serially on a single thread, and also serves as the scheduler for the delayed coalesced flush. */
     private val ioExecutor = ScheduledThreadPoolExecutor(1) { r ->
         Thread(r, "file-logger").apply { isDaemon = true }
     }
@@ -51,42 +51,42 @@ object FileLogger {
     @Volatile
     private var logDir: File? = null
 
-    // 以下字段仅由 ioExecutor 单线程访问，无需同步。
+    // The following fields are only accessed by the ioExecutor single thread and need no synchronisation.
     private var writer: java.io.BufferedWriter? = null
     private var writerDate: String? = null
     private var flushScheduled = false
 
-    /** 当前最低记录等级；低于它的日志一律跳过。默认按构建类型：debug=VERBOSE（开发期全量），release=INFO。 */
+    /** Current minimum log level; logs below it are all skipped. Defaults by build type: debug=VERBOSE (full during development), release=INFO. */
     @Volatile
     var minLevel: LogLevel = LogLevel.VERBOSE
         private set
 
-    /** 设置最低记录等级（线程安全）。由设置项/启动同步调用。 */
+    /** Sets the minimum log level (thread-safe). Called by the settings item / startup sync. */
     fun setMinLevel(level: LogLevel) {
         if (minLevel != level) {
             minLevel = level
-            // 等级变更本身用 logcat 记录，避免被新阈值过滤掉
-            Log.i(TAG, "日志等级切换为 $level")
+            // The level change itself is logged via logcat, to avoid being filtered out by the new threshold
+            Log.i(TAG, "Log level switched to $level")
         }
     }
 
     private fun shouldLog(level: LogLevel): Boolean = level.ordinal >= minLevel.ordinal
 
-    /** 初始化日志目录。重复调用安全。 */
+    /** Initialises the log directory. Safe to call repeatedly. */
     fun init(context: Context) {
         if (logDir != null) return
-        // 优先外部私有目录，便于用户用文件管理器查看；不可用时回退内部存储。
+        // Prefers the external private directory so users can view it in a file manager; falls back to internal storage when unavailable.
         val base = context.getExternalFilesDir(null) ?: context.filesDir
         val dir = File(base, "logs").apply { mkdirs() }
         logDir = dir
-        // 默认等级按构建类型兜底：release 不开全量 VERBOSE（AI 高频工具日志会持续刷盘）。
-        // 仅当从未设置过时生效——用户/持久化设置随后经 setMinLevel 覆盖，永远优先。
+        // The default level falls back by build type: release does not enable full VERBOSE (frequent AI tool logs would keep writing to disk).
+        // Only applies if it has never been set -- user/persisted settings later override it via setMinLevel and always take precedence.
         val debuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         if (minLevel == LogLevel.VERBOSE) {
             minLevel = if (debuggable) LogLevel.VERBOSE else LogLevel.INFO
         }
         ioExecutor.execute { cleanupOldLogs(dir) }
-        i(TAG, "FileLogger 初始化完成，日志目录: ${dir.absolutePath}")
+        i(TAG, "FileLogger initialised, log directory: ${dir.absolutePath}")
     }
 
     fun v(tag: String, message: String) {
@@ -119,7 +119,7 @@ object FileLogger {
         write("ERROR", tag, message, throwable)
     }
 
-    /** 返回当前所有日志文件，按文件名（即日期）排序，供"查看日志"等界面使用。 */
+    /** Returns all current log files, sorted by file name (i.e. date), for use by screens such as "View logs". */
     fun listLogFiles(): List<File> {
         val dir = logDir ?: return emptyList()
         return dir.listFiles { f -> f.isFile && f.name.startsWith("log-") }
@@ -128,10 +128,10 @@ object FileLogger {
     }
 
     /**
-     * 删除全部日志文件，返回释放的字节数。
+     * Deletes all log files and returns the number of bytes freed.
      *
-     * 删除动作必须排到 [ioExecutor] 上：当天的文件正被 [writer] 持有句柄，不先关闭并清掉日期标记，
-     * 后续写入会继续落进已删除的 inode，日志静默丢失直到跨天换文件。
+     * The deletion must be queued onto [ioExecutor]: today's file is held open by [writer], and without first closing it and clearing the date marker,
+     * subsequent writes would keep landing in the deleted inode, silently losing logs until the file rolls over the next day.
      */
     fun clearLogs(): Long {
         val dir = logDir ?: return 0L
@@ -147,7 +147,7 @@ object FileLogger {
                     val size = file.length()
                     if (file.delete()) freed.addAndGet(size)
                 }
-            }.onFailure { Log.e(TAG, "清空日志失败", it) }
+            }.onFailure { Log.e(TAG, "Failed to clear logs", it) }
             latch.countDown()
         }
         runCatching { latch.await(5, java.util.concurrent.TimeUnit.SECONDS) }
@@ -155,9 +155,9 @@ object FileLogger {
     }
 
     private fun write(level: String, tag: String, message: String, throwable: Throwable?) {
-        val dir = logDir ?: return // 未初始化则只走 logcat，不落盘
+        val dir = logDir ?: return // If not initialised, only logcat is used, nothing is written to disk
         val now = java.time.Instant.now()
-        // 落盘前过媒体脱敏：防超大 base64（图片等）撑爆按天日志文件；logcat 仍打印原样（有系统截断保护）。
+        // Media redaction before writing to disk: prevents oversized base64 (images, etc.) from blowing up the daily log file; logcat still prints the original (protected by system truncation).
         val redacted = MediaRedactor.redact(message)
         val line = buildString {
             append(timestampFormat.format(now))
@@ -173,20 +173,20 @@ object FileLogger {
             runCatching {
                 val date = fileNameFormat.format(now)
                 val file = File(dir, "log-$date.txt")
-                // 跨天换文件；单文件超上限则重置重开。writer 仅本线程访问。
-                // 一律追加打开：进程重启、同一天二次启动都不能清掉已写下的日志。
+                // Rolls to a new file across days; if a single file exceeds the limit it is reset and reopened. writer is only accessed on this thread.
+                // Always opened in append mode: a process restart or a second launch on the same day must not clear logs already written.
                 if (writerDate != date) {
                     writer?.close()
                     writer = FileOutputStream(file, true).bufferedWriter()
                     writerDate = date
                 } else if (file.length() > MAX_FILE_BYTES) {
                     writer?.close()
-                    file.writeText("--- 日志文件超过 ${MAX_FILE_BYTES / 1024 / 1024}MB 已重置 ---\n")
+                    file.writeText("--- Log file exceeded ${MAX_FILE_BYTES / 1024 / 1024}MB, reset ---\n")
                     writer = FileOutputStream(file, true).bufferedWriter()
                 }
                 writer?.append(line)
-                // ERROR 立即落盘；其余合并到 FLUSH_DELAY_MS 后统一 flush。
-                // 缓冲期间进程被系统杀掉会丢最后这几百毫秒的日志，不能再攒到更大的阈值。
+                // ERROR flushes to disk immediately; the rest are coalesced and flushed together after FLUSH_DELAY_MS.
+                // If the process is killed by the system while buffering, the last few hundred milliseconds of logs are lost, so it must not accumulate to a larger threshold.
                 if (level == "ERROR") {
                     flushWriter()
                 } else if (!flushScheduled) {
@@ -194,14 +194,14 @@ object FileLogger {
                     ioExecutor.schedule({ runCatching { flushWriter() } }, FLUSH_DELAY_MS, TimeUnit.MILLISECONDS)
                 }
             }.onFailure {
-                Log.e(TAG, "写入日志失败", it)
+                Log.e(TAG, "Failed to write log", it)
             }
         }
     }
 
     /**
-     * 同步 flush 缓冲日志（崩溃处理器等紧急路径调用）。
-     * 提交到 ioExecutor 队列尾部执行，保证此前排队的追加都已落盘；调用方线程最多阻塞 2s。
+     * Synchronously flushes buffered logs (called from emergency paths such as the crash handler).
+     * Submitted to the tail of the ioExecutor queue to guarantee previously queued appends have been written; the calling thread blocks for at most 2s.
      */
     fun flushSync() {
         val latch = java.util.concurrent.CountDownLatch(1)
@@ -212,7 +212,7 @@ object FileLogger {
         runCatching { latch.await(2, java.util.concurrent.TimeUnit.SECONDS) }
     }
 
-    /** 把缓冲日志推到底层文件。只允许在 [ioExecutor] 单线程上调用。 */
+    /** Pushes buffered logs to the underlying file. Only callable on the [ioExecutor] single thread. */
     private fun flushWriter() {
         runCatching { writer?.flush() }
         flushScheduled = false
@@ -224,7 +224,7 @@ object FileLogger {
         return sw.toString().trimEnd()
     }
 
-    /** 删除超过 [MAX_AGE_DAYS] 天的日志文件。 */
+    /** Deletes log files older than [MAX_AGE_DAYS] days. */
     private fun cleanupOldLogs(dir: File) {
         val cutoff = System.currentTimeMillis() - MAX_AGE_DAYS * 24L * 60 * 60 * 1000
         dir.listFiles { f -> f.isFile && f.name.startsWith("log-") }?.forEach { file ->

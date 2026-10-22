@@ -32,10 +32,10 @@ import androidx.compose.ui.unit.dp
 import com.aicode.core.theme.semanticColors
 
 /**
- * iOS 风分段控件：中性灰轨道 + 白色（深色下为抬起灰）滑块，选中时滑块弹性滑到对应一段。
+ * iOS-style segmented control: neutral gray track + white (raised gray in dark mode) thumb; when selected, the thumb springs elastically to the corresponding segment.
  *
- * 不用主题色填充，让它与下方的扫描式列表协调，只靠中性色与轻阴影表现层次。
- * 侧边栏顶部与 MCP 编辑弹窗共用同一份，切换手感保持一致。
+ * It is not filled with the theme color, so it coordinates with the scanning-style list below, relying only on neutral colors and a light shadow to express hierarchy.
+ * Shared as a single implementation between the top of the sidebar and the MCP edit dialog, keeping the switching feel consistent.
  */
 @Composable
 fun SegmentedTabs(
@@ -57,7 +57,7 @@ fun SegmentedTabs(
             .padding(3.dp)
     ) {
         val thumbWidth = maxWidth / labels.size
-        // 选中滑块位移：临界阻尼弹簧（不过冲），切换时滑块顺滑到位，不是硬切。
+        // Selected thumb displacement: critically damped spring (no overshoot), the thumb slides smoothly into place when switching, rather than snapping hard.
         val thumbOffset by animateDpAsState(
             targetValue = thumbWidth * selected,
             animationSpec = spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow),
@@ -81,7 +81,7 @@ fun SegmentedTabs(
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(9.dp))
-                        // 禁用点击波纹：选中滑块位移已是反馈，ripple 残留的深色阴影反而扎眼。
+                        // Disable the click ripple: the selected thumb displacement is already feedback, and the dark shadow left by the ripple is instead jarring.
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null

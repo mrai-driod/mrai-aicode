@@ -226,7 +226,7 @@ internal suspend fun copyUriToWorkspace(
         fileMimeType(context, uri, fileName)
     }
 
-    // 图片要整份读进来做 base64，先按 provider 报的大小拦一道；SIZE 拿不到时下面还有兜底判断。
+    // Images are read in whole for base64, so first gate on the size reported by the provider; when SIZE is unavailable there is a fallback check below.
     if (includeImageData) {
         val declared = context.contentSize(uri)
         if (declared != null && declared > MAX_IMAGE_UPLOAD_BYTES) error(imageLimitError(context))
@@ -246,14 +246,14 @@ internal suspend fun copyUriToWorkspace(
             path = containerPath
         )
     } else {
-        // 普通附件流式落盘：不再整份读进内存，于是文件多大都不会顶爆堆
+        // Regular attachments are streamed to disk: they are no longer read wholly into memory, so no file size can blow the heap
         sizeBytes = context.contentResolver.openInputStream(uri)?.use { input ->
             fileAccess.writeStream(containerPath, input, overwrite = true)
         } ?: error(unreadableFileMessage(context))
         image = null
     }
 
-    // 缩略图与图片数据需要本地文件：本地模式直接给宿主文件，远程模式下载到临时文件
+    // Thumbnails and image data need a local file: local mode gives the host file directly, remote mode downloads to a temp file
     val localFile = fileAccess.copyToLocal(containerPath)
 
     UploadedWorkspaceFile(

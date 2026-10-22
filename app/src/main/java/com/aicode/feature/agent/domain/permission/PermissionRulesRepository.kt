@@ -33,10 +33,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 工具授权规则的持久化。全局规则存 app 私有目录 (`filesDir/aicode/permissions.json`)，
- * 项目级规则存工作区目录 (`.aicode/permissions.json`)，方便团队通过 git 共享。
+ * Persistence for tool authorization rules. Global rules are stored in the app's private directory
+ * (`filesDir/aicode/permissions.json`); project-level rules are stored in the workspace directory
+ * (`.aicode/permissions.json`), so a team can share them via git.
  *
- * 文件格式为紧凑的 `Tool(pattern)` 风格，示例：
+ * The file format is the compact `Tool(pattern)` style, for example:
  * ```json
  * {
  *   "permissions": {
@@ -46,10 +47,11 @@ import javax.inject.Singleton
  * }
  * ```
  *
- * 安全要点：全局规则存在 app 私有目录，AI 无法篡改；项目级规则存在工作区内，
- * 可被 AI 修改，但作为项目级声明式配置这是有意为之（可 git 追踪/回滚）。
+ * Security points: global rules live in the app's private directory, where the AI cannot tamper with them;
+ * project-level rules live inside the workspace and can be modified by the AI, but as declarative
+ * project-level configuration that is intentional (they can be tracked/rolled back via git).
  *
- * 并发模式参考 [McpConfigRepository]：Mutex 保护文件 IO + MutableStateFlow 缓存。
+ * The concurrency pattern follows [McpConfigRepository]: a Mutex protects file IO + a MutableStateFlow cache.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -62,33 +64,35 @@ class PermissionRulesRepository @Inject constructor(
     private companion object {
         const val TAG = "PermissionRules"
         const val PERMISSIONS_FILE = "permissions.json"
-        /** 项目级配置目录名，容器内即 `~/workspace/.aicode`。 */
+        /** The project-level config directory name; inside the container this is `~/workspace/.aicode`. */
         const val AICODE_DIR_NAME = ".aicode"
         val JSON = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
     }
 
-    /** 全局权限文件：`filesDir/aicode/permissions.json`，与 mcp.json 同级。 */
+    /** The global permissions file: `filesDir/aicode/permissions.json`, at the same level as mcp.json. */
     private val globalFile: File
         get() = File(File(context.filesDir, "aicode"), PERMISSIONS_FILE)
 
-    /** 当前工作区的项目级权限文件：`workspacePath/.aicode/permissions.json`。 */
+    /** The project-level permissions file for the current workspace: `workspacePath/.aicode/permissions.json`. */
     private fun projectFileForPath(workspacePath: String): File =
         File(projectAicodeRoot.forPath(workspacePath), PERMISSIONS_FILE)
 
-    // ── 内存缓存与响应式流 ──────────────────────────────────────
+    // ── In-memory cache and reactive flows ──────────────────────────────────────
 
     private val globalState = MutableStateFlow<List<PermissionRule>?>(null)
     private val projectStates = ConcurrentHashMap<String, MutableStateFlow<List<PermissionRule>?>>()
     private val mutex = Mutex()
 
-    // ── 外部修改监听：容器内/手工直接编辑 permissions.json 后刷新缓存，UI 与评估即时生效 ──
+    // ── External-change watching: after permissions.json is edited directly inside the container / by hand, refresh the cache so the UI and evaluation take effect immediately ──
 
     private val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
-     * 启动配置文件监听：外部修改后按磁盘现状刷新缓存。App 启动调用一次（幂等）。
-     * 订阅驱动：[FileChangeHub] 监听两个权限文件所在目录并合并成批上报，不再自建轮询。
-     * 保持常驻订阅是因为 AI 权限评估随时要读到最新规则（不像纯 UI 列表可以暂停刷新）。
+     * Starts watching the config files: after an external change, refreshes the cache from the current on-disk
+     * state. Called once at app startup (idempotent). Subscription-driven: [FileChangeHub] watches the
+     * directories containing both permission files and reports merged batches; no self-built polling anymore.
+     * The subscription stays resident because AI permission evaluation must read the latest rules at any time
+     * (unlike a pure UI list, which can pause refreshing).
      */
     fun startWatching() {
         watchScope.launch {
@@ -99,25 +103,25 @@ class PermissionRulesRepository @Inject constructor(
         }
     }
 
-    /** 只处理命中的文件；内容确实变化才更新缓存（touch 不算）。 */
+    /** Only handles files that were hit; the cache is updated only when the content actually changed (a touch does not count). */
     private suspend fun refreshFromDisk(batch: FileChangeBatch) {
         val globalPath = globalFile.absolutePath
         if (batch.changes.any { it.hostPath == globalPath }) {
             val rules = loadFromFile(globalFile)
             if (rules != (globalState.value ?: emptyList<PermissionRule>())) {
                 globalState.value = rules
-                FileLogger.i(TAG, "检测到全局权限配置变化，已刷新")
+                FileLogger.i(TAG, "Detected a change to the global permission config; refreshed")
             }
         }
         val path = workspaceRepository.currentPath()
         if (batch.changes.any { it.hostPath == projectFileForPath(path).absolutePath }) {
             val state = getProjectState(path)
-            // 缓存尚未加载时不处理：首次加载由 [ensureProjectLoaded] 完成，工作区切换不算外部变更。
+            // Not handled while the cache has not loaded yet: the first load is done by [ensureProjectLoaded], and a workspace switch does not count as an external change.
             if (state.value != null) {
                 val rules = loadFromFile(projectFileForPath(path))
                 if (rules != state.value) {
                     state.value = rules
-                    FileLogger.i(TAG, "检测到项目权限配置变化，已刷新")
+                    FileLogger.i(TAG, "Detected a change to the project permission config; refreshed")
                 }
             }
         }
@@ -126,7 +130,7 @@ class PermissionRulesRepository @Inject constructor(
     private fun getProjectState(workspacePath: String): MutableStateFlow<List<PermissionRule>?> =
         projectStates.getOrPut(workspacePath) { MutableStateFlow(null) }
 
-    // ── 懒加载 ──────────────────────────────────────────────────
+    // ── Lazy loading ──────────────────────────────────────────────────
 
     private suspend fun ensureGlobalLoaded() {
         if (globalState.value != null) return
@@ -151,7 +155,7 @@ class PermissionRulesRepository @Inject constructor(
             runCatching {
                 JSON.decodeFromString<PermissionFile>(file.readText()).toRuleList()
             }.getOrElse {
-                FileLogger.w(TAG, "读取 ${file.path} 失败: ${it.message}")
+                FileLogger.w(TAG, "Failed to read ${file.path}: ${it.message}")
                 emptyList()
             }
         }
@@ -161,36 +165,37 @@ class PermissionRulesRepository @Inject constructor(
         file.writeText(JSON.encodeToString(PermissionFile.serializer(), rules.toPermissionFile()))
     }
 
-    // ── 公共 API ────────────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────
 
-    /** 当前选中的项目名；无选中时为 null（此时项目级规则不可用，仅全局生效）。 */
+    /** The name of the currently selected project; null when none is selected (project-level rules are then unavailable and only the global ones apply). */
     fun currentProjectName(): String? = workspaceRepository.current.value?.name
 
-    /** 当前项目名流，跟随工作区切换自动更新，供 UI 订阅。 */
+    /** Flow of the current project name; updates automatically as the workspace switches, for the UI to subscribe to. */
     val currentProjectNameFlow: Flow<String?> = workspaceRepository.current.map { it?.name }
 
     /**
-     * 当前项目规则流：跟随 [workspaceRepository.current] 切换自动重新加载对应项目规则；
-     * 无选中工作区时发空列表。供 UI 订阅，避免一次性快照在初始化未完成时读到 null。
+     * Flow of the current project's rules: automatically reloads the corresponding project rules as
+     * [workspaceRepository.current] switches; emits an empty list when no workspace is selected.
+     * For the UI to subscribe to, avoiding a one-shot snapshot reading null before initialization completes.
      */
     val currentProjectRulesFlow: Flow<List<PermissionRule>> =
         workspaceRepository.current.flatMapLatest { ws ->
             if (ws == null) flowOf(emptyList()) else projectRulesFlow(ws.name)
         }
 
-    /** 全局规则流，供管理界面观察。 */
+    /** Flow of the global rules, for the management UI to observe. */
     val globalRulesFlow: Flow<List<PermissionRule>> = flow {
         ensureGlobalLoaded()
         emitAll(globalState.filterNotNull())
     }
 
-    /** 一次性读取全部全局规则（备份用）。 */
+    /** One-shot read of all global rules (for backup). */
     suspend fun getGlobalRulesOnce(): List<PermissionRule> {
         ensureGlobalLoaded()
         return globalState.value ?: emptyList()
     }
 
-    /** 全量替换全局规则（备份导入用），原子写文件并更新缓存。 */
+    /** Replaces all global rules (for backup import); writes the file atomically and updates the cache. */
     suspend fun setGlobalRules(rules: List<PermissionRule>) {
         mutex.withLock {
             withContext(Dispatchers.IO) { writeToFile(globalFile, rules) }
@@ -198,7 +203,7 @@ class PermissionRulesRepository @Inject constructor(
         }
     }
 
-    /** 指定项目的规则流，供管理界面观察。 */
+    /** Flow of the rules for the specified project, for the management UI to observe. */
     fun projectRulesFlow(projectName: String): Flow<List<PermissionRule>> {
         val workspacePath = workspaceRepository.currentPath()
         val state = getProjectState(workspacePath)
@@ -209,7 +214,7 @@ class PermissionRulesRepository @Inject constructor(
     }
 
     /**
-     * 评估用：当前项目规则 + 全局规则合并（项目在前）。一次性读取快照。
+     * For evaluation: the current project's rules + the global rules merged (project first). A one-shot snapshot read.
      */
     suspend fun loadEffectiveForCurrentProject(): List<PermissionRule> {
         ensureGlobalLoaded()
@@ -220,7 +225,7 @@ class PermissionRulesRepository @Inject constructor(
         return project + global
     }
 
-    /** 按 scope 新增规则。PROJECT 写入当前项目；无当前项目则忽略并告警。 */
+    /** Adds a rule by scope. PROJECT writes to the current project; with no current project it is ignored with a warning. */
     suspend fun add(scope: PermissionScope, rule: PermissionRule) {
         when (scope) {
             PermissionScope.GLOBAL -> editGlobal { if (rule !in it) it.add(rule) }
@@ -229,7 +234,7 @@ class PermissionRulesRepository @Inject constructor(
                 editProject(workspacePath) { if (rule !in it) it.add(rule) }
             }
         }
-        FileLogger.i(TAG, "记忆授权规则[$scope]: ${rule.toolName} ${rule.pattern}")
+        FileLogger.i(TAG, "Remembered authorization rule [$scope]: ${rule.toolName} ${rule.pattern}")
     }
 
     suspend fun removeGlobalRule(rule: PermissionRule) = editGlobal { it.remove(rule) }
@@ -239,15 +244,15 @@ class PermissionRulesRepository @Inject constructor(
         editProject(workspacePath) { it.remove(rule) }
     }
 
-    /** 把一条项目规则提升为全局：项目删、全局加。 */
+    /** Promotes a project rule to global: deletes it from the project, adds it to global. */
     suspend fun promoteToGlobal(projectName: String, rule: PermissionRule) {
         val workspacePath = workspaceRepository.currentPath()
         editProject(workspacePath) { it.remove(rule) }
         editGlobal { if (rule !in it) it.add(rule) }
-        FileLogger.i(TAG, "提升为全局: ${rule.toolName} ${rule.pattern}")
+        FileLogger.i(TAG, "Promoted to global: ${rule.toolName} ${rule.pattern}")
     }
 
-    // ── 内部写入 ────────────────────────────────────────────────
+    // ── Internal writes ────────────────────────────────────────────────
 
     private suspend fun editGlobal(mutate: (MutableList<PermissionRule>) -> Unit) {
         ensureGlobalLoaded()

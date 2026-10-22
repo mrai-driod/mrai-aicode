@@ -62,7 +62,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 终端设置底部抽屉面板：配色主题、字号大小、字体与光标样式，提供即时预览。
+ * Terminal settings bottom sheet panel: color theme, font size, font and cursor style, with instant preview.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -97,12 +97,12 @@ fun TerminalSettingsSheet(
 
             Spacer(Modifier.height(Spacing.md))
 
-            // 实时预览卡片
+            // Live preview card
             TerminalPreviewCard(settings = settings)
 
             Spacer(Modifier.height(Spacing.lg))
 
-            // 配色主题选择
+            // Color theme selection
             Text(
                 text = stringResource(R.string.terminal_theme_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -130,7 +130,7 @@ fun TerminalSettingsSheet(
 
             Spacer(Modifier.height(Spacing.lg))
 
-            // 字号大小滑块
+            // Font size slider
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,7 +159,7 @@ fun TerminalSettingsSheet(
 
             Spacer(Modifier.height(Spacing.md))
 
-            // 字体选择
+            // Font selection
             TerminalFontSection(
                 currentPath = settings.fontPath,
                 onChangeFontPath = onChangeFontPath
@@ -167,7 +167,7 @@ fun TerminalSettingsSheet(
 
             Spacer(Modifier.height(Spacing.md))
 
-            // 光标样式选择
+            // Cursor style selection
             Text(
                 text = stringResource(R.string.terminal_cursor_style_title),
                 style = MaterialTheme.typography.titleMedium,
@@ -199,7 +199,7 @@ fun TerminalSettingsSheet(
     }
 }
 
-/** 自定义字体选择区：系统等宽 + 已导入字体，支持导入与删除。 */
+/** Custom font selection area: system monospace + imported fonts, supports importing and deleting. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TerminalFontSection(
@@ -294,7 +294,7 @@ private fun TerminalFontSection(
     }
 }
 
-/** 把字体路径解析成预览用 FontFamily，路径无效时回落系统等宽字体。 */
+/** Resolves a font path into a FontFamily for preview, falling back to the system monospace font when the path is invalid. */
 @Composable
 private fun rememberPreviewFontFamily(path: String): FontFamily = remember(path) {
     if (path.isBlank()) return@remember FontFamily.Monospace
@@ -306,7 +306,7 @@ private fun rememberPreviewFontFamily(path: String): FontFamily = remember(path)
     runCatching { FontFamily(Font(file)) }.getOrDefault(FontFamily.Monospace)
 }
 
-/** 终端实时预览小窗。 */
+/** Small live terminal preview window. */
 @Composable
 private fun TerminalPreviewCard(settings: TerminalSettings) {
     val theme = settings.theme
@@ -382,7 +382,7 @@ private fun TerminalPreviewCard(settings: TerminalSettings) {
                     fontSize = settings.fontSizeSp.sp
                 )
                 Spacer(Modifier.width(2.dp))
-                // 模拟光标
+                // Simulated cursor
                 Box(
                     modifier = Modifier
                         .size(

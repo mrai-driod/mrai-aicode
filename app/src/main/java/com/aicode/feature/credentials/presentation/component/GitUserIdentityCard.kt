@@ -32,8 +32,8 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.Check
 
 /**
- * git 提交署名(user.name / user.email)与仓库地址配置：
- * 采用全局统一的 AppTextField 组件。
+ * git commit identity (user.name / user.email) and repository URL configuration:
+ * uses the globally unified AppTextField component.
  */
 @Composable
 internal fun GitUserIdentityCard(

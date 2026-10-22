@@ -54,15 +54,15 @@ import compose.icons.feathericons.ChevronDown
 import compose.icons.feathericons.ChevronUp
 
 /**
- * 待办任务常驻面板（两种形态）：
- * - 消息栏上方：内嵌在输入区列里的普通卡片（默认，改造前既有行为）；
- * - 标题栏下方：悬浮玻璃浮层（传入 [glassBackdrop] 启用），与标题栏共用同一层背景采样。
+ * Persistent to-do panel (two forms):
+ * - Above the message bar: a plain card embedded in the input-area column (the default, pre-existing behaviour);
+ * - Below the title bar: a floating glass overlay (enabled by passing [glassBackdrop]), sharing the same background sampling layer as the title bar.
  *
- * 共性：
- * - 仅在当前会话有待办项时显示；
- * - 支持折叠为单行紧凑摘要与展开查看完整列表；
- * - 记住各会话的展开/折叠状态；
- * - 弹窗/键盘叠加时支持联动强制收起。
+ * Common traits:
+ * - Shown only when the current session has to-do items;
+ * - Can collapse to a compact single-line summary and expand to show the full list;
+ * - Remembers each session's expanded/collapsed state;
+ * - Can be forcibly collapsed in sync when a dialog/keyboard overlays it.
  */
 @Composable
 fun TodoDashboardBar(
@@ -71,16 +71,16 @@ fun TodoDashboardBar(
     modifier: Modifier = Modifier,
     forceCollapse: Boolean = false,
     onExpandedChange: (Boolean) -> Unit = {},
-    /** 背景采样层；非 null 时容器切换为液态玻璃（标题栏下方浮层形态）。 */
+    /** Background sampling layer; when non-null the container switches to liquid glass (the below-title-bar overlay form). */
     glassBackdrop: PrismalGlassLayer? = null,
-    /** 背景亮度（0..1），玻璃模式专用。 */
+    /** Background luminance (0..1), glass mode only. */
     glassLuminance: () -> Float = { 0.5f },
-    /** 玻璃上的前景色：随背景亮度自适应；Unspecified 时退回色板色。 */
+    /** Foreground colour on the glass: adapts to the background luminance; when Unspecified, falls back to palette colours. */
     glassContentColor: Color = Color.Unspecified
 ) {
     if (items.isEmpty()) return
 
-    // 按会话隔离记忆展开状态，新会话默认收起
+    // Remember the expanded state per session; new sessions start collapsed
     var isExpanded by rememberSaveable(sessionId) { mutableStateOf(false) }
     val effectiveExpanded = isExpanded && !forceCollapse
 
@@ -110,7 +110,7 @@ fun TodoDashboardBar(
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.md, vertical = 8.dp)
         ) {
-            // 单行标题栏（点击切换折叠/展开）
+            // Single-line title bar (tap to toggle collapse/expand)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -134,7 +134,7 @@ fun TodoDashboardBar(
                 )
                 Spacer(Modifier.width(Spacing.sm))
 
-                // 进度胶囊或当前进行中的任务简述
+                // Progress pill or a brief description of the task currently in progress
                 Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = if (completedCount == totalCount && totalCount > 0) {
@@ -181,7 +181,7 @@ fun TodoDashboardBar(
                 )
             }
 
-            // 展开时展示待办列表（平滑淡入展开、向上卷折淡出）
+            // When expanded, shows the to-do list (smoothly fades in while expanding, rolls up and fades out)
             AnimatedVisibility(
                 visible = effectiveExpanded,
                 enter = fadeIn(tween(180)) + expandVertically(tween(220)),
@@ -206,7 +206,7 @@ fun TodoDashboardBar(
     }
 
     if (glassBackdrop != null) {
-        // 标题栏下方浮层：液态玻璃容器，与标题栏同圆角、同采样层
+        // Below-title-bar overlay: a liquid-glass container with the same corner radius and sampling layer as the title bar
         GlassSurface(
             backdrop = glassBackdrop,
             modifier = modifier
@@ -220,7 +220,7 @@ fun TodoDashboardBar(
             body()
         }
     } else {
-        // 消息栏上方：普通卡片（保持改造前观感）
+        // Above the message bar: a plain card (keeping the pre-rework look)
         Surface(
             modifier = modifier
                 .fillMaxWidth()

@@ -28,32 +28,32 @@ import com.styropyr0.prismal.sources.prismalGlassLayer
 import com.styropyr0.prismal.sources.rememberPrismalGlassLayer
 
 /**
- * Liquid Glass 脚手架（基于 PrismalAGSL）。
+ * Liquid Glass scaffolding (based on PrismalAGSL).
  *
- * 三条使用纪律，改动时请保持：
+ * Three rules of use; please keep them when making changes:
  *
- * 1. **只有一个 backdrop**：一个界面里只允许创建一层 [rememberChatGlassLayer]，并用
- *    [Modifier.glassBackdrop] 挂在「玻璃背后的内容」上（聊天页是消息列表）。
- *    多个全屏 backdrop capture 会显著抬高 GPU 与内存开销——这正是需求里点名要避免的。
- *    所有玻璃元素（标题栏 / 输入区 / 待办浮层）共用这一层，而不是各自采样。
+ * 1. **Only one backdrop**: only one layer of [rememberChatGlassLayer] may be created in a single screen, and it should be attached with
+ *    [Modifier.glassBackdrop] to the "content behind the glass" (on the chat page that is the message list).
+ *    Multiple full-screen backdrop captures significantly increase GPU and memory overhead -- this is exactly what the requirements specifically call out to avoid.
+ *    All glass elements (title bar / input area / to-do overlay) share this one layer, rather than sampling individually.
  *
- * 2. **只做局部 surface**：玻璃只出现在上述几处悬浮层上，页面主体仍是普通内容。
+ * 2. **Only local surfaces**: glass appears only on the few floating layers mentioned above; the page body remains ordinary content.
  *
- * 3. **不自己判断 API 级别**：PrismalAGSL 自带三档降级
- *    （API 25-30 磨砂 → 31-32 RenderEffect 模糊 → 33+ 完整 AGSL 折射/色散），
- *    我们不在业务代码里调用 RuntimeShader，也不写 Build.VERSION 分支，
- *    否则会破坏 Android 8.0（minSdk 26）的兼容范围。
- *    折射/色散参数在低版本上会被库内部忽略，仅高光叠层（自绘渐变）始终生效。
+ * 3. **Do not judge the API level yourself**: PrismalAGSL provides its own three-tier degradation
+ *    (API 25-30 frosted → 31-32 RenderEffect blur → 33+ full AGSL refraction/chromatic aberration),
+ *    we do not call RuntimeShader in business code, nor write Build.VERSION branches,
+ *    otherwise the compatibility range of Android 8.0 (minSdk 26) would be broken.
+ *    Refraction/chromatic aberration parameters are ignored internally by the library on lower versions; only the highlight overlay (self-drawn gradient) always takes effect.
  */
 
-/** 界面唯一的背景采样层；创建后需用 [Modifier.glassBackdrop] 挂到背景内容上。 */
+/** The screen's sole background sampling layer; after creation it must be attached to the background content with [Modifier.glassBackdrop]. */
 @Composable
 fun rememberChatGlassLayer(): PrismalGlassLayer = rememberPrismalGlassLayer()
 
-/** 把某个子树登记为玻璃的背景源（每个界面只应挂一处）。 */
+/** Registers a subtree as a background source for the glass (each screen should attach this in only one place). */
 fun Modifier.glassBackdrop(layer: PrismalGlassLayer): Modifier = this.prismalGlassLayer(layer)
 
-/** 玻璃亮度状态：[luminance] 交给玻璃做自适应调优，[contentColor] 作为玻璃上文字的前景色。 */
+/** Glass luminance state: [luminance] is handed to the glass for adaptive tuning, [contentColor] serves as the foreground color for text on the glass. */
 @androidx.compose.runtime.Stable
 class GlassLuminanceState(
     val luminance: Float,
@@ -61,14 +61,14 @@ class GlassLuminanceState(
 )
 
 /**
- * 玻璃亮度与前景色（主题推导，零采样）。
+ * Glass luminance and foreground color (theme-derived, zero sampling).
  *
- * 历史：最初用 PrismalAGSL 的 rememberPrismalAdaptiveLuminance——它每 600~1500ms 对
- * 背景层做一次 toImageBitmap + readPixels 的 GPU→CPU 读回（滚动时采样更密），
- * 每次读回都强制渲染管线 flush，是滚动/流式期间周期性小卡顿的来源。
- * 聊天页背景在深色/浅色主题下本来就是稳定的暗/亮，主题推导值与实测亮度几乎一致，
- * 故改为零成本静态值；PrismalGlassSurface 内部的 adaptiveTuning 仍会基于该值工作。
- * [source] / [enabled] 仅为保持签名兼容保留，不再参与采样。
+ * History: originally used PrismalAGSL's rememberPrismalAdaptiveLuminance -- it performs, every 600~1500ms, a
+ * toImageBitmap + readPixels GPU→CPU readback of the background layer (sampling more densely while scrolling),
+ * and each readback forces a render pipeline flush, which was a source of periodic small stutters during scrolling/streaming.
+ * The chat page background is inherently a stable dark/light under dark/light themes, and the theme-derived value is almost identical to the measured luminance,
+ * so it was changed to a zero-cost static value; PrismalGlassSurface's internal adaptiveTuning still works based on this value.
+ * [source] / [enabled] are retained only to keep signature compatibility and no longer participate in sampling.
  */
 @Composable
 fun rememberGlassLuminance(
@@ -87,26 +87,26 @@ fun rememberGlassLuminance(
 }
 
 /**
- * 统一的液态玻璃容器。
+ * Unified liquid glass container.
  *
- * 光感来源分三层，缺一不可：
- * 1. **AGSL 折射带**（[refractionHeight] / [refractionAmount] / [chromaticAberration] /
- *    [depthEffect]）：边缘弧形隆起 + RGB 色散，内容滑到玻璃边缘时被真实地「掰弯」，
- *    这是「液态」感的核心——之前没传折射参数，玻璃只是一块磨砂板；
- * 2. **vibrancy**（[saturation] / [contrast]）：提升采样背景的饱和度与微对比，
- *    让背后的颜色「透」上来而不是糊成灰；
- * 3. **自绘高光**（[specularHighlight]）：斜向渐变 sheen + 顶部 specular 亮带 +
- *    上亮下暗的 rim 光描边，模拟抛边反射；全 API 生效，不依赖 AGSL。
+ * The sense of light comes from three layers, all indispensable:
+ * 1. **AGSL refraction band** ([refractionHeight] / [refractionAmount] / [chromaticAberration] /
+ *    [depthEffect]): edge arc bulge + RGB chromatic aberration; when content slides to the glass edge it is genuinely "bent",
+ *    this is the core of the "liquid" feel -- previously no refraction parameters were passed, so the glass was just a frosted panel;
+ * 2. **vibrancy** ([saturation] / [contrast]): raises the saturation and micro-contrast of the sampled background,
+ *    letting the colors behind "show through" instead of smearing into gray;
+ * 3. **Self-drawn highlight** ([specularHighlight]): diagonal gradient sheen + top specular highlight band +
+ *    rim light outline that is bright on top and dark below, simulating polished-edge reflection; effective on all APIs, does not depend on AGSL.
  *
- * - [cornerRadius]：大圆角，液态玻璃的基本形态；
- * - [tintAlpha]：极低，只做很轻的 surface tint，避免变成「大面积半透明白块」；
- * - [adaptiveLuminance] + [luminance]：让模糊与色彩随背景亮度自适应，并保住对比度下限。
+ * - [cornerRadius]: large rounded corners, the basic form of liquid glass;
+ * - [tintAlpha]: extremely low, only a very light surface tint, to avoid becoming a "large semi-transparent white block";
+ * - [adaptiveLuminance] + [luminance]: make blur and color adapt to the background luminance, while preserving a lower bound on contrast.
  */
 @Composable
 fun GlassSurface(
     /**
-     * 背景采样层；为 null 时降级为「半透明 surface + 极轻描边」的普通容器。
-     * 这样调用方不必写两套布局，玻璃开关只需传 null / 非 null。
+     * Background sampling layer; when null, degrades to a plain container of "semi-transparent surface + extremely light outline".
+     * This way the caller does not need to write two layouts; the glass switch only needs to pass null / non-null.
      */
     backdrop: PrismalBackdrop?,
     modifier: Modifier = Modifier,
@@ -115,15 +115,15 @@ fun GlassSurface(
     tintAlpha: Float = 0.10f,
     adaptiveLuminance: Boolean = true,
     luminance: () -> Float = { 0.5f },
-    /** 折射带厚度（自边缘向内的弧形隆起宽度）；0.dp 关闭折射。 */
+    /** Refraction band thickness (width of the arc bulge inward from the edge); 0.dp disables refraction. */
     refractionHeight: Dp = 14.dp,
-    /** 折射弯曲强度（像素级位移量）；越大边缘扭曲越明显。 */
+    /** Refraction bending strength (pixel-level displacement amount); larger values make the edge distortion more pronounced. */
     refractionAmount: Dp = 30.dp,
-    /** RGB 色散强度 [0,1]，折射带边缘的彩虹色边；0 关闭。 */
+    /** RGB chromatic aberration strength [0,1], the rainbow color fringe at the refraction band edge; 0 disables it. */
     chromaticAberration: Float = 0.16f,
-    /** 采样背景饱和度提升（iOS vibrancy）；1f = 不提升。 */
+    /** Sampled background saturation boost (iOS vibrancy); 1f = no boost. */
     saturation: Float = 1.35f,
-    /** 顶部镜面高光与 rim 光描边（自绘，全 API 生效）。 */
+    /** Top specular highlight and rim light outline (self-drawn, effective on all APIs). */
     specularHighlight: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
@@ -169,16 +169,16 @@ fun GlassSurface(
 }
 
 /**
- * 玻璃体积光：斜向 sheen（左上微亮、底部极轻反光）+ 顶部 specular 高光带。
- * 画在内容之下，只提供「光穿过玻璃」的体积感，不干扰阅读。
+ * Glass volumetric light: diagonal sheen (slightly bright at the top-left, extremely light reflection at the bottom) + top specular highlight band.
+ * Drawn beneath the content, it only provides the volumetric feel of "light passing through glass" and does not interfere with reading.
  *
- * Brush remember 化：GlassSurface 重组时不再每帧分配 3 个新 Brush 对象，
- * 减少滚动/流式输出期间的 GC 压力与 GPU 着色器管线重建。
+ * Brushes are remembered: when GlassSurface recomposes it no longer allocates 3 new Brush objects per frame,
+ * reducing GC pressure and GPU shader pipeline rebuilds during scrolling/streaming output.
  */
 @Composable
 private fun BoxScope.GlassSheenOverlay(cornerRadius: Dp) {
     val shape = RoundedCornerShape(cornerRadius)
-    // 浅色主题下背景本身亮，高光要更收敛，避免一片白
+    // Under a light theme the background itself is bright, so the highlight must be more restrained to avoid a wash of white
     val scale = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) 0.55f else 1f
     val sheenBrush = remember(scale) {
         Brush.linearGradient(
@@ -213,8 +213,8 @@ private fun BoxScope.GlassSheenOverlay(cornerRadius: Dp) {
 }
 
 /**
- * Rim 光描边：上缘亮、侧缘弱、下缘回弹一点反光——抛边玻璃的边缘反射。
- * 画在内容之上（仅 1dp，不遮内容），让玻璃轮廓在复杂背景上依然清晰。
+ * Rim light outline: bright top edge, weak side edges, a little reflected bounce at the bottom edge -- the edge reflection of polished-edge glass.
+ * Drawn above the content (only 1dp, does not cover the content), keeping the glass outline clear even against complex backgrounds.
  */
 @Composable
 private fun BoxScope.GlassRimOverlay(cornerRadius: Dp) {

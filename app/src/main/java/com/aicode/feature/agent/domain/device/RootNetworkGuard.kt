@@ -9,45 +9,50 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * ROOT「伪前台」：以 root 身份让系统一直把本应用当前台进程看待，从而不再
- * 挂起它的网络。仅在设备已取得 ROOT 时生效，无 ROOT 静默跳过。
+ * ROOT "fake foreground": as root, makes the system keep treating this app as a foreground process, so it stops
+ * suspending its network. Only takes effect on devices that have obtained ROOT; silently skipped without ROOT.
  *
- * ## 为什么必须这么干
+ * ## Why this is necessary
  *
- * 切后台后 SSE 静默挂起，实测存在**两层互相独立**的限制，只解一层不够：
+ * After moving to the background, SSE silently hangs, and testing shows there are **two independent layers** of
+ * restriction; removing only one is not enough:
  *
- * 1. **cgroup v2 freezer**：线程被整个挂起，停在 socket `read()` 上——不推进、
- *    也不抛异常（所以日志里没有 error）；解冻瞬间积压的 RST 一次性爆发成
- *    `SocketException: Software caused connection abort`，两个独立连接会同毫秒
- *    双双毙命，因为那是进程级事件而非对端超时。
+ * 1. **cgroup v2 freezer**: threads are suspended wholesale, stuck on a socket `read()` - they neither advance
+ *    nor throw (so there is no error in the logs); the moment they thaw, the backlog of RSTs bursts out at once as
+ *    `SocketException: Software caused connection abort`, and two independent connections die in the same
+ *    millisecond, because that is a process-level event, not a peer timeout.
  *
- *    注意 cgroup 冻结是**层级继承**的，UID 级 freeze=1 时下属进程全冻，
- *    进程级文件显示 0 也无效——只看进程级会得出「没被冻结」的错误结论。
- *    且冻结时 `/proc/<pid>/status` 仍是 `S (sleeping)`（`TASK_FROZEN` 只是
- *    `TASK_INTERRUPTIBLE` 加标志位），不能用进程状态判断冻结。
+ *    Note that cgroup freezing is **hierarchically inherited**: when freeze=1 is set at UID level, every process
+ *    under it freezes, and the process-level file showing 0 changes nothing - looking only at the process level
+ *    leads to the wrong conclusion that it was "not frozen". Also, while frozen, `/proc/<pid>/status` still shows
+ *    `S (sleeping)` (`TASK_FROZEN` is just `TASK_INTERRUPTIBLE` plus a flag), so the process state cannot be used
+ *    to judge freezing.
  *
- * 2. **ROM 私有后台网络管控**：ColorOS（OPPO/一加）有 `hans` 原生守护，
- *    把后台 UID 写进 netd 的 eBPF map（`map_oplus-netd_app_drop_wlan_socket_uid_limit_map`
- *    等），在 socket 层直接丢包。此时 iptables 里**一条规则都没有**，查防火墙
- *    白查；表现为 `UnknownHostException`（DNS 报文被丢），跟冻结是两码事。
+ * 2. **ROM-private background network control**: ColorOS (OPPO/OnePlus) has a native `hans` daemon that writes
+ *    background UIDs into netd's eBPF map (`map_oplus-netd_app_drop_wlan_socket_uid_limit_map`, etc.) and drops
+ *    packets directly at the socket layer. At that point iptables contains **not a single rule**, so checking the
+ *    firewall finds nothing; it manifests as `UnknownHostException` (DNS packets are dropped), which is a different
+ *    matter from freezing.
  *
- * 两者都与前台服务、`PARTIAL_WAKE_LOCK`、`WifiLock`、`netpolicy` 白名单无关——
- * 那些保的是 CPU/优先级/后台数据配额，管不了「线程不执行」和「socket 被丢包」。
+ * Neither is related to foreground services, `PARTIAL_WAKE_LOCK`, `WifiLock`, or `netpolicy` allowlists: those
+ * protect CPU/priority/background data quota, and can do nothing about "threads not executing" or "sockets dropping packets".
  *
- * ## 对策：持续维持而非一次性设置
+ * ## Countermeasure: maintain continuously rather than set once
  *
- * 系统会不断把状态改回去，所以一次性设置撑不过几秒。这里拉一个 root 常驻
- * 守护循环维持（以 marker 文件保证单实例，本应用进程消失后自行退出）：
+ * The system keeps reverting the state, so a one-time setting does not survive more than a few seconds. This starts
+ * a resident root daemon loop to maintain it (a marker file guarantees a single instance, and it exits by itself
+ * once this app's process is gone):
  *
- * - 高频（每 2s）：解冻 UID 级 + 全部进程级 `cgroup.freeze`；
- * - 低频（每 10s）：`standby bucket = active`、后台运行 AppOps allow；
- * - 每次检查：`stop hans`（仅 ColorOS 存在该服务时）；
- * - 一次性：关闭全局 `app_standby_enabled`、`netpolicy` 后台数据白名单。
+ * - High frequency (every 2s): unfreeze the UID-level and all process-level `cgroup.freeze`;
+ * - Low frequency (every 10s): `standby bucket = active`, AppOps allow for background running;
+ * - Every check: `stop hans` (only when that service exists, i.e. ColorOS);
+ * - One-time: disable the global `app_standby_enabled`, add the `netpolicy` background-data allowlist entry.
  *
- * 刻意**不申请 Doze 白名单**：息屏后本就不需要继续工作，只针对网络被挂起。
+ * Deliberately **does not request a Doze allowlist entry**: after the screen turns off there is no need to keep
+ * working anyway; this targets only the network being suspended.
  *
- * 守护的 stdout/stderr 必须重定向到 `/dev/null`：调用方把 stderr 合并进了
- * stdout 并读到 EOF，后台进程持有管道会让 `waitFor()` 卡满超时。
+ * The daemon's stdout/stderr must be redirected to `/dev/null`: the caller merges stderr into stdout and reads to
+ * EOF, and a background process holding the pipe would make `waitFor()` block for the full timeout.
  */
 @Singleton
 class RootNetworkGuard @Inject constructor(
@@ -60,15 +65,16 @@ class RootNetworkGuard @Inject constructor(
     private var lastAppliedAtMs = 0L
 
     /**
-     * 应用后台网络豁免。必须在 IO 线程调用（内部经 `su` 子进程）。
+     * Applies the background network exemption. Must be called on an IO thread (internally goes through an `su` child process).
      *
-     * 同一会话内按 [APPLY_INTERVAL_MS] 节流：这些设置一旦生效就持续有效，
-     * 没必要每条消息都 fork 一次 su。失败不抛，交由上层继续走常规保活路径。
+     * Throttled by [APPLY_INTERVAL_MS] within a session: once these settings take effect they stay in effect, so
+     * there is no need to fork an su for every message. Failures do not throw; the upper layer continues with the
+     * regular keep-alive path.
      *
-     * @return 是否已（或本次刚刚）生效；无 ROOT 返回 false。
+     * @return whether it is in effect (already, or as of this call); returns false without ROOT.
      */
     suspend fun applyIfRooted(): Boolean {
-        // ROOT 探测本身有缓存，未取得 ROOT 时静默跳过
+        // The ROOT probe itself is cached; silently skip when ROOT has not been obtained
         if (!deviceRootEngine.isProvisioned()) return false
 
         return mutex.withLock {
@@ -76,14 +82,14 @@ class RootNetworkGuard @Inject constructor(
             if (now - lastAppliedAtMs < APPLY_INTERVAL_MS) return@withLock true
 
             val pkg = context.packageName
-            // 一条脚本一次 su：先做一次性设置，再落守护脚本并后台拉起。
-            // $pkg 由 Kotlin 注入；\$xxx 是设备 shell 的变量，需转义。
+            // One script, one su: first the one-time settings, then write the daemon script and launch it in the background.
+            // $pkg is injected by Kotlin; \$xxx is a device shell variable and must be escaped.
             val script = buildString {
                 append("uid=\$(stat -c %u /data/data/$pkg 2>/dev/null); ")
-                // ---- 一次性：关掉会把后台网络推后的 App Standby，加后台数据白名单 ----
+                // ---- One-time: turn off App Standby, which defers background network, and add the background data allowlist entry ----
                 append("settings put global app_standby_enabled 0; ")
                 append("[ -n \"\$uid\" ] && cmd netpolicy add restrict-background-whitelist \$uid; ")
-                // ---- 立即解冻一次，不等守护首个 tick ----
+                // ---- Unfreeze once immediately, without waiting for the daemon's first tick ----
                 append("if [ -n \"\$uid\" ]; then for f in /sys/fs/cgroup/apps/uid_\$uid/cgroup.freeze ")
                 append("/sys/fs/cgroup/uid_\$uid/cgroup.freeze ")
                 append("/sys/fs/cgroup/apps/uid_\$uid/pid_*/cgroup.freeze ")
@@ -92,9 +98,9 @@ class RootNetworkGuard @Inject constructor(
                 append("am set-standby-bucket $pkg active; ")
                 append("cmd appops set $pkg RUN_IN_BACKGROUND allow; ")
                 append("cmd appops set $pkg RUN_ANY_IN_BACKGROUND allow; ")
-                // ---- 停掉 ROM 私有的后台网络管控守护（ColorOS 的 hans）----
+                // ---- Stop the ROM-private background network control daemon (ColorOS's hans) ----
                 append("if [ \"\$(getprop init.svc.hans)\" = running ]; then stop hans; fi; ")
-                // ---- 落守护脚本：heredoc 引用符避免 shell 提前展开 ----
+                // ---- Write the daemon script: the heredoc quoting prevents the shell from expanding it early ----
                 append("cat > $GUARD_PATH <<'AICODE_GUARD_EOF'\n")
                 append("#!/system/bin/sh\n")
                 append("u=\$(stat -c %u /data/data/$pkg 2>/dev/null)\n")
@@ -104,14 +110,14 @@ class RootNetworkGuard @Inject constructor(
                 append("i=0\n")
                 append("while [ \$i -lt $GUARD_MAX_TICKS ]; do\n")
                 append("  pidof $pkg >/dev/null 2>&1 || break\n")
-                // 高频：解冻（纯 echo，开销可忽略）
+                // High frequency: unfreeze (pure echo, negligible cost)
                 append("  for f in /sys/fs/cgroup/apps/uid_\$u/cgroup.freeze /sys/fs/cgroup/uid_\$u/cgroup.freeze ")
                 append("/sys/fs/cgroup/apps/uid_\$u/pid_*/cgroup.freeze /sys/fs/cgroup/uid_\$u/pid_*/cgroup.freeze; do\n")
                 append("    [ -f \"\$f\" ] && echo 0 > \"\$f\" 2>/dev/null\n")
                 append("  done\n")
-                // 每次：压住 ROM 私有管控守护（它会在 socket 层丢后台 UID 的包）
+                // Every iteration: keep the ROM-private control daemon down (it drops background UIDs' packets at the socket layer)
                 append("  if [ \"\$(getprop init.svc.hans)\" = running ]; then stop hans; fi\n")
-                // 低频：am/cmd 是 java 命令，fork 开销较大，降频执行
+                // Low frequency: am/cmd are Java commands with a large fork cost, so run them less often
                 append("  if [ \$((i % $STATE_EVERY_TICKS)) -eq 0 ]; then\n")
                 append("    am set-standby-bucket $pkg active >/dev/null 2>&1\n")
                 append("    cmd appops set $pkg RUN_IN_BACKGROUND allow >/dev/null 2>&1\n")
@@ -123,7 +129,7 @@ class RootNetworkGuard @Inject constructor(
                 append("rm -f $GUARD_MARKER 2>/dev/null\n")
                 append("AICODE_GUARD_EOF\n")
                 append("nohup sh $GUARD_PATH >/dev/null 2>&1 &\n")
-                // ---- 回读关键状态，便于日志一眼确认是否真的生效 ----
+                // ---- Read back the key state, so the logs show at a glance whether it really took effect ----
                 append("echo \"freeze=\$(cat /sys/fs/cgroup/apps/uid_\$uid/cgroup.freeze 2>/dev/null) ")
                 append("hans=\$(getprop init.svc.hans) bucket=\$(am get-standby-bucket $pkg)\"")
             }
@@ -131,12 +137,12 @@ class RootNetworkGuard @Inject constructor(
             val result = runCatching {
                 deviceRootEngine.runCommandSyncWithExit(script, null, TIMEOUT_MS)
             }.getOrElse {
-                FileLogger.w(TAG, "ROOT 网络豁免执行失败: ${it.message}")
+                FileLogger.w(TAG, "ROOT network exemption execution failed: ${it.message}")
                 return@withLock false
             }
 
             if (result.exitCode == null) {
-                FileLogger.w(TAG, "ROOT 网络豁免未完成: ${result.output.take(200)}")
+                FileLogger.w(TAG, "ROOT network exemption did not complete: ${result.output.take(200)}")
                 return@withLock false
             }
             lastAppliedAtMs = now
@@ -145,7 +151,7 @@ class RootNetworkGuard @Inject constructor(
                 ?.trim()
             FileLogger.i(
                 TAG,
-                "ROOT 伪前台已布置(exit=$result.exitCode) $status"
+                "ROOT fake foreground deployed (exit=$result.exitCode) $status"
             )
             true
         }
@@ -154,29 +160,29 @@ class RootNetworkGuard @Inject constructor(
     private companion object {
         const val TAG = "RootNetworkGuard"
 
-        /** 单条脚本超时：`cmd netpolicy` 偶发卡顿，给足但不至于拖住任务启动。 */
+        /** Timeout for a single script: `cmd netpolicy` occasionally stalls, so allow plenty without holding up task startup. */
         const val TIMEOUT_MS = 15_000L
 
         /**
-         * 节流间隔：只决定多久重新「校验并补拉」一次守护，守护自身在此期间持续维持。
-         * 不能太长——守护有可能被系统清理，间隔过长会留出一个无人维持的空窗；
-         * 脚本本身幂等（marker 保单实例）且耗时不足 1 秒，1 分钟校验一次足够廉价。
+         * Throttle interval: only decides how often the daemon is re-checked and re-launched if needed; the daemon itself keeps maintaining state in between.
+         * It must not be too long: the daemon may be cleaned up by the system, and too long an interval would leave a window with nobody maintaining state;
+         * the script itself is idempotent (the marker guarantees a single instance) and takes under 1 second, so checking once a minute is cheap enough.
          */
         const val APPLY_INTERVAL_MS = 60 * 1000L
 
-        /** 守护脚本落盘路径。 */
+        /** Path where the daemon script is written. */
         const val GUARD_PATH = "/data/local/tmp/.aicode_guard.sh"
 
-        /** 守护单实例 marker：存 pid，进程消失即视为失效。 */
+        /** Daemon single-instance marker: stores the pid; once the process is gone it is treated as invalid. */
         const val GUARD_MARKER = "/data/local/tmp/.aicode_guard"
 
-        /** 守护每次循环间隔（秒）：系统重新冻结的节奏是秒级，2 秒足够压住。 */
+        /** Interval between daemon loop iterations (seconds): the system re-freezes on a seconds scale, so 2 seconds is enough to keep it down. */
         const val GUARD_TICK_SECONDS = 2
 
-        /** `am`/`cmd` 是 java 命令、fork 开销较大，每 N 个 tick 才执行一次。 */
+        /** `am`/`cmd` are Java commands with a large fork cost, so they run only every N ticks. */
         const val STATE_EVERY_TICKS = 5
 
-        /** 守护最多存活的 tick 数：2s × 1800 = 60 分钟，覆盖一次长任务的量级。 */
+        /** Maximum number of ticks the daemon lives: 2s x 1800 = 60 minutes, on the scale of one long task. */
         const val GUARD_MAX_TICKS = 1800
     }
 }

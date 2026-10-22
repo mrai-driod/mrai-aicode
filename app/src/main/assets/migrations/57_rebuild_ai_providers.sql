@@ -1,7 +1,7 @@
--- v56 曾出现两套 schema：a8d5c5df 之前全新安装的库缺 userAgent 物理列，此前（含正式版 ≤52，
--- 迁移 40 加的）的库有该列。两类库版本号都可能是 56，无法再靠 onOpen 身份校验区分。
--- 升 57 并重建 ai_providers，使两类库统一到同一列集合。SQLite 3.18 无 ADD COLUMN IF NOT EXISTS，
--- 若用加列，在已有该列的库上会报 duplicate column，故一律重建（userAgent 补为空串）。
+-- v56 ended up with two schemas: databases freshly installed before a8d5c5df lack the physical userAgent column, while earlier ones (including releases <=52,
+-- which had it added by migration 40) have the column. Both kinds can report version 56, so the onOpen identity check can no longer distinguish them.
+-- Bump to 57 and rebuild ai_providers so both kinds converge on the same column set. SQLite 3.18 has no ADD COLUMN IF NOT EXISTS,
+-- so adding the column would raise a duplicate column error on databases that already have it; rebuild unconditionally instead (userAgent filled with an empty string).
 ALTER TABLE `ai_providers` RENAME TO `ai_providers_old`;
 
 CREATE TABLE `ai_providers` (

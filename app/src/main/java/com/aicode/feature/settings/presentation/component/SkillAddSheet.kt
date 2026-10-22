@@ -26,8 +26,8 @@ import compose.icons.feathericons.Edit3
 import compose.icons.feathericons.FileText
 
 /**
- * 「添加技能」底部弹层：顶部选择作用域（全局 / 当前项目），下方三种添加方式——
- * 手动新建（进编辑表单）、从文件导入（.md）、从压缩包导入（.zip，可含多个技能）。
+ * "Add skill" bottom sheet: pick the scope at the top (Global / Current project), with three ways to add below —
+ * create manually (opens the edit form), import from a file (.md), or import from an archive (.zip, which may contain multiple skills).
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)

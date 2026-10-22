@@ -14,21 +14,21 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 在「容器内路径」与「宿主真实路径」之间互转，让 AI 只看到 / 只使用容器路径。
+ * Converts between "container paths" and "host real paths", so the AI only sees / uses container paths.
  *
- * 背景：容器是 PRoot 以当前 profile 的 rootfs 目录为根（`-r rootfs`）跑起来的，
- * 当前工作区目录又被 bind 成容器内的 [CONTAINER_ROOT]（`~/workspace`，展开为 `$HOME/workspace`）。因此「容器内路径」到「宿主真实文件」有两条确定映射：
- * - `~/workspace[/…]` → 宿主工作区目录（写它即写宿主，且容器内可见——bind mount）；
- * - 其它容器绝对路径 `/etc/…`、`/root/…` → 当前 profile rootfs 目录下对应文件（与终端在容器里看到的完全是同一批文件）。
+ * Background: the container runs under PRoot with the current profile's rootfs directory as its root (`-r rootfs`),
+ * and the current workspace directory is bound as [CONTAINER_ROOT] inside the container (`~/workspace`, expanded to `$HOME/workspace`). So there are two deterministic mappings from "container path" to "host real file":
+ * - `~/workspace[/…]` → host workspace directory (writing there writes to the host, and it is visible inside the container — bind mount);
+ * - Other container absolute paths `/etc/…`, `/root/…` → the corresponding file under the current profile's rootfs directory (exactly the same files the terminal sees inside the container).
  *
- * 这样文件类工具（read/write/edit）无需进 PRoot 即可读写整个容器文件系统，与 `execute_command` 看到的一致。
+ * This lets file tools (read/write/edit) read and write the whole container filesystem without entering PRoot, consistent with what `execute_command` sees.
  *
- * **profile 感知**：rootfs 目录随当前选中 profile 变化（内置 Alpine 用 filesDir/rootfs，自定义用 filesDir/rootfs_<id>）。
- * [currentProfile] 缓存自 [ContainerSettingsRepository]，避免同步读 DataStore；启动首帧为内置 Alpine，等同改动前。
+ * **Profile-aware**: the rootfs directory varies with the currently selected profile (built-in Alpine uses filesDir/rootfs, custom profiles use filesDir/rootfs_<id>).
+ * [currentProfile] is cached from [ContainerSettingsRepository] to avoid synchronous DataStore reads; the first frame at startup is the built-in Alpine, same as before this change.
  *
- * 用本映射器统一：
- * - 工具入参（AI 给的路径）经 [toHostFile] 落到宿主真实文件；
- * - 工具回显/返回的路径经 [toContainerPath] 还原成容器视角（`~/workspace/…` 或 `/etc/…`），对 AI 只暴露容器路径。
+ * This mapper unifies:
+ * - Tool inputs (paths given by the AI) resolve via [toHostFile] to real host files;
+ * - Paths echoed/returned by tools are converted back via [toContainerPath] to the container view (`~/workspace/…` or `/etc/…`), exposing only container paths to the AI.
  */
 @Singleton
 class WorkspacePathMapper @Inject constructor(
@@ -38,17 +38,17 @@ class WorkspacePathMapper @Inject constructor(
     private val pathHomeResolver: PathHomeResolver
 ) {
     companion object {
-        /** AI 看到的工作区根路径。用 `~` 形式让提示词/工具描述更自然，内部用 [resolvedContainerRoot] 展开后匹配。 */
+        /** Workspace root path as seen by the AI. The `~` form makes prompts/tool descriptions more natural; internally it is expanded via [resolvedContainerRoot] before matching. */
         const val CONTAINER_ROOT = "~/workspace"
-        /** AI 配置目录在容器内的路径，绑定到宿主 [ContainerInstaller.aicodeDir]（独立于 rootfs）。 */
+        /** Path of the AI config directory inside the container, bound to the host [ContainerInstaller.aicodeDir] (independent of rootfs). */
         const val AICODE_ROOT = "/root/.aicode"
         private const val TAG = "WorkspacePathMapper"
     }
 
     /**
-     * 当前选中的 profile（缓存，避免同步读 DataStore）。启动首帧为内置 Alpine，等同改动前。
-     * profile 切换后由 flow collector 更新；切换瞬间与引擎缓存可能短暂不一致，但 ensureInstalled 与文件工具
-     * 调用之间有自然顺序，实际不影响。
+     * The currently selected profile (cached, to avoid synchronous DataStore reads). The first frame at startup is the built-in Alpine, same as before this change.
+     * Updated by a flow collector after a profile switch; it may briefly differ from the engine cache at the moment of switching, but ensureInstalled and file-tool
+     * calls have a natural ordering, so this has no practical effect.
      */
     @Volatile
     private var currentProfile: ContainerProfile = ContainerProfile.BUILTIN_ALPINE
@@ -68,27 +68,27 @@ class WorkspacePathMapper @Inject constructor(
             ?: ContainerProfile.BUILTIN_ALPINE
     }
 
-    /** 当前工作区在宿主上的根目录。 */
+    /** Root directory of the current workspace on the host. */
     private fun hostRoot(): File = File(workspaceRepository.currentPath())
 
-    /** [CONTAINER_ROOT] 展开后的绝对路径（`$HOME/workspace`），供路径匹配使用。home 未就绪时回退 `/root`。 */
+    /** Absolute path after expanding [CONTAINER_ROOT] (`$HOME/workspace`), used for path matching. Falls back to `/root` when home is not ready. */
     private fun resolvedContainerRoot(): String =
         pathHomeResolver.home().trimEnd('/') + "/workspace"
 
-    /** 容器 rootfs 在宿主上的根目录（容器内 `/` 即此目录，随当前 profile 变化）。 */
+    /** Root directory of the container rootfs on the host (container `/` is this directory; varies with the current profile). */
     private fun rootfsRoot(): File = containerInstaller.rootfsDirFor(currentProfile)
 
-    /** AI 配置目录在宿主上的根（容器内 `/root/.aicode` 即此目录，独立于 rootfs）。 */
+    /** Root of the AI config directory on the host (container `/root/.aicode` is this directory, independent of rootfs). */
     private fun aicodeRoot(): File = containerInstaller.aicodeDir
 
     /**
-     * 把 AI 提供的路径解析为宿主真实文件。兼容以下写法：
-     * - 容器绝对路径 `~/workspace[/…]`（或展开后的 `$HOME/workspace[/…]`）→ 映射到宿主工作区；
-     * - 容器绝对路径 `/root/.aicode[/…]` → 映射到宿主 AI 配置目录（skill / mcp.json，独立于 rootfs）；
-     * - 其它容器绝对路径 `/etc/…`、`/root/…` → 映射到 rootfs 内对应文件（容器系统文件）；
-     * - 相对路径 `src/Main.kt` → 挂到宿主工作区根下；
+     * Resolves a path provided by the AI to a real host file. Supports the following forms:
+     * - Container absolute path `~/workspace[/…]` (or the expanded `$HOME/workspace[/…]`) → maps to the host workspace;
+     * - Container absolute path `/root/.aicode[/…]` → maps to the host AI config directory (skill / mcp.json, independent of rootfs);
+     * - Other container absolute paths `/etc/…`, `/root/…` → map to the corresponding file inside rootfs (container system files);
+     * - Relative path `src/Main.kt` → placed under the host workspace root;
      *
-     * `/root/.aicode` 必须先于通用 `/`→rootfs 规则匹配，否则会落到 rootfs 内的临时副本（升级即丢）。
+     * `/root/.aicode` must be matched before the generic `/` → rootfs rule, otherwise it would land on a temporary copy inside rootfs (lost on upgrade).
      */
     fun toHostFile(path: String): File {
         val root = hostRoot()
@@ -107,14 +107,14 @@ class WorkspacePathMapper @Inject constructor(
     }
 
     /**
-     * 把宿主路径还原为容器路径：
-     * - 位于工作区内 → `~/workspace/…`；
-     * - 位于 AI 配置目录内 → `/root/.aicode/…`；
-     * - 位于 rootfs 内 → 去掉 rootfs 前缀的容器绝对路径（如 `/etc/apk/repositories`）；
-     * - 其余原样返回（极少出现）。
+     * Converts a host path back to a container path:
+     * - Inside the workspace → `~/workspace/…`;
+     * - Inside the AI config directory → `/root/.aicode/…`;
+     * - Inside rootfs → the container absolute path with the rootfs prefix removed (e.g. `/etc/apk/repositories`);
+     * - Otherwise returned as-is (rare).
      *
-     * 工作区在 `filesDir/projects`、AI 配置在 `filesDir/aicode`、rootfs 在 `filesDir/rootfs`，三者互不重叠，
-     * 判断顺序无歧义。
+     * The workspace is in `filesDir/projects`, the AI config in `filesDir/aicode`, and rootfs in `filesDir/rootfs`; the three do not overlap,
+     * so the check order is unambiguous.
      */
     fun toContainerPath(hostPath: String): String {
         val rootPath = hostRoot().absolutePath.replace('\\', '/')
@@ -126,7 +126,7 @@ class WorkspacePathMapper @Inject constructor(
         return when {
             abs == rootPath -> CONTAINER_ROOT
             abs.startsWith("$rootPath/") -> CONTAINER_ROOT + "/" + abs.removePrefix("$rootPath/")
-            // 展开后的 $HOME/workspace 形式也还原为 ~/workspace（bind mount 路径可能以绝对形式出现）
+            // The expanded $HOME/workspace form is also converted back to ~/workspace (bind-mount paths may appear in absolute form)
             raw == resolvedWs || abs == resolvedWs -> CONTAINER_ROOT
             raw.startsWith("$resolvedWs/") -> CONTAINER_ROOT + "/" + raw.removePrefix("$resolvedWs/")
             abs.startsWith("$resolvedWs/") -> CONTAINER_ROOT + "/" + abs.removePrefix("$resolvedWs/")
@@ -139,10 +139,10 @@ class WorkspacePathMapper @Inject constructor(
     }
 
     /**
-     * 当前 profile 的额外挂载（[ContainerProfile.extraBindings]，格式 `本地源:容器目标`）解析为
-     * (宿主源, 展开并去尾斜杠的容器目标)，按容器目标长度降序（最长前缀优先，避免嵌套挂载歧义）。
-     * 文件工具不进 PRoot，若不在此映射，挂载路径会被兜底落到 rootfs 内部，
-     * 与容器内 shell（proot `-b` bind mount）看到的不一致。
+     * Parses the current profile's extra mounts ([ContainerProfile.extraBindings], format `local source:container target`) into
+     * (host source, expanded container target with trailing slash removed), sorted by container-target length descending (longest prefix first, to avoid nested-mount ambiguity).
+     * File tools do not enter PRoot; without this mapping, mount paths would fall back into rootfs,
+     * which would differ from what the in-container shell (proot `-b` bind mount) sees.
      */
     private fun extraMounts(): List<Pair<String, String>> =
         currentProfile.extraBindings.mapNotNull { binding ->
@@ -153,7 +153,7 @@ class WorkspacePathMapper @Inject constructor(
             if (src.isEmpty() || dst.isEmpty()) null else src to dst
         }.sortedByDescending { it.second.length }
 
-    /** [p]（已展开的容器路径）落在某额外挂载目标下时，映射到宿主源真实文件；否则 null。 */
+    /** If [p] (an already-expanded container path) falls under an extra mount target, maps it to the real file under the host source; otherwise null. */
     private fun mountedHostFile(p: String): File? {
         for ((src, dst) in extraMounts()) {
             when {
@@ -164,7 +164,7 @@ class WorkspacePathMapper @Inject constructor(
         return null
     }
 
-    /** 宿主 [abs] 落在某额外挂载源下时，还原为容器目标路径；否则 null。 */
+    /** If host [abs] falls under an extra mount source, converts it back to the container target path; otherwise null. */
     private fun mountedContainerPath(abs: String): String? {
         for ((src, dst) in extraMounts()) {
             val srcAbs = File(src).absolutePath

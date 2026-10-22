@@ -39,25 +39,25 @@ class ReadFileTool @Inject constructor(
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         return try {
             val path = args["path"]?.jsonPrimitive?.contentOrNull ?: run {
-                FileLogger.w(TAG, "read_file 缺少 path 参数")
+                FileLogger.w(TAG, "read_file missing path argument")
                 return ToolResult.Error("Missing required parameter: path", "MISSING_PATH")
             }
             FileLogger.d(TAG, "read_file path=$path")
 
             if (!fileAccess.exists(path)) {
-                FileLogger.w(TAG, "read_file 文件不存在: $path")
+                FileLogger.w(TAG, "read_file file does not exist: $path")
                 return ToolResult.Error("File does not exist: $path", "FILE_NOT_FOUND")
             }
 
             val startLine = args["start_line"]?.jsonPrimitive?.intOrNull?.coerceAtLeast(1) ?: 1
             val requestedEnd = args["end_line"]?.jsonPrimitive?.intOrNull
-            // 行窗口上界：显式 end_line 与 start_line+MAX_LINES 取较小值，缺省则按 MAX_LINES 上限。
+            // Upper bound of the line window: the smaller of an explicit end_line and start_line+MAX_LINES; when not given, the MAX_LINES cap applies.
             val lineCap = startLine + MAX_LINES - 1
             val endCap = if (requestedEnd != null) minOf(requestedEnd, lineCap) else lineCap
 
-            // 逐行流式读取，避免 readText() 整篇进内存导致移动端 OOM；
-            // 只保留 [startLine, endCap] 窗口，并在累计字节超过 MAX_BYTES 时提前停止。
-            // 走 IO 线程：本地 File 读与远程 exec 流的阻塞读写都不应占着调用方线程。
+            // Read line by line as a stream, avoiding readText() loading the whole file into memory and causing OOM on mobile;
+            // keep only the [startLine, endCap] window, and stop early once the accumulated bytes exceed MAX_BYTES.
+            // Run on the IO thread: neither local File reads nor the blocking reads/writes of a remote exec stream should occupy the caller's thread.
             val sb = StringBuilder()
             var totalLines = 0
             var emittedLines = 0
@@ -70,7 +70,7 @@ class ReadFileTool @Inject constructor(
                     totalLines = lineNo
                     if (lineNo < startLine) return@forEach
                     if (lineNo > endCap) {
-                        // 已越过窗口，但仍需继续计数以得到准确 total_lines。
+                        // Past the window, but counting must continue to get an accurate total_lines.
                         return@forEach
                     }
                     if (!truncatedByBytes) {
@@ -88,8 +88,8 @@ class ReadFileTool @Inject constructor(
             }
 
             val lastEmittedLine = startLine + emittedLines - 1
-            // 用户想要的窗口末行：给了 end_line 取 min(end_line, EOF)，否则到 EOF。
-            // 我们只发到了 lastEmittedLine，若它落在窗口末行之前，说明被截断、还有内容可读。
+            // The last line of the window the user wants: if end_line is given, min(end_line, EOF); otherwise to EOF.
+            // We only emitted up to lastEmittedLine; if it falls before the window's last line, the output was truncated and more content can be read.
             val wantedEnd = if (requestedEnd != null) minOf(requestedEnd, totalLines) else totalLines
             val truncated = emittedLines > 0 && lastEmittedLine < wantedEnd
             val note = when {
@@ -98,7 +98,7 @@ class ReadFileTool @Inject constructor(
                 else -> "Content exceeded the $MAX_LINES-line limit and was truncated; continue reading from line ${lastEmittedLine + 1} using start_line."
             }
 
-            FileLogger.v(TAG, "read_file 成功 path=$path total=$totalLines emitted=$emittedLines bytes=$byteCount truncated=$truncated")
+            FileLogger.v(TAG, "read_file succeeded path=$path total=$totalLines emitted=$emittedLines bytes=$byteCount truncated=$truncated")
             val resultMap = mutableMapOf<String, JsonElement>(
                 "content" to JsonPrimitive(sb.toString()),
                 "total_lines" to JsonPrimitive(totalLines),
@@ -110,24 +110,24 @@ class ReadFileTool @Inject constructor(
             if (note != null) resultMap["note"] = JsonPrimitive(note)
             ToolResult.Success(JsonObject(resultMap))
         } catch (e: Exception) {
-            FileLogger.e(TAG, "read_file 异常", e)
+            FileLogger.e(TAG, "read_file error", e)
             ToolResult.Error(e.message ?: "Failed to read file", "READ_ERROR")
         }
     }
 
     private companion object {
-        /** 单次最多返回的行数，超出截断并提示用 start_line 续读。 */
+        /** The maximum number of lines returned in one call; beyond that it truncates and hints to continue reading with start_line. */
         const val MAX_LINES = 2000
-        /** 单次最多返回的字节数（UTF-8，约 200KB），防止超大行撑爆内存/上下文。 */
+        /** The maximum number of bytes returned in one call (UTF-8, about 200KB), preventing very long lines from blowing up memory/context. */
         const val MAX_BYTES = 200 * 1024
     }
 }
 
 /**
- * 写入整个文件，文件不存在时会自动创建（含父目录）。
+ * Writes the whole file; if the file does not exist it is created automatically (including parent directories).
  *
- * 通过 overwrite 参数吸收了旧 create_file 的「不覆盖已有文件」语义：
- * overwrite=false 且目标已存在时报错，可用于安全地新建文件。
+ * The overwrite parameter absorbs the old create_file's "do not overwrite an existing file" semantics:
+ * with overwrite=false and the target already existing, it reports an error, so it can be used to create new files safely.
  */
 class WriteFileTool @Inject constructor(
     private val fileAccess: FileAccessProvider
@@ -163,27 +163,27 @@ class WriteFileTool @Inject constructor(
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         return try {
             val path = args["path"]?.jsonPrimitive?.contentOrNull ?: run {
-                FileLogger.w(TAG, "write_file 缺少 path 参数")
+                FileLogger.w(TAG, "write_file missing path argument")
                 return ToolResult.Error("Missing required parameter: path", "MISSING_PATH")
             }
             val content = args["content"]?.jsonPrimitive?.contentOrNull ?: ""
             val overwrite = args["overwrite"]?.jsonPrimitive?.booleanOrNull ?: true
 
-            FileLogger.d(TAG, "write_file path=$path (${content.length} 字符, overwrite=$overwrite)")
+            FileLogger.d(TAG, "write_file path=$path (${content.length} chars, overwrite=$overwrite)")
             val existed = fileAccess.exists(path)
             if (existed && !overwrite) {
-                FileLogger.w(TAG, "write_file 文件已存在且 overwrite=false: $path")
+                FileLogger.w(TAG, "write_file file already exists and overwrite=false: $path")
                 return ToolResult.Error("File already exists: $path (overwrite=false)", "FILE_EXISTS")
             }
 
-            // 写前留存旧内容，供生成「旧→新」差异（与 edit_file 同构，UI 据此渲染彩色 diff）。
+            // Keep the old content before writing, to generate an "old -> new" diff (isomorphic with edit_file; the UI renders a coloured diff from it).
             val oldContent = if (existed) runCatching { fileAccess.readFile(path) }.getOrDefault("") else ""
 
             fileAccess.writeFile(path, content, overwrite = true)
 
-            // 生成统一差异文本：新建文件按「整体新增」呈现（旧内容视为空，避免一行伪删除）；
-            // 覆盖写则计算旧→新的行级增删。LineDiff 为 O(n·m) 内存，超大文件重写时跳过 LCS、
-            // 退化为整体新增，防止移动端因构造 DP 表而 OOM。
+            // Generate the unified diff text: a new file is presented as "entirely added" (old content treated as empty, avoiding a line of fake deletion);
+            // an overwrite computes the line-level additions/removals from old to new. LineDiff uses O(n*m) memory; when rewriting a very large file, skip LCS and
+            // degrade to entirely-added, preventing OOM on mobile from building the DP table.
             val diff = buildWriteDiff(existed, oldContent, content)
             val added = diff.lines().count { it.startsWith("+") }
             val removed = diff.lines().count { it.startsWith("-") }
@@ -196,7 +196,7 @@ class WriteFileTool @Inject constructor(
                 ))
             ))
 
-            FileLogger.v(TAG, "write_file 成功 path=$path created=${!existed} lines=${content.lines().size} (+$added -$removed)")
+            FileLogger.v(TAG, "write_file succeeded path=$path created=${!existed} lines=${content.lines().size} (+$added -$removed)")
             ToolResult.Success(
                 JsonObject(mapOf(
                     "path" to JsonPrimitive(fileAccess.toDisplayPath(path)),
@@ -209,31 +209,31 @@ class WriteFileTool @Inject constructor(
                 ))
             )
         } catch (e: Exception) {
-            FileLogger.e(TAG, "write_file 异常", e)
+            FileLogger.e(TAG, "write_file error", e)
             ToolResult.Error(e.message ?: "Failed to write file", "WRITE_ERROR")
         }
     }
 
     /**
-     * 构造 write_file 的统一差异文本（每行以 `+`/`-`/` ` 起头）：
-     * - 新建文件：旧内容视为空，整篇按「全部新增」呈现，不跑 LCS；
-     * - 覆盖写且规模可控：计算旧→新的行级 LCS 差异；
-     * - 覆盖写但任一侧行数超过 [MAX_DIFF_LINES]：跳过 O(n·m) 的 LCS（移动端易 OOM），
-     *   退化为整篇「全部新增」，仅展示落盘后的内容。
+     * Builds the unified diff text for write_file (each line starts with `+`/`-`/` `):
+     * - New file: the old content is treated as empty, the whole file is presented as "entirely added", and LCS is not run;
+     * - Overwrite at a manageable scale: computes the line-level LCS diff from old to new;
+     * - Overwrite but either side has more than [MAX_DIFF_LINES] lines: skips the O(n*m) LCS (OOM-prone on mobile),
+     *   and degrades to presenting the whole file as "entirely added", showing only the content as written to disk.
      */
     private fun buildWriteDiff(existed: Boolean, oldContent: String, newContent: String): String {
         val newLines = newContent.split("\n")
         if (!existed) return newLines.joinToString("\n") { "+$it" }
         val oldLines = oldContent.split("\n")
         if (maxOf(oldLines.size, newLines.size) > MAX_DIFF_LINES) {
-            FileLogger.w(TAG, "write_file 文件过大跳过 LCS 差异 (old=${oldLines.size}, new=${newLines.size})")
+            FileLogger.w(TAG, "write_file file too large, skipping LCS diff (old=${oldLines.size}, new=${newLines.size})")
             return newLines.joinToString("\n") { "+$it" }
         }
         return LineDiff.toUnified(oldContent, newContent)
     }
 
     private companion object {
-        /** 旧/新任一侧行数超过此值即跳过 LCS：DP 表为 O(n·m) ints，过大会拖垮移动端内存。 */
+        /** If either the old or new side exceeds this many lines, LCS is skipped: the DP table is O(n*m) ints, and too large a table drags down mobile memory. */
         const val MAX_DIFF_LINES = 2000
     }
 }

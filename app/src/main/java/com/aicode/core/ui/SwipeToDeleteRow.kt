@@ -46,15 +46,15 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 /**
- * 全项目统一的左滑删除行容器：底层红色删除按钮固定在右端，随左滑露出（带缩放/透明度渐变），
- * 表层内容整体左滑，滑开时点击表层收回。
+ * Project-wide unified swipe-left-to-delete row container: the underlying red delete button is fixed at the right end and is revealed as you swipe left (with scale/opacity gradients),
+ * the surface content slides left as a whole; when swiped open, tapping the surface retracts it.
  *
- * 手势与动画参数全项目保持一致（露出宽度 -112dp、按钮上限 104dp、回弹弹簧参数），改这里即全局生效。
+ * Gesture and animation parameters are kept consistent project-wide (reveal width -112dp, button limit 104dp, rebound spring parameters); changing them here takes effect globally.
  *
- * @param onDelete 点按删除按钮后触发（先收回再回调）。是否弹二次确认由调用方决定。
- * @param onClick 表层未滑开时的点击回调；null 表示整行不可点击。
- * @param deleteEnabled false 时删除按钮可露出但点击无效（如未下载完成的镜像不可删）。
- * @param content 表层行内容；背景由本组件提供，内边距由调用方内容自带（与既有各页用法一致）。
+ * @param onDelete Triggered after tapping the delete button (retracts first, then calls back). Whether to show a secondary confirmation is decided by the caller.
+ * @param onClick Click callback when the surface is not swiped open; null means the whole row is not clickable.
+ * @param deleteEnabled When false, the delete button can be revealed but tapping it has no effect (e.g. an image whose download has not completed cannot be deleted).
+ * @param content Surface row content; the background is provided by this component, and the padding is supplied by the caller's own content (consistent with existing usage on each page).
  */
 @Composable
 fun SwipeToDeleteRow(
@@ -74,12 +74,12 @@ fun SwipeToDeleteRow(
     val maxButtonWidth = 104.dp
     val buttonWidth = if (revealedWidthDp > 8.dp) (revealedWidthDp - 8.dp).coerceAtMost(maxButtonWidth) else 0.dp
     val progress = (buttonWidth / maxButtonWidth).coerceIn(0f, 1f)
-    // 不可删除时按钮呈灰色，与可删状态区分
+    // When deletion is not allowed, the button is gray, distinguishing it from the deletable state
     val buttonBg = if (deleteEnabled) Color(0xFFEF4444) else Color(0xFF9CA3AF)
     val buttonBorder = if (deleteEnabled) Color(0xFFF87171) else Color(0xFFD1D5DB)
 
     Box(modifier = modifier.fillMaxWidth()) {
-        // 底层删除按钮：随滑动露出，缩放与透明度跟随进度
+        // Underlying delete button: revealed as you swipe, with scale and opacity following the progress
         Row(
             modifier = Modifier
                 .matchParentSize()
@@ -133,7 +133,7 @@ fun SwipeToDeleteRow(
             }
         }
 
-        // 表层分组行：手势回弹与滑动展开；滑开状态下点击先收回、不触发 onClick
+        // Surface grouping row: gesture rebound and slide expansion; in the swiped-open state, a tap retracts it first and does not trigger onClick
         Row(
             modifier = Modifier
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AiCode 余额查询示例脚本 (demo_balance.py) - 余额制 Adaptive Card 模板
+AiCode balance query demo script (demo_balance.py) - pay-as-you-go Adaptive Card template
 
-本脚本演示如何为 AiCode 供应商返回余额、消费统计与快捷控制台动作的 Adaptive Card 数据。
+This script demonstrates how to return balance, usage statistics and quick console actions as Adaptive Card data for an AiCode provider.
 """
 
 import json
@@ -11,7 +11,7 @@ import os
 import sys
 
 def main():
-    # 模拟从接口返回的余额与消费明细数据
+    # Simulate balance and usage detail data as returned by an API
     data = {
         "type": "AdaptiveCard",
         "version": "1.5",
@@ -20,8 +20,8 @@ def main():
             "spacing": "Medium",
             "items": [
                 { "type": "StatusDot", "color": "Good" },
-                { "type": "TextBlock", "text": "可用余额 $18.42", "weight": "Bolder" },
-                { "type": "TextBlock", "text": "(今日 $0.45)", "size": "Small", "isSubtle": True }
+                { "type": "TextBlock", "text": "Available balance $18.42", "weight": "Bolder" },
+                { "type": "TextBlock", "text": "(today $0.45)", "size": "Small", "isSubtle": True }
             ]
         },
         "body": [
@@ -32,7 +32,7 @@ def main():
                         "type": "Column",
                         "width": "stretch",
                         "items": [
-                            { "type": "TextBlock", "text": "当前可用余额", "size": "Small", "isSubtle": True },
+                            { "type": "TextBlock", "text": "Current available balance", "size": "Small", "isSubtle": True },
                             { "type": "TextBlock", "text": "$18.42", "size": "ExtraLarge", "weight": "Bolder", "color": "Good" },
                             { "type": "TextBlock", "text": "≈ ¥132.60 CNY", "size": "Small", "isSubtle": True }
                         ]
@@ -42,9 +42,9 @@ def main():
                         "width": "stretch",
                         "separator": True,
                         "items": [
-                            { "type": "TextBlock", "text": "本月累计消费", "size": "Small", "isSubtle": True },
+                            { "type": "TextBlock", "text": "Total spent this month", "size": "Small", "isSubtle": True },
                             { "type": "TextBlock", "text": "$6.58", "size": "ExtraLarge", "weight": "Bolder", "color": "Accent" },
-                            { "type": "TextBlock", "text": "今日消耗 $0.45", "size": "Small", "isSubtle": True }
+                            { "type": "TextBlock", "text": "Spent today $0.45", "size": "Small", "isSubtle": True }
                         ]
                     }
                 ]
@@ -53,16 +53,16 @@ def main():
             {
                 "type": "FactSet",
                 "facts": [
-                    { "title": "当前计费模式", "value": "官方原价 (无倍率)" },
-                    { "title": "Token 剩余", "value": "12,450,000" },
-                    { "title": "速率限制", "value": "500 RPM" }
+                    { "title": "Current billing mode", "value": "Official list price (no multiplier)" },
+                    { "title": "Tokens remaining", "value": "12,450,000" },
+                    { "title": "Rate limit", "value": "500 RPM" }
                 ]
             }
         ],
         "actions": [
             {
                 "type": "Action.OpenUrl",
-                "title": "管理控制台",
+                "title": "Management console",
                 "url": "https://api.openai.com",
                 "icon": "external-link"
             }

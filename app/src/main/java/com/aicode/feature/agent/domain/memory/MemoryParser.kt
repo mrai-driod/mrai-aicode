@@ -13,7 +13,7 @@ object MemoryParser {
             if (!file.isFile || !file.canRead()) return null
             file.readText()
         } catch (e: Exception) {
-            FileLogger.w(TAG, "读取 Memory 文件失败: ${file.absolutePath}", e)
+            FileLogger.w(TAG, "Failed to read memory file: ${file.absolutePath}", e)
             return null
         }
 
@@ -37,7 +37,7 @@ object MemoryParser {
         return "---\nname: $safeName\ndescription: $safeDesc\n---\n$content"
     }
 
-    /** 把任意字符串转成安全的 YAML 标量，避免冒号/引号/换行破坏 frontmatter。 */
+    /** Converts an arbitrary string into a safe YAML scalar, so colons/quotes/newlines do not break the frontmatter. */
     private fun yamlScalar(value: String): String {
         val needsQuote = value.contains(':') || value.contains('#') ||
             value.contains('"') || value.contains('\'') ||
@@ -65,7 +65,7 @@ object MemoryParser {
             val loaded = yaml.load<Map<String, Any>>(block)
             loaded ?: emptyMap()
         } catch (e: Exception) {
-            FileLogger.w(TAG, "解析 YAML 失败", e)
+            FileLogger.w(TAG, "Failed to parse YAML", e)
             emptyMap()
         }
 

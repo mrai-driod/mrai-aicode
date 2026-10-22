@@ -19,11 +19,11 @@ private val Context.keepaliveDataStore by preferencesDataStore(
 )
 
 /**
- * 持久化「后台保活常驻通知」开关。默认关闭——必须由用户在设置页手动开启并授予通知权限。
+ * Persists the "background keepalive persistent notification" toggle. Off by default -- the user must enable it manually on the settings page and grant notification permission.
  *
- * 开启后由 [com.aicode.AIEditorApp] 监听本开关，启动
- * [com.aicode.feature.terminal.domain.TerminalKeepaliveService] 的常驻前台通知，
- * 使 App 进程在后台保持存活。DataStore 用法与 [LogSettingsRepository] 一致。
+ * When enabled, [com.aicode.AIEditorApp] observes this toggle and starts
+ * the persistent foreground notification of [com.aicode.feature.terminal.domain.TerminalKeepaliveService],
+ * keeping the App process alive in the background. DataStore usage matches [LogSettingsRepository].
  */
 @Singleton
 class KeepaliveSettingsRepository @Inject constructor(
@@ -33,20 +33,20 @@ class KeepaliveSettingsRepository @Inject constructor(
         val ENABLED_KEY = booleanPreferencesKey("keepalive_enabled")
     }
 
-    /** 当前持久化的开关流；未设置时回退到 false（默认关闭，需手动开启）。 */
+    /** Flow of the currently persisted toggle; falls back to false when unset (off by default, must be enabled manually). */
     val enabledFlow: Flow<Boolean> = context.keepaliveDataStore.data.map { it[ENABLED_KEY] ?: false }
 
-    /** 写入开关。实际启停 Service 由 [com.aicode.AIEditorApp] 监听本流统一完成。 */
+    /** Writes the toggle. Actually starting/stopping the Service is handled centrally by [com.aicode.AIEditorApp] observing this flow. */
     suspend fun setEnabled(enabled: Boolean) {
         context.keepaliveDataStore.edit { it[ENABLED_KEY] = enabled }
     }
 
-    /** 读取一次当前值（冷启动恢复用）。 */
+    /** Reads the current value once (for cold-start restore). */
     suspend fun isEnabled(): Boolean = enabledFlow.first()
 
-    /** 备份快照：当前保活开关是否开启。 */
+    /** Backup snapshot: whether the keepalive toggle is currently enabled. */
     suspend fun snapshot(): Boolean = enabledFlow.first()
 
-    /** 从备份还原保活开关。 */
+    /** Restores the keepalive toggle from a backup. */
     suspend fun restore(enabled: Boolean) = setEnabled(enabled)
 }

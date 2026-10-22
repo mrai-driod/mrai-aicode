@@ -71,7 +71,7 @@ fun RemoteServerScreen(
     var showHostKeysScreen by remember { mutableStateOf(false) }
     var showSyncSettingsSheet by remember { mutableStateOf(false) }
 
-    // 列表滚动状态提升到页面层：滚动时底部 tab 栏淡出（同 Git 页面）。
+    // List scroll state is hoisted to the page level: the bottom tab bar fades out while scrolling (same as the Git page).
     val connScrollState = rememberScrollState()
     val mountScrollState = rememberScrollState()
     val ftpScrollState = rememberScrollState()
@@ -362,7 +362,7 @@ fun RemoteServerScreen(
     }
 }
 
-/** 居中空态：标题 + 描述 + 添加按钮，样式与容器镜像空态一致。 */
+/** Centered empty state: title + description + add button, same style as the container image empty state. */
 @Composable
 private fun EmptyState(
     title: String,
@@ -393,8 +393,8 @@ private fun EmptyState(
     }
 }
 
-/** 分组列表容器：垂直滚动 + 白色圆角分组，与容器镜像页列表一致。底部预留 70dp（tab 栏高度），
- *  列表最后一项可完全滚到悬浮 tab 栏之上不被遮挡（同 Git 页面）。 */
+/** Grouped list container: vertical scrolling + white rounded grouping, same as the container image page list. Reserves 70dp at the bottom (tab bar height),
+ *  so the last item can scroll fully above the floating tab bar without being obscured (same as the Git page). */
 @Composable
 private fun SettingsList(
     scrollState: ScrollState,

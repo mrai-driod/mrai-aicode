@@ -179,14 +179,14 @@ class BackupManagerImpl @Inject constructor(
     ): Result<RestoreStats> {
         val pw = password?.takeIf { it.isNotEmpty() }
         return withContext(Dispatchers.IO) {
-            FileLogger.i(TAG, "导入备份开始（${if (pw != null) "加密" else "明文"}${if (selectedWorkspaces != null) "，勾选工作区=${selectedWorkspaces.size}个" else "，全量"}）")
+            FileLogger.i(TAG, "Backup import started (${if (pw != null) "encrypted" else "plaintext"}${if (selectedWorkspaces != null) ", selected workspaces=${selectedWorkspaces.size}" else ", full"})")
             runCatching {
                 openTar(input, pw).use { source ->
                     restoreFromTar(source.tar, selectedWorkspaces)
                 }
             }
-            .onSuccess { FileLogger.i(TAG, "导入备份完成：$it") }
-            .onFailure { FileLogger.e(TAG, "导入备份失败", it) }
+            .onSuccess { FileLogger.i(TAG, "Backup import completed: $it") }
+            .onFailure { FileLogger.e(TAG, "Backup import failed", it) }
             .recoverCatching { e -> mapImportError(e, pw) }
         }
     }
@@ -194,7 +194,7 @@ class BackupManagerImpl @Inject constructor(
     override suspend fun previewImport(input: InputStream, password: CharArray?): Result<ImportPreview> {
         val pw = password?.takeIf { it.isNotEmpty() }
         return withContext(Dispatchers.IO) {
-            FileLogger.i(TAG, "导入预览开始（${if (pw != null) "加密" else "明文"}）")
+            FileLogger.i(TAG, "Import preview started (${if (pw != null) "encrypted" else "plaintext"})")
             runCatching {
                 openTar(input, pw).use { source ->
                     val tar = source.tar
@@ -206,7 +206,7 @@ class BackupManagerImpl @Inject constructor(
                             val metadata = json.decodeFromString(BackupMetadata.serializer(), String(plain, Charsets.UTF_8))
                             checkVersion(metadata.schemaVersion)
                             workspaces = metadata.workspaces
-                            // 导出时 metadata.json 为首个条目，读到即可停，避免遍历大段 jsonl
+                            // On export metadata.json is the first entry; stop as soon as it is read to avoid scanning large jsonl sections
                             break
                         }
                         entry = tar.nextEntry
@@ -214,37 +214,37 @@ class BackupManagerImpl @Inject constructor(
                     ImportPreview(workspaces)
                 }
             }
-            .onSuccess { FileLogger.i(TAG, "导入预览完成：${it.workspaces.size} 个工作区") }
-            .onFailure { FileLogger.e(TAG, "导入预览失败", it) }
+            .onSuccess { FileLogger.i(TAG, "Import preview completed: ${it.workspaces.size} workspaces") }
+            .onFailure { FileLogger.e(TAG, "Import preview failed", it) }
             .recoverCatching { e -> mapImportError(e, pw) }
         }
     }
 
-    /** 把导入异常映射为用户可读的 IllegalArgumentException（解密异常原样抛出）。 */
+    /** Maps an import exception to a user-readable IllegalArgumentException (decryption exceptions are rethrown as-is). */
     private fun mapImportError(e: Throwable, pw: CharArray?): Nothing {
         when (e) {
             is BackupDecryptionException -> throw e
             is IllegalStateException -> throw e
             else -> throw IllegalArgumentException(
                 if (pw != null) {
-                    "备份文件已损坏，或口令与备份文件不匹配"
+                    "The backup file is corrupted, or the password does not match the backup file"
                 } else {
-                    "不是有效的 AiCode 备份文件；如果这是加密备份，请输入导出口令"
+                    "Not a valid AiCode backup file; if this is an encrypted backup, please enter the export password"
                 },
                 e
             )
         }
     }
 
-    /** 打开 tar 流：先按需解密到临时文件，再解压；调用方负责 [TarSource.close]。 */
+    /** Opens the tar stream: decrypts to a temp file first if needed, then decompresses; the caller is responsible for [TarSource.close]. */
     private fun openTar(input: InputStream, pw: CharArray?): TarSource {
         if (pw == null) {
-            FileLogger.i(TAG, "明文备份：直接解压 tar.gz")
+            FileLogger.i(TAG, "Plaintext backup: decompressing tar.gz directly")
             val p = BufferedInputStream(input)
             val gz = GzipCompressorInputStream(p)
             return TarSource(TarArchiveInputStream(gz), null)
         }
-        FileLogger.i(TAG, "加密备份：先解密到临时文件")
+        FileLogger.i(TAG, "Encrypted backup: decrypting to a temp file first")
         val temp = createTempFile()
         try {
             BufferedInputStream(input).use { src ->
@@ -259,7 +259,7 @@ class BackupManagerImpl @Inject constructor(
         }
     }
 
-    // ── 导出辅助 ──────────────────────────────────────────────
+    // ── Export helpers ──────────────────────────────────────────────
 
     private suspend fun writeTarGz(file: File, options: BackupOptions) {
         FileOutputStream(file).use { fos ->
@@ -357,8 +357,8 @@ class BackupManagerImpl @Inject constructor(
     }
 
     /**
-     * 先将 jsonl 写入一个临时文件，获取确切的 [File.length] 设置 TarArchiveEntry.size，
-     * 然后流式拷入 TarArchiveOutputStream，避免在 Header 中 size 设为 0 导致写入越界异常。
+     * Writes the jsonl to a temp file first to get the exact [File.length] for TarArchiveEntry.size,
+     * then streams it into the TarArchiveOutputStream, avoiding an out-of-bounds write caused by setting size to 0 in the header.
      */
     private suspend fun writeJsonlFileEntry(
         tar: TarArchiveOutputStream,
@@ -381,13 +381,13 @@ class BackupManagerImpl @Inject constructor(
         }
     }
 
-    // ── 工作区文件备份 ──────────────────────────────────────────
+    // ── Workspace file backup ──────────────────────────────────────────
 
-    /** 仅备份内部本地工作区；外部本地工作区是用户设备上的目录，不属于 App 私有数据，不纳入备份。 */
+    /** Backs up only internal local workspaces; external local workspaces are directories on the user's device, not the app's private data, and are not included in the backup. */
     private fun backupLocalWorkspaces(): List<Workspace> =
         workspaceRepository.workspaces.value.filter { it.type != WorkspaceType.EXTERNAL_LOCAL }
 
-    /** 第一遍：统计每个本地工作区将备份的文件数（写 metadata 用）。 */
+    /** First pass: counts the files to be backed up in each local workspace (for writing metadata). */
     private fun collectWorkspaceMetas(): List<WorkspaceBackupMeta> =
         backupLocalWorkspaces().mapNotNull { ws ->
             var count = 0
@@ -395,7 +395,7 @@ class BackupManagerImpl @Inject constructor(
             if (count > 0) WorkspaceBackupMeta(ws.name, count) else null
         }
 
-    /** 第二遍：把各本地工作区文件写入 tar（`workspaces/<name>/<相对路径>`）。 */
+    /** Second pass: writes each local workspace's files into the tar (`workspaces/<name>/<relative path>`). */
     private fun writeWorkspaceEntries(tar: TarArchiveOutputStream) {
         backupLocalWorkspaces().forEach { ws ->
             walkWorkspaceFiles(ws) { file, parts ->
@@ -405,15 +405,15 @@ class BackupManagerImpl @Inject constructor(
     }
 
     /**
-     * 递归遍历本地工作区，按「.gitignore（锚定）+ 同步忽略清单」排除文件；
-     * `.git` 目录强制包含（其内部不参与忽略判断）；符号链接跳过（防循环）。
+     * Recursively walks a local workspace, excluding files per ".gitignore (anchored) + sync ignore list";
+     * the `.git` directory is always included (its contents are not subject to ignore checks); symbolic links are skipped (to prevent cycles).
      */
     private fun walkWorkspaceFiles(
         workspace: Workspace,
         onFile: (File, List<String>) -> Unit
     ) {
         val root = File(workspace.path)
-        if (!root.isDirectory) return  // 远程工作区或不存在：本地无文件可备份
+        if (!root.isDirectory) return  // Remote workspace or does not exist: no local files to back up
         val customIgnores = syncSettingsRepository.ignoredPatterns.value
             .split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         val gitignorePatterns = parseGitIgnore(File(root, ".gitignore"))
@@ -434,7 +434,7 @@ class BackupManagerImpl @Inject constructor(
         walk(root, emptyList())
     }
 
-    /** 解析工作区根 .gitignore：去空行/注释/结尾斜杠。 */
+    /** Parses the workspace-root .gitignore: strips blank lines/comments/trailing slashes. */
     private fun parseGitIgnore(file: File): List<String> =
         if (!file.isFile) emptyList()
         else file.readLines()
@@ -448,7 +448,7 @@ class BackupManagerImpl @Inject constructor(
         tar.closeArchiveEntry()
     }
 
-    // ── 导入辅助 ──────────────────────────────────────────────
+    // ── Import helpers ──────────────────────────────────────────────
 
     private suspend fun restoreFromTar(tar: TarArchiveInputStream, selectedWorkspaces: Set<String>?): RestoreStats {
         val restoreMapping = mutableMapOf<String, Workspace>()
@@ -478,21 +478,21 @@ class BackupManagerImpl @Inject constructor(
                             }
                         )
                     }
-                    FileLogger.i(TAG, "恢复会话 $count 条")
+                    FileLogger.i(TAG, "Restored $count sessions")
                     stats += RestoreStats(chatSessions = count)
                 }
                 FILE_MESSAGES -> {
                     val count = restoreJsonl(tar, AgentMessageDto.serializer()) { dtos ->
                         agentMessageDao.insertAll(dtos.map { it.toEntity() })
                     }
-                    FileLogger.i(TAG, "恢复消息 $count 条")
+                    FileLogger.i(TAG, "Restored $count messages")
                     stats += RestoreStats(agentMessages = count)
                 }
                 FILE_TODOS -> {
                     val count = restoreJsonl(tar, TodoItemDto.serializer()) { dtos ->
                         todoItemDao.upsertAll(dtos.map { it.toEntity() })
                     }
-                    FileLogger.i(TAG, "恢复待办 $count 条")
+                    FileLogger.i(TAG, "Restored $count todos")
                     stats += RestoreStats(todoItems = count)
                 }
                 else -> {
@@ -504,14 +504,14 @@ class BackupManagerImpl @Inject constructor(
             entry = tar.nextEntry
         }
         val meta = metadata ?: run {
-            FileLogger.e(TAG, "导入失败：tar 中缺少 metadata.json")
-            error("不是有效的 AiCode 备份文件：缺少 metadata.json")
+            FileLogger.e(TAG, "Import failed: metadata.json missing from tar")
+            error("Not a valid AiCode backup file: missing metadata.json")
         }
-        FileLogger.i(TAG, "tar 解析完成，开始还原元数据段")
+        FileLogger.i(TAG, "Tar parsing complete, starting to restore the metadata section")
         return stats + restoreMeta(meta)
     }
 
-    /** 逐行解析 jsonl 条目，每 [PAGE_SIZE] 条回调一次批量插入；返回该文件的总条数。 */
+    /** Parses a jsonl entry line by line, invoking the batch-insert callback every [PAGE_SIZE] items; returns the total count for the file. */
     private suspend fun <T> restoreJsonl(tar: TarArchiveInputStream, serializer: KSerializer<T>, insert: suspend (List<T>) -> Unit): Int {
         val buffer = ByteArray(64 * 1024)
         val line = ByteArrayOutputStream(16 * 1024)
@@ -523,8 +523,8 @@ class BackupManagerImpl @Inject constructor(
             for (i in 0 until n) {
                 if (buffer[i] == '\n'.code.toByte()) {
                     if (line.size() > 0) {
-                        // 注意：ByteArrayOutputStream.toString(Charset) 是 API 33 才有的方法，
-                        // 在 Android 13 以下会抛 NoSuchMethodError，必须用 String(byte[], Charset) 构造器。
+                        // Note: ByteArrayOutputStream.toString(Charset) is only available from API 33,
+                        // and throws NoSuchMethodError below Android 13, so the String(byte[], Charset) constructor must be used.
                         batch.add(json.decodeFromString(serializer, String(line.toByteArray(), Charsets.UTF_8)))
                         line.reset()
                         if (batch.size >= PAGE_SIZE) {
@@ -552,15 +552,15 @@ class BackupManagerImpl @Inject constructor(
 
     private fun checkVersion(schemaVersion: Int) {
         if (schemaVersion > currentSchemaVersion()) {
-            error("备份的数据库版本 v$schemaVersion 高于本应用 v${currentSchemaVersion()}，请升级应用")
+            error("The backup database version v$schemaVersion is newer than this app v${currentSchemaVersion()}; please upgrade the app")
         }
     }
 
-    /** 旧格式（单文件 snapshot.json 完整快照）还原。 */
+    /** Restores the legacy format (single-file snapshot.json full snapshot). */
     private suspend fun restoreLegacy(snapshot: BackupSnapshot): RestoreStats {
         var stats = restoreMeta(snapshot.toMetadata())
         if (snapshot.chatSessions.isNotEmpty()) {
-            // 按备份中的工作区路径逐个解析到目标工作区（不存在则自动创建空工作区），不再全部塞进当前工作区。
+            // Resolves each workspace path from the backup to a target workspace one by one (creating an empty workspace automatically if none exists), instead of putting everything into the current workspace.
             val restoreMapping = mutableMapOf<String, Workspace>()
             chatSessionDao.upsertAll(
                 snapshot.chatSessions.map {
@@ -581,11 +581,11 @@ class BackupManagerImpl @Inject constructor(
         )
     }
 
-    /** 元数据段还原（小表 + 应用设置），新旧格式共用。 */
+    /** Restores the metadata section (small tables + app settings), shared by the new and legacy formats. */
     private suspend fun restoreMeta(meta: BackupMetadata): RestoreStats {
         FileLogger.i(
             TAG,
-            "还原元数据：providers=${meta.providers.size} remoteConnections=${meta.remoteConnections.size} remoteMounts=${meta.remoteMounts.size} " +
+            "Restoring metadata: providers=${meta.providers.size} remoteConnections=${meta.remoteConnections.size} remoteMounts=${meta.remoteMounts.size} " +
                 "mcpServers=${meta.mcpServers.size} permissionRules=${meta.globalPermissionRules.size} syncSettings=${meta.syncSettings != null}"
         )
         if (meta.providers.isNotEmpty()) {
@@ -595,7 +595,7 @@ class BackupManagerImpl @Inject constructor(
             remoteConnectionDao.insertAllConnections(meta.remoteConnections.mapNotNull { it.toEntity() })
         }
         if (meta.remoteMounts.isNotEmpty()) {
-            // 指向已移除协议（旧版本的本地通道）的挂载一并跳过，避免外键约束失败。
+            // Mounts pointing to a removed protocol (the legacy local channel) are also skipped to avoid foreign-key constraint failures.
             val connectionIds = remoteConnectionDao.getAllConnectionsOnce().map { it.id }.toSet()
             remoteConnectionDao.insertAllMounts(
                 meta.remoteMounts.map { it.toEntity() }.filter { it.connectionId in connectionIds }
@@ -642,9 +642,9 @@ class BackupManagerImpl @Inject constructor(
     }
 
     /**
-     * 还原单个工作区文件条目：`workspaces/<name>/<相对路径>`。
-     * 仅处理勾选的工作区（[selectedWorkspaces] 非 null 时），且只允许写入内部工作区；本地无同名工作区时自动创建，
-     * 避免新设备/重装后导入的工作区文件因找不到目标而丢失。
+     * Restores a single workspace file entry: `workspaces/<name>/<relative path>`.
+     * Only processes selected workspaces (when [selectedWorkspaces] is non-null), and only allows writing to internal workspaces; creates one automatically when no local workspace with the same name exists,
+     * so workspace files imported on a new device / after reinstall are not lost because no target was found.
      */
     private suspend fun restoreWorkspaceEntry(
         tar: TarArchiveInputStream,
@@ -664,13 +664,13 @@ class BackupManagerImpl @Inject constructor(
         val target = File(wsDir, segments[2])
         target.parentFile?.mkdirs()
         FileOutputStream(target).use { out -> tar.copyTo(out) }
-        FileLogger.i(TAG, "恢复工作区文件：${ws.name}/${segments[2]}")
+        FileLogger.i(TAG, "Restored workspace file: ${ws.name}/${segments[2]}")
         return RestoreStats(workspaceFiles = 1)
     }
 
     /**
-     * 按备份中的工作区名解析到目标工作区：优先复用本轮导入已解析的映射，其次复用本地同名内部工作区，
-     * 都不存在则自动创建一个空内部工作区。工作区文件条目与会话共用同一映射，保证两者落到同一个工作区。
+     * Resolves a workspace name from the backup to a target workspace: prefers reusing the mapping already resolved in this import, then reusing a local internal workspace with the same name,
+     * and creates an empty internal workspace automatically if neither exists. Workspace file entries and sessions share the same mapping, so both land in the same workspace.
      */
     private suspend fun resolveWorkspaceForRestore(
         wsName: String,
@@ -687,15 +687,15 @@ class BackupManagerImpl @Inject constructor(
             workspaceRepository.createWorkspace(targetName) ?: return null
         }
         restoreMapping[wsName] = resolved
-        FileLogger.i(TAG, "导入会话目标工作区：${resolved.name} -> ${resolved.path}")
+        FileLogger.i(TAG, "Import session target workspace: ${resolved.name} -> ${resolved.path}")
         return resolved
     }
 
     /**
-     * 解析某会话在备份中的原始工作区路径到目标设备的工作区：
-     * 1. 现有工作区路径与备份一致（同设备重装场景，内部/外部本地都能对上）直接复用；
-     * 2. 否则按路径末段当作工作区名，经 [resolveWorkspaceForRestore] 复用同名内部工作区或自动创建空工作区；
-     * 3. 路径为空或解析失败（如无法创建）时兜底回当前工作区。
+     * Resolves a session's original workspace path from the backup to a workspace on the target device:
+     * 1. If an existing workspace path matches the backup (same-device reinstall scenario, for both internal/external local) it is reused directly;
+     * 2. Otherwise the last path segment is treated as the workspace name and resolved via [resolveWorkspaceForRestore] to reuse a same-named internal workspace or create an empty one automatically;
+     * 3. If the path is blank or resolution fails (e.g. cannot be created), falls back to the current workspace.
      */
     private suspend fun resolveSessionWorkspace(
         backupWorkspacePath: String,
@@ -710,7 +710,7 @@ class BackupManagerImpl @Inject constructor(
         return resolveWorkspaceForRestore(name, restoreMapping)?.path ?: workspaceRepository.currentPath()
     }
 
-    /** 防路径穿越：工作区必须是本地目录，且相对路径规范化后仍位于其内。 */
+    /** Guards against path traversal: the workspace must be a local directory, and the normalized relative path must still be inside it. */
     private fun isPathInsideWorkspace(wsDir: File, relPath: String): Boolean {
         if (!wsDir.isDirectory) return false
         val root = wsDir.canonicalPath
@@ -720,7 +720,7 @@ class BackupManagerImpl @Inject constructor(
 
     private fun createTempFile(): File = File.createTempFile("backup", ".tmp", context.cacheDir)
 
-    // ── Entity ↔ DTO 转换 ──────────────────────────────────────
+    // ── Entity ↔ DTO conversion ──────────────────────────────────────
 
     private fun AIProviderEntity.toDto() = ProviderDto(
         id = id,
@@ -779,7 +779,7 @@ class BackupManagerImpl @Inject constructor(
         KeystoreCipher.decryptString(authData), passphrase?.let { KeystoreCipher.decryptString(it) }
     )
 
-    /** 旧备份可能含已移除的协议（本地通道），此类记录跳过不恢复。 */
+    /** Legacy backups may contain a removed protocol (local channel); such records are skipped and not restored. */
     private fun RemoteConnectionDto.toEntity(): RemoteConnectionEntity? {
         val parsed = runCatching { RemoteProtocol.valueOf(protocol) }.getOrNull() ?: return null
         return RemoteConnectionEntity(
@@ -858,7 +858,7 @@ class BackupManagerImpl @Inject constructor(
     }
 }
 
-/** 带内部缓冲的 jsonl 写入器：行缓冲满 64KB 时刷入 tar 流，避免逐行写系统调用。 */
+/** A jsonl writer with an internal buffer: flushes to the tar stream when the line buffer reaches 64KB, avoiding a syscall per line. */
 private class JsonlWriter(private val out: OutputStream) {
     private val buffer = ByteArrayOutputStream(64 * 1024)
 
@@ -874,7 +874,7 @@ private class JsonlWriter(private val out: OutputStream) {
     }
 }
 
-/** 打开的 tar 流封装：加密导入时附带解密用的临时文件，关闭时一并清理。 */
+/** Wrapper for an opened tar stream: carries the temp file used for decryption on encrypted imports, and cleans it up on close. */
 private class TarSource(
     val tar: TarArchiveInputStream,
     private val temp: File?

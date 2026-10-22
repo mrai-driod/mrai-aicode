@@ -17,13 +17,13 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * 让 AI 向用户提出结构化的选择题。
+ * Lets the AI ask the user structured multiple-choice questions.
  *
- * 当 AI 遇到需要用户决策的场景（选库、选方案、确认环境安装等）时，调用本工具可暂停执行、
- * 在 UI 弹出一个问题面板、等待用户做出选择，然后拿到用户的回答继续工作。
+ * When the AI hits a scenario requiring a user decision (choosing a library, choosing a plan, confirming an environment install, etc.), calling this tool can pause execution,
+ * pop up a question panel in the UI, wait for the user to choose, then continue working with the user's answer.
  *
- * 每次调用可同时问 1-4 个问题，每个问题 2-4 个预设选项，支持单选/多选。
- * 用户侧每个问题自动附带一个「其他」选项，选中后可输入自定义文本。
+ * Each call can ask 1-4 questions at once, each with 2-4 preset options, supporting single / multiple choice.
+ * On the user side, each question automatically gets an extra "Other" option; selecting it allows entering custom text.
  */
 class AskUserQuestionTool @Inject constructor(
     private val questionManager: AskUserQuestionManager
@@ -40,15 +40,15 @@ class AskUserQuestionTool @Inject constructor(
     override val capabilities = setOf(ToolCapability.USER_INTERACTION)
 
     override val description =
-        "Ask the user structured multiple-choice questions and block waiting for their selection, for scenarios requiring a user decision. Can ask 1-4 questions at once, with 2-4 options per question (the UI automatically appends an 「Other」 option)."
+        "Ask the user structured multiple-choice questions and block waiting for their selection, for scenarios requiring a user decision. Can ask 1-4 questions at once, with 2-4 options per question (the UI automatically appends an 'Other' option)."
 
-    /** 单个选项的 JSON Schema */
+    /** JSON Schema of a single option */
     private val optionItemSchema: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
             "label" to mapOf(
                 "type" to "string",
-                "description" to "Option display text (short, 1-5 words), e.g. 「OkHttp (recommended)」."
+                "description" to "Option display text (short, 1-5 words), e.g. 'OkHttp (recommended)'."
             ),
             "description" to mapOf(
                 "type" to "string",
@@ -58,7 +58,7 @@ class AskUserQuestionTool @Inject constructor(
         "required" to listOf("label", "description")
     )
 
-    /** 单个问题的 JSON Schema */
+    /** JSON Schema of a single question */
     private val questionItemSchema: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
@@ -68,12 +68,12 @@ class AskUserQuestionTool @Inject constructor(
             ),
             "header" to mapOf(
                 "type" to "string",
-                "description" to "Short label (≤12 characters), shown as a tag header, e.g. 「Plan」「Library」「Tool」."
+                "description" to "Short label (<=12 characters), shown as a tag header, e.g. 'Plan', 'Library', 'Tool'."
             ),
             "options" to mapOf(
                 "type" to "array",
-                "description" to "2-4 preset options. The UI automatically appends an 「Other」 option for free-form input." +
-                    "If you have a recommended option, put it first and add 「(recommended)」 at the end of its label.",
+                "description" to "2-4 preset options. The UI automatically appends an 'Other' option for free-form input." +
+                    "If you have a recommended option, put it first and add '(recommended)' at the end of its label.",
                 "items" to optionItemSchema
             ),
             "multiSelect" to mapOf(
@@ -107,7 +107,7 @@ class AskUserQuestionTool @Inject constructor(
             )
         }
 
-        // 解析每个问题
+        // Parse each question
         val questions = mutableListOf<QuestionItem>()
         for ((idx, qElement) in questionsJson.withIndex()) {
             val qObj = qElement.jsonObject
@@ -165,20 +165,20 @@ class AskUserQuestionTool @Inject constructor(
         val requestId = UUID.randomUUID().toString()
         val pending = PendingUserQuestion(id = requestId, questions = questions)
 
-        FileLogger.d(TAG, "ask_user_question 发起: ${questions.size} 个问题，等待用户回答...")
+        FileLogger.d(TAG, "ask_user_question started: ${questions.size} questions, waiting for the user to answer...")
 
-        // 挂起，等待用户在 UI 做出选择
+        // Suspend, waiting for the user to choose in the UI
         val answer = questionManager.awaitAnswer(pending)
 
-        FileLogger.d(TAG, "ask_user_question 用户已回答: ${answer.answers.size} 条")
+        FileLogger.d(TAG, "ask_user_question user answered: ${answer.answers.size} answers")
 
-        // 将用户回答序列化为文本，喂回给模型
+        // Serialise the user's answers to text and feed them back to the model
         val resultText = buildString {
             if (answer.answers.isEmpty()) {
                 append("The user did not select a preset option and will provide additional explanation. Continue based on what the user adds next.")
             } else {
                 for (a in answer.answers) {
-                    append("「${a.question}」= ")
+                    append("\"${a.question}\" = ")
                     val parts = mutableListOf<String>()
                     if (a.selected.isNotEmpty()) {
                         parts.addAll(a.selected)

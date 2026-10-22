@@ -12,33 +12,33 @@ import androidx.compose.ui.unit.dp
 import com.aicode.core.util.FileLogger
 
 /**
- * 全局统一的位图采样解码。
+ * Globally unified bitmap sampled decoding.
  *
- * 项目没有引入 Coil/Glide（F-Droid 可复现构建下刻意保持依赖精简），所有图片都是手写
- * [BitmapFactory] 解码。此处收敛采样与 OOM 兜底逻辑，避免各处各写一份、各带一份 bug。
+ * The project does not include Coil/Glide (dependencies are deliberately kept lean for F-Droid reproducible builds), so all images are decoded by hand-written
+ * [BitmapFactory] decoding. Sampling and OOM fallback logic are consolidated here, to avoid each call site writing its own copy, each with its own bug.
  */
 private const val TAG = "ImageDecode"
 
-/** 缩略图档位：聊天附件预览卡只有 76dp，采样到 180 已有余量。 */
+/** Thumbnail tier: the chat attachment preview card is only 76dp, so sampling to 180 already leaves headroom. */
 const val THUMBNAIL_MAX_EDGE = 180
 
-/** Markdown 正文内嵌图片档位：显示高度上限 320dp。 */
+/** Markdown body inline image tier: display height limit 320dp. */
 const val MARKDOWN_MAX_EDGE = 1024
 
-/** 全屏查看器的总像素上限：ARGB_8888 下峰值约 16MB。 */
+/** Total pixel limit for the full-screen viewer: peak is about 16MB under ARGB_8888. */
 private const val VIEWER_MAX_PIXELS = 4_000_000L
 
-/** 解码 OOM 后的降采样重试次数。 */
+/** Number of downsampling retries after a decode OOM. */
 private const val OOM_RETRIES = 3
 
-/** inSampleSize 上限，防兜底循环在畸形尺寸下失控。 */
+/** Upper limit for inSampleSize, preventing the fallback loop from running out of control on malformed dimensions. */
 private const val MAX_SAMPLE = 32
 
 /**
- * 按**最大边**算 [BitmapFactory.Options.inSampleSize]。
+ * Computes [BitmapFactory.Options.inSampleSize] by the **maximum edge**.
  *
- * 判定用 `||` 而不是 `&&`：`&&` 实际约束的是短边，4000×300 这类长截图会整个逃过采样、
- * 按全尺寸解码（约 4.8MB）—— 而 AI 产出的长网页截图、终端长输出截图正好是这个形状。
+ * The check uses `||` rather than `&&`: `&&` actually constrains the short edge, so long screenshots such as 4000×300 would escape sampling entirely and
+ * be decoded at full size (about 4.8MB) -- and AI-produced long web page screenshots and terminal long-output screenshots are exactly this shape.
  */
 fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int): Int {
     if (width <= 0 || height <= 0 || maxEdge <= 0) return 1
@@ -50,8 +50,8 @@ fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int): Int {
 }
 
 /**
- * 在最大边约束之上再按总像素兜底：ARGB_8888 下 `maxPixels × 4` 字节就是解码峰值内存，
- * 极端长宽比的图（最大边没超限但总像素巨大）靠这一层挡住。
+ * On top of the maximum-edge constraint, also guards by total pixels: under ARGB_8888, `maxPixels × 4` bytes is the peak decode memory,
+ * and images with extreme aspect ratios (maximum edge not exceeded but total pixels huge) are stopped by this layer.
  */
 fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int, maxPixels: Long): Int {
     var sample = calculateInSampleSize(width, height, maxEdge)
@@ -62,13 +62,13 @@ fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int, maxPixels: Long
     return sample
 }
 
-/** 采样解码本地文件。文件不存在、不是图片或解码失败均返回 null。 */
+/** Sample-decodes a local file. Returns null if the file does not exist, is not an image, or decoding fails. */
 fun decodeSampledBitmap(path: String, maxEdge: Int, maxPixels: Long = Long.MAX_VALUE): ImageBitmap? {
     val bounds = decodeBounds(path) { BitmapFactory.decodeFile(path, it) } ?: return null
     return decodeWithOomRetry(path, bounds, maxEdge, maxPixels) { BitmapFactory.decodeFile(path, it) }
 }
 
-/** 采样解码内存中的图片字节。 */
+/** Sample-decodes image bytes in memory. */
 fun decodeSampledBitmap(bytes: ByteArray, maxEdge: Int, maxPixels: Long = Long.MAX_VALUE): ImageBitmap? {
     val what = "byte[${bytes.size}]"
     val decode: (BitmapFactory.Options) -> Bitmap? = { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, it) }
@@ -76,23 +76,23 @@ fun decodeSampledBitmap(bytes: ByteArray, maxEdge: Int, maxPixels: Long = Long.M
     return decodeWithOomRetry(what, bounds, maxEdge, maxPixels, decode)
 }
 
-/** 只读图片宽高，不真正分配像素内存。 */
+/** Only reads the image width and height, without actually allocating pixel memory. */
 private fun decodeBounds(what: String, decode: (BitmapFactory.Options) -> Bitmap?): Pair<Int, Int>? {
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     try {
         decode(options)
     } catch (e: Exception) {
-        FileLogger.w(TAG, "读取图片边界失败: $what", e)
+        FileLogger.w(TAG, "Failed to read image bounds: $what", e)
         return null
     }
     return if (options.outWidth > 0 && options.outHeight > 0) options.outWidth to options.outHeight else null
 }
 
 /**
- * 按采样档位解码，OOM 时降一档重试。
+ * Decodes at the sampled tier, retrying one tier lower on OOM.
  *
- * [OutOfMemoryError] 是 `Error` 不是 `Exception`，`runCatching {}` 与 `catch (e: Exception)` 都
- * 抓不到 —— 不显式接住的话，一张超大图就能把 App 崩掉。
+ * [OutOfMemoryError] is an `Error`, not an `Exception`, so neither `runCatching {}` nor `catch (e: Exception)`
+ * can catch it -- if it is not caught explicitly, a single oversized image can crash the App.
  */
 private fun decodeWithOomRetry(
     what: String,
@@ -106,25 +106,25 @@ private fun decodeWithOomRetry(
         try {
             return decode(BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
         } catch (e: OutOfMemoryError) {
-            FileLogger.w(TAG, "解码 OOM，inSampleSize $sample -> ${sample * 2}: $what")
+            FileLogger.w(TAG, "Decode OOM, inSampleSize $sample -> ${sample * 2}: $what")
             sample *= 2
         } catch (e: Exception) {
-            FileLogger.w(TAG, "解码失败: $what", e)
+            FileLogger.w(TAG, "Decode failed: $what", e)
             return null
         }
     }
-    FileLogger.w(TAG, "解码连续 OOM，放弃: $what")
+    FileLogger.w(TAG, "Decode OOM repeatedly, giving up: $what")
     return null
 }
 
-/** 解码档位：最大边（像素）+ 总像素上限。 */
+/** Decode tier: maximum edge (pixels) + total pixel limit. */
 data class ImageDecodeSpec(val maxEdge: Int, val maxPixels: Long)
 
 /**
- * 全屏查看器的解码档位，跟当前窗口走而不写死。
+ * Decode tier for the full-screen viewer, following the current window rather than being hardcoded.
  *
- * 查看器允许放大看细节，故取窗口长边的 1.5 倍，夹在 1024..2048。写死 2048 在 1080p 手机上
- * 是纯浪费（屏幕才 2.6MP），在 720p 低端机上则是实打实的 OOM 风险。
+ * The viewer allows zooming in to see details, so it takes 1.5x the window's long edge, clamped to 1024..2048. Hardcoding 2048 on a 1080p phone
+ * is pure waste (the screen is only 2.6MP), while on a 720p low-end device it is a real OOM risk.
  */
 @Composable
 fun rememberViewerDecodeSpec(): ImageDecodeSpec {

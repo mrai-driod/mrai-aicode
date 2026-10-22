@@ -18,13 +18,13 @@ import kotlinx.serialization.json.longOrNull
 import java.security.MessageDigest
 
 /**
- * 把一个 MCP server 工具适配成应用内的 [AgentTool]，注册进 ToolRegistry 后即可被 Agent 循环复用。
+ * Adapts an MCP server tool into an in-app [AgentTool]; once registered in ToolRegistry it can be reused by the Agent loop.
  *
- * 关键点：
- * - [toJsonSchema] 覆写为透传 server 的原始 inputSchema（转成普通 Kotlin 类型供 Gson 序列化），
- *   绕过受限的 ParameterType 枚举——MCP 工具可以有任意复杂的入参 schema。
- * - 对模型暴露的 [name] 做命名空间化（`mcp__server__tool`）并清洗成 function-calling 合法字符，
- *   避免多个 server 工具重名；真正调用时用原始 [remoteName] 走 tools/call。
+ * Key points:
+ * - [toJsonSchema] is overridden to pass through the server's original inputSchema (converted to plain Kotlin types for Gson serialisation),
+ *   bypassing the limited ParameterType enum -- MCP tools can have arbitrarily complex argument schemas.
+ * - The [name] exposed to the model is namespaced (`mcp__server__tool`) and sanitised to function-calling-legal characters,
+ *   avoiding name clashes between tools from multiple servers; the actual call uses the original [remoteName] via tools/call.
  */
 class McpTool(
     private val client: McpClient,
@@ -36,8 +36,8 @@ class McpTool(
         private const val NAME_PREFIX = "mcp"
 
         /**
-         * 拼接命名空间名并清洗成 function-calling 合法字符（^[a-zA-Z0-9_-]{1,64}$）。
-         * 只能按 ASCII 判定——[Char.isLetterOrDigit] 会把中文等 Unicode 字母当成合法字符放行。
+         * Builds the namespaced name and sanitises it to function-calling-legal characters (^[a-zA-Z0-9_-]{1,64}$).
+         * Must judge by ASCII only -- [Char.isLetterOrDigit] would let Chinese and other Unicode letters through as legal characters.
          */
         internal fun buildNamespacedName(server: String, tool: String): String {
             val raw = "${NAME_PREFIX}__${sanitize(server)}__${sanitize(tool)}"
@@ -58,22 +58,22 @@ class McpTool(
         }
     }
 
-    /** server 上的原始工具名，tools/call 必须用它。 */
+    /** The original tool name on the server; tools/call must use it. */
     val remoteName: String = descriptor.name
 
     override val name: String = buildNamespacedName(client.serverName, descriptor.name)
 
     override val description: String =
-        descriptor.description ?: "MCP 工具 ${descriptor.name}（来自 ${client.serverName}）"
+        descriptor.description ?: "MCP tool ${descriptor.name} (from ${client.serverName})"
     override val capabilities = setOf(ToolCapability.EXTERNAL_TOOL)
 
-    // 所有 MCP 工具统一走工具权限：默认需审核，可「始终允许」记忆（见 ToolPermissionPolicyEngine）。
+    // All MCP tools uniformly go through tool permissions: review required by default, with an "always allow" memory option (see ToolPermissionPolicyEngine).
     override val permissionPolicy = ToolPermissionPolicy.ASK
 
-    // MCP 工具直接用原始 schema，不走 parameters 这条路；保留空 map 满足基类契约。
+    // MCP tools use the raw schema directly and do not go through parameters; an empty map is kept to satisfy the base-class contract.
     override val parameters: Map<String, ToolParameter> = emptyMap()
 
-    /** 透传 server 的 inputSchema；缺失时回退为空对象 schema。 */
+    /** Passes through the server's inputSchema; falls back to an empty-object schema when missing. */
     override fun toJsonSchema(): Map<String, Any> {
         val schema = descriptor.inputSchema
         if (schema == null || schema.isEmpty()) {
@@ -86,7 +86,7 @@ class McpTool(
 
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         return try {
-            FileLogger.d(TAG, "调用 MCP 工具 $name (remote=$remoteName) args=${args.keys}")
+            FileLogger.d(TAG, "Calling MCP tool $name (remote=$remoteName) args=${args.keys}")
             val call = client.callTool(remoteName, JsonObject(args))
             if (call.isError) {
                 ToolResult.Error(call.text)
@@ -94,15 +94,15 @@ class McpTool(
                 ToolResult.Success(JsonPrimitive(call.text))
             }
         } catch (e: McpException) {
-            FileLogger.e(TAG, "MCP 工具调用失败: $name", e)
-            ToolResult.Error("MCP 工具执行失败：${e.message}")
+            FileLogger.e(TAG, "MCP tool call failed: $name", e)
+            ToolResult.Error("MCP tool execution failed: ${e.message}")
         } catch (e: Exception) {
-            FileLogger.e(TAG, "MCP 工具调用异常: $name", e)
-            ToolResult.Error("MCP 工具执行异常：${e.message}")
+            FileLogger.e(TAG, "MCP tool call exception: $name", e)
+            ToolResult.Error("MCP tool execution error: ${e.message}")
         }
     }
 
-    /** 工具被调用时展示的权限请求，提供清晰的 MCP 工具上下文。 */
+    /** The permission request shown when the tool is called, providing clear MCP tool context. */
     override fun buildPermissionRequest(
         callId: String,
         args: Map<String, JsonElement>,
@@ -111,16 +111,16 @@ class McpTool(
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认调用 MCP 工具",
-            summary = "AI 请求调用 MCP 工具「$remoteName」（服务 $serverName）",
-            details = "MCP 工具：$remoteName\n服务：$serverName\n参数：$argsPreview",
+            title = "Confirm MCP tool call",
+            summary = "AI requests calling MCP tool \"$remoteName\" (server $serverName)",
+            details = "MCP tool: $remoteName\nServer: $serverName\nArguments: $argsPreview",
             argsPreview = argsPreview
         )
     }
 
     private val serverName: String get() = client.serverName
 
-    /** kotlinx JsonElement → 普通 Kotlin 类型（Map/List/String/Number/Boolean/null），供 Gson 正确序列化。 */
+    /** kotlinx JsonElement -> plain Kotlin types (Map/List/String/Number/Boolean/null), for Gson to serialise correctly. */
     private fun jsonElementToAny(element: JsonElement): Any? = when (element) {
         is JsonObject -> element.mapValues { (_, v) -> jsonElementToAny(v) }
         is JsonArray -> element.map { jsonElementToAny(it) }

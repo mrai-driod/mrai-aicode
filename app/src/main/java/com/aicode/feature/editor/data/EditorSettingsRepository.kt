@@ -21,7 +21,7 @@ const val MIN_EDITOR_FONT_SIZE_SP = 10
 const val MAX_EDITOR_FONT_SIZE_SP = 28
 const val DEFAULT_EDITOR_FONT_SIZE_SP = 14
 
-/** 编辑器可持久化的显示设置。 */
+/** Persistable display settings for the editor. */
 data class EditorSettings(
     val fontSizeSp: Int = DEFAULT_EDITOR_FONT_SIZE_SP,
     val wordWrap: Boolean = false,
@@ -30,7 +30,7 @@ data class EditorSettings(
     val showWhitespace: Boolean = false
 )
 
-/** 持久化编辑器的字体大小与自动换行偏好，跨会话保留。 */
+/** Persists the editor's font size and word wrap preferences across sessions. */
 @Singleton
 class EditorSettingsRepository @Inject constructor(
     @param:ApplicationContext private val context: Context

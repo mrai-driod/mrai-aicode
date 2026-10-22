@@ -22,8 +22,8 @@ import android.content.Context
 import androidx.compose.ui.res.stringResource
 
 /**
- * 提供商最终命中的品牌 key：优先按提供商名称识别品牌名，未命中再按协议类型兜底。
- * 与 [modelBrandKey] 的匹配优先级一致；返回 null 表示无任何 logo 可显示。
+ * The brand key the provider ultimately matches: the brand name is identified from the provider name first, falling back to the protocol type if there is no match.
+ * The matching priority is the same as [modelBrandKey]; returning null means there is no logo to display.
  */
 fun providerBrandKey(provider: AIProviderConfig?): String? {
     if (provider == null) return null
@@ -37,37 +37,37 @@ fun providerBrandKey(provider: AIProviderConfig?): String? {
 }
 
 /**
- * 根据提供商的品牌 key（名称识别优先，协议类型兜底）匹配对应的品牌 logo drawable 资源。
+ * Matches the corresponding brand logo drawable resource from the provider's brand key (name identification first, protocol type as fallback).
  */
 fun providerLogoRes(provider: AIProviderConfig?): Int? =
     providerBrandKey(provider)?.let { brandLogoRes(it) }
 
 /**
- * 根据模型名称推断所属品牌分类 key（小写英文标识）。
- * 与 providerLogoRes / modelLogoRes 匹配优先级一致，确保 "zhipu" 不会先命中 "glm" 等。
- * 返回的品牌 key 可用于分组和 logo 查找。
+ * Infers the brand category key (a lowercase English identifier) from the model name.
+ * The matching priority is the same as providerLogoRes / modelLogoRes, ensuring "zhipu" is not matched before "glm", etc.
+ * The returned brand key can be used for grouping and logo lookup.
  */
 fun modelBrandKey(modelName: String): String {
     val target = modelName.lowercase()
     return when {
         target.contains("doubao") || target.contains("豆包") -> "doubao"
-        // minimax 必须排在 grok 之前：minimaxai 等名称含 "xai"，否则会被 grok 规则误匹配
+        // minimax must come before grok: names such as minimaxai contain "xai", otherwise they would be incorrectly matched by the grok rule
         target.contains("minimax") || target.contains("abab") -> "minimax"
         target.contains("moonshot") || target.contains("kimi") -> "moonshot"
         target.contains("zhipu") || target.contains("智谱") || target.contains("bigmodel") || target.contains("glm") -> "zhipu"
-        // alibaba / 通义千问：qwen 归 alibaba 品牌（阿里云通义），优先级在 gemini 之前以防误匹配。
+        // alibaba / Tongyi Qianwen: qwen belongs to the alibaba brand (Alibaba Cloud Tongyi), and its priority is before gemini to prevent incorrect matching.
         target.contains("qwen") || target.contains("通义") || target.contains("alibaba") || target.contains("aliyun") || target.contains("dashscope") -> "alibaba"
         target.contains("deepseek") || target.contains("deep-seek") -> "deepseek"
         target.contains("grok") || target.contains("xai") -> "grok"
         target.contains("groq") -> "groq"
         target.contains("claude") || target.contains("anthropic") -> "anthropic"
-        // google / gemini：gemma、gemini 都归 google 品牌。
+        // google / gemini: gemma and gemini both belong to the google brand.
         target.contains("google") || target.contains("gemini") || target.contains("gemma") -> "google"
         target.contains("hunyuan") || target.contains("混元") || target.contains("tencent") || target.contains("hy") -> "hunyuan"
         target.contains("openrouter") -> "openrouter"
         target.contains("perplexity") -> "perplexity"
         target.contains("siliconflow") || target.contains("硅基") -> "siliconflow"
-        // ollama 必须在 meta 之前：ollama 名称含 "llama"，否则会被 meta 规则误匹配
+        // ollama must come before meta: the ollama name contains "llama", otherwise it would be incorrectly matched by the meta rule
         target.contains("ollama") -> "ollama"
         target.contains("meta") || target.contains("llama") -> "meta"
         target.contains("mistral") -> "mistral"
@@ -76,7 +76,7 @@ fun modelBrandKey(modelName: String): String {
     }
 }
 
-/** 品牌 key → 用户可见的显示名称 */
+/** Brand key → user-visible display name */
 fun brandDisplayName(context: Context, key: String): String = when (key) {
     "doubao" -> context.getString(R.string.provider_brand_doubao)
     "minimax" -> "MiniMax"
@@ -100,7 +100,7 @@ fun brandDisplayName(context: Context, key: String): String = when (key) {
     else -> key.replaceFirstChar { it.uppercase() }
 }
 
-/** 品牌 key → 对应 logo drawable 资源，无匹配时返回 null */
+/** Brand key → corresponding logo drawable resource; returns null when there is no match */
 fun brandLogoRes(key: String): Int? = when (key) {
     "doubao" -> R.drawable.logo_doubao
     "minimax" -> R.drawable.logo_minimax
@@ -123,7 +123,7 @@ fun brandLogoRes(key: String): Int? = when (key) {
     else -> null
 }
 
-/** 是否给 logo 施加主题色 tint；保留原色的品牌（如 hunyuan/siliconflow 多色 logo）不在此列。 */
+/** Whether to apply a theme-colour tint to the logo; brands that keep their original colours (such as the multicolour hunyuan/siliconflow logos) are not included. */
 private fun shouldTintModelLogo(key: String): Boolean =
     key == "grok" || key == "groq" || key == "moonshot" || key == "openai" ||
         key == "openrouter" || key == "perplexity" ||
@@ -136,7 +136,7 @@ private fun modelLogoTint(): Color {
 }
 
 /**
- * 渲染品牌 logo 图标；若未匹配或 provider 为 null，则显示默认 Cpu 图标。
+ * Renders the brand logo icon; if there is no match or the provider is null, shows the default Cpu icon.
  */
 @Composable
 fun ProviderLogoIcon(
@@ -164,7 +164,7 @@ fun ProviderLogoIcon(
 }
 
 /**
- * 根据模型名称渲染品牌 logo 图标；若未匹配则显示默认 Cpu 图标。
+ * Renders the brand logo icon from the model name; if there is no match, shows the default Cpu icon.
  */
 @Composable
 fun ModelLogoIcon(

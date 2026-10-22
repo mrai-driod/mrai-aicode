@@ -5,10 +5,10 @@ import com.aicode.feature.agent.domain.prompt.SystemPromptProvider
 import javax.inject.Inject
 
 /**
- * /init —— 触发一次 agent 回合，分析当前工作区代码库并生成/改进项目规则文件
- * （`AGENTS.md`，仅有 `CLAUDE.md` 时改进它）。
+ * /init - triggers one agent turn, analyzing the current workspace codebase and generating/improving the project rules file
+ * (`AGENTS.md`; when only `CLAUDE.md` exists, improves that).
  *
- * 指令正文存放在 `prompts/agent/init.md`，可被 `~/.aicode/prompts.custom/agent/init.md` 覆盖。
+ * The instruction body is stored in `prompts/agent/init.md`, and can be overridden by `~/.aicode/prompts.custom/agent/init.md`.
  */
 class InitCommandHandler @Inject constructor(
     private val systemPromptProvider: SystemPromptProvider
@@ -22,7 +22,7 @@ class InitCommandHandler @Inject constructor(
     }
 
     companion object {
-        /** 指令正文片段名，与 `prompts/` 下路径一致。 */
+        /** Name of the instruction-body fragment, matching the path under `prompts/`. */
         const val PROMPT_NAME = "agent/init.md"
     }
 }

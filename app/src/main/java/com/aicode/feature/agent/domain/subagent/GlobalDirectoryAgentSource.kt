@@ -5,9 +5,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 全局子代理定义来源：`~/.aicode/agents`，跨项目共享。以容器路径经 [FileAccessProvider] 访问，
- * 跟随当前执行环境——本地模式落 App 私有 `filesDir/aicode/agents`（容器内 `/root/.aicode/agents`），
- * 远程模式经 SSH 落服务器用户 home 下的 `.aicode/agents`。远程是独立执行环境，读写均以远端为准。
+ * Global subagent definition source: `~/.aicode/agents`, shared across projects. Accessed by container path via [FileAccessProvider],
+ * following the current execution environment: in local mode it lands in the app-private `filesDir/aicode/agents` (in-container `/root/.aicode/agents`),
+ * and in remote mode it lands over SSH in `.aicode/agents` under the server user's home. Remote is a separate execution environment, so reads and writes use the remote side as authoritative.
  */
 @Singleton
 class GlobalDirectoryAgentSource @Inject constructor(

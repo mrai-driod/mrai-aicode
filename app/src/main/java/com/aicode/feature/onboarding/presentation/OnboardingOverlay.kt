@@ -8,7 +8,7 @@ import com.aicode.feature.onboarding.domain.OnboardingCoordinator
 import com.aicode.feature.onboarding.domain.OnboardingStateHolder
 
 /**
- * 新手聚焦引导总覆层（悬浮在页面最顶层）。
+ * Top-level overlay for the focused new-user onboarding flow (floats above everything else on the page).
  */
 @Composable
 fun OnboardingOverlay(

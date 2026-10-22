@@ -4,18 +4,18 @@ import androidx.annotation.StringRes
 import com.aicode.R
 
 /**
- * 首次启动全链路引导的完整模拟演示流程：
+ * The complete simulated walkthrough flow for the first-launch, end-to-end onboarding:
  *
- * 1. [OPEN_SIDEBAR]: 主页聚焦左上角汉堡按钮，提示打开侧边栏。
- * 2. [ENTER_SETTINGS]: 侧边栏展开状态，聚焦底部「设置」项，提示进入系统设置。
- * 3. [CONFIG_PROVIDER]: 设置页聚焦「AI 提供商」管理行，提示进入提供商列表。
- * 4. [PROVIDER_ADD]: 提供商列表聚焦顶栏「+」添加按钮，提示添加服务商。
- * 5. [PROVIDER_CONFIG_INFO]: 提供商编辑页聚焦 API Key / 配置信息输入区域。
- * 6. [PROVIDER_FETCH_MODELS]: 提供商模型标签页聚焦「拉取模型」按钮。
- * 7. [SIMULATE_FETCH_DIALOG]: 蒙版上模拟拉取模型弹窗，展示获取到的模型并引导添加。
- * 8. [OPEN_MODEL_PICKER]: 回到主页，聚焦模型选择按钮，提示打开面板。
- * 9. [SIMULATE_CHOOSE_MODEL]: 蒙版上模拟主页模型选择面板，演示选择模型。
- * 10. [SEND_MESSAGE]: 主页聚焦底部输入框，提示输入内容发送第一条消息开启对话。
+ * 1. [OPEN_SIDEBAR]: On the home screen, focuses the hamburger button in the top-left corner and prompts to open the sidebar.
+ * 2. [ENTER_SETTINGS]: With the sidebar expanded, focuses the "Settings" item at the bottom and prompts to enter system settings.
+ * 3. [CONFIG_PROVIDER]: On the Settings page, focuses the "AI Provider" management row and prompts to enter the provider list.
+ * 4. [PROVIDER_ADD]: In the provider list, focuses the "+" add button in the top bar and prompts to add a provider.
+ * 5. [PROVIDER_CONFIG_INFO]: On the provider edit page, focuses the API Key / configuration input area.
+ * 6. [PROVIDER_FETCH_MODELS]: On the provider models tab, focuses the "Fetch Models" button.
+ * 7. [SIMULATE_FETCH_DIALOG]: Simulates the fetch-models dialog on the overlay, showing the fetched models and guiding the user to add one.
+ * 8. [OPEN_MODEL_PICKER]: Back on the home screen, focuses the model selection button and prompts to open the panel.
+ * 9. [SIMULATE_CHOOSE_MODEL]: Simulates the home-screen model selection panel on the overlay, demonstrating how to choose a model.
+ * 10. [SEND_MESSAGE]: On the home screen, focuses the input box at the bottom and prompts to type and send the first message to start a conversation.
  */
 enum class OnboardingStep(
     val route: String,
@@ -73,10 +73,10 @@ enum class OnboardingStep(
         descRes = R.string.onboarding_send_message_desc
     );
 
-    /** 当前步的序号（1-based）。 */
+    /** The index of the current step (1-based). */
     val stepIndex: Int get() = ordinal + 1
 
-    /** 是否是最后一步。 */
+    /** Whether this is the last step. */
     val isLastStep: Boolean get() = this == entries.last()
 
     companion object {

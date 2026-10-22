@@ -10,9 +10,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * SSH 私钥文件的加密读写：私钥以 Keystore 加密后的密文落盘，读取时在内存解密后交给 sshj。
+ * Encrypted reading and writing of SSH private key files: keys are stored on disk as ciphertext encrypted with
+ * the Keystore, and are decrypted in memory on read before being handed to sshj.
  *
- * 明文只存在于内存中，容器内进程即便读到私钥文件也只是密文。旧版明文文件在首次读取时惰性加密回写。
+ * Plaintext exists only in memory; even if a process inside the container reads the private key file it sees only
+ * ciphertext. Legacy plaintext files are lazily encrypted and written back on first read.
  */
 @Singleton
 class SshPrivateKeyStore @Inject constructor(
@@ -22,27 +24,27 @@ class SshPrivateKeyStore @Inject constructor(
         const val TAG = "SshPrivateKeyStore"
     }
 
-    /** 加密写入私钥文件（覆盖原内容）。 */
+    /** Encrypts and writes a private key file (overwriting the previous contents). */
     fun write(path: String, plain: ByteArray) {
         val file = File(path)
         file.parentFile?.mkdirs()
         file.writeBytes(KeystoreCipher.encryptBytes(plain))
     }
 
-    /** 读取私钥明文 PEM：密文解密，旧明文原样返回并惰性加密回写。 */
+    /** Reads the private key plaintext PEM: ciphertext is decrypted; legacy plaintext is returned as-is and lazily encrypted and written back. */
     fun readPem(path: String): String {
         val file = File(path)
         val bytes = file.readBytes()
         if (!KeystoreCipher.isEncryptedBytes(bytes)) {
-            // 旧版明文文件：本次按明文使用，并尝试加密回写（失败不阻断连接）。
+            // Legacy plaintext file: use it as plaintext this time, and try to encrypt and write it back (failure does not block the connection).
             runCatching { file.writeBytes(KeystoreCipher.encryptBytes(bytes)) }
-                .onFailure { FileLogger.w(TAG, "私钥明文迁移加密失败: ${file.name}", it) }
+                .onFailure { FileLogger.w(TAG, "Failed to encrypt-migrate plaintext private key: ${file.name}", it) }
             return String(bytes, Charsets.UTF_8)
         }
         return String(KeystoreCipher.decryptBytes(bytes), Charsets.UTF_8)
     }
 
-    /** 计算私钥对应公钥的 SHA-256 指纹；加密私钥（需口令）无法解析时返回 null。 */
+    /** Computes the SHA-256 fingerprint of the public key corresponding to a private key; returns null when an encrypted private key (requiring a passphrase) cannot be parsed. */
     fun fingerprint(pem: String): String? = try {
         val keyProvider = SSHClient().loadKeys(pem, null, null)
         sshHostKeyFingerprint(keyProvider.getPublic())

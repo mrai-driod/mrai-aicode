@@ -1,7 +1,7 @@
 package com.aicode.feature.settings.domain.model
 
 /**
- * 自定义面板查询结果。
+ * Custom dashboard query result.
  */
 data class ProviderDashboardResult(
     val card: AdaptiveCardRoot = AdaptiveCardRoot(),
@@ -9,7 +9,7 @@ data class ProviderDashboardResult(
 )
 
 /**
- * 自定义面板状态。
+ * Custom dashboard state.
  */
 sealed interface ProviderDashboardState {
     data object Idle : ProviderDashboardState

@@ -9,14 +9,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 当前执行环境（本地 PRoot 容器 / 远程 SSH 服务器 / 真机 ROOT）家目录的统一来源，供各工具展开 `~`。
+ * Unified source for the home directory of the current execution environment (local PRoot container / remote SSH server / device ROOT), used by tools to expand `~`.
  *
- * 各环境真实 home 的获取方式不同：本地容器就绪后查 `$HOME` 缓存（[containerHome]，由
- * [com.aicode.feature.agent.domain.container.LinuxContainerEngine] 写入）；远程连接成功后查
- * 远程 `$HOME` 缓存（[RemoteSshConnection.remoteHome]）；真机 ROOT 固定用 App 私有 filesDir
- * （app 与 root shell 双通道都可读写，且能在其中建 `workspace` / `.aicode` 符号链接，
- * 让 shell 里的 `~/workspace`、`~/.aicode` 与文件工具的路径别名一致）。本类屏蔽差异，
- * 统一提供 [home] 与 [expandHome]，避免各工具各自硬编码（如 `/root`）或重复判断执行模式。
+ * Each environment obtains its real home differently: after the local container is ready, look up the cached `$HOME` ([containerHome], written by
+ * [com.aicode.feature.agent.domain.container.LinuxContainerEngine]); after a remote connection succeeds, look up
+ * the cached remote `$HOME` ([RemoteSshConnection.remoteHome]); device ROOT always uses the app-private filesDir
+ * (both the app and root shell channels can read and write it, and `workspace` / `.aicode` symlinks can be created in it,
+ * so that `~/workspace` and `~/.aicode` in the shell agree with the file tools' path aliases). This class hides those differences,
+ * uniformly providing [home] and [expandHome], so tools do not each hardcode (e.g. `/root`) or repeatedly check the execution mode.
  */
 @Singleton
 class PathHomeResolver @Inject constructor(
@@ -24,13 +24,13 @@ class PathHomeResolver @Inject constructor(
     private val executionModeHolder: ExecutionModeHolder,
     private val remoteSshConnection: RemoteSshConnection
 ) {
-    /** 本地容器内真实 home（容器就绪后查 $HOME 缓存），未就绪为 null。 */
+    /** Real home inside the local container (cached $HOME lookup after the container is ready); null when not ready. */
     @Volatile
     var containerHome: String? = null
 
     /**
-     * 当前环境的 home：远程取远程用户 home（连接后缓存），真机 ROOT 取 App 私有 filesDir，
-     * 本地容器取容器 home；未知时回退 /root。
+     * Home of the current environment: remote takes the remote user's home (cached after connection), device ROOT takes the app-private filesDir,
+     * local container takes the container home; falls back to /root when unknown.
      */
     fun home(): String = when (executionModeHolder.currentMode()) {
         ExecutionMode.REMOTE_SSH -> remoteSshConnection.remoteHome ?: "/root"
@@ -39,13 +39,13 @@ class PathHomeResolver @Inject constructor(
     }
 
     /**
-     * 当前执行环境下的 AI 配置根目录（`<home>/.aicode`）：本地容器为 `/root/.aicode`，
-     * 远程为服务器用户 home 下的 `.aicode`。供需要执行/回显该目录内文件的代码统一取用，
-     * 避免写死 `/root`（远程非 root 用户会指错）。
+     * AI config root directory for the current execution environment (`<home>/.aicode`): for the local container this is `/root/.aicode`,
+     * and for remote it is `.aicode` under the server user's home. For code that needs to execute/display files in that directory to obtain it uniformly,
+     * avoiding hardcoding `/root` (which would point wrong for non-root remote users).
      */
     fun aicodeRoot(): String = home().trimEnd('/') + "/.aicode"
 
-    /** 展开 `~` 或 `~/` 前缀为当前环境的 home 路径；其它路径原样返回。 */
+    /** Expand a `~` or `~/` prefix to the current environment's home path; other paths are returned unchanged. */
     fun expandHome(path: String): String {
         val h = home()
         return when {

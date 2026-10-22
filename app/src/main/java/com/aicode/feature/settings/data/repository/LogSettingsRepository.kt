@@ -20,13 +20,13 @@ private val Context.logDataStore by preferencesDataStore(
 )
 
 /**
- * 持久化「日志最低记录等级」。等级以枚举名（字符串）存取。
+ * Persists the minimum log level. The level is stored as the enum name (string).
  *
- * 默认等级按构建类型区分：debug 构建（FLAG_DEBUGGABLE）为 [LogLevel.VERBOSE]（开发期全量记录），
- * release 构建为 [LogLevel.INFO]（正式版过滤调试噪音）。用户手动设置后始终以用户设置为准。
+ * The default level differs by build type: debug builds (FLAG_DEBUGGABLE) use [LogLevel.VERBOSE] (full logging during development),
+ * release builds use [LogLevel.INFO] (filters debug noise in production). Once the user sets it manually, the user setting always wins.
  *
- * 取值由 `AIEditorApp` 在启动与设置变更时 collect [levelFlow] 同步到 [com.aicode.core.util.FileLogger]。
- * DataStore 用法与 `WorkspaceRepository` 一致（构造注入即可，无需 DI module）。
+ * `AIEditorApp` collects [levelFlow] at startup and on settings changes and syncs the value to [com.aicode.core.util.FileLogger].
+ * DataStore usage matches `WorkspaceRepository` (constructor injection only, no DI module needed).
  */
 @Singleton
 class LogSettingsRepository @Inject constructor(
@@ -34,7 +34,7 @@ class LogSettingsRepository @Inject constructor(
 ) {
     private val LEVEL_KEY = stringPreferencesKey("log_min_level")
 
-    /** 默认等级：debug 全量记录，release 过滤调试噪音。 */
+    /** Default level: debug logs everything, release filters debug noise. */
     private val defaultLevel: LogLevel =
         if ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             LogLevel.VERBOSE
@@ -42,20 +42,20 @@ class LogSettingsRepository @Inject constructor(
             LogLevel.INFO
         }
 
-    /** 当前持久化的日志等级流；解析失败/未设置时回退到默认等级。 */
+    /** Flow of the currently persisted log level; falls back to the default level on parse failure / when unset. */
     val levelFlow: Flow<LogLevel> = context.logDataStore.data.map { prefs ->
         prefs[LEVEL_KEY]?.let { runCatching { LogLevel.valueOf(it) }.getOrNull() } ?: defaultLevel
     }
 
-    /** 写入新的日志等级。 */
+    /** Writes the new log level. */
     suspend fun setLevel(level: LogLevel) {
         context.logDataStore.edit { it[LEVEL_KEY] = level.name }
     }
 
-    /** 备份快照：当前日志等级名。 */
+    /** Backup snapshot: current log level name. */
     suspend fun snapshot(): String = levelFlow.first().name
 
-    /** 从备份还原日志等级；解析失败时忽略。 */
+    /** Restores the log level from a backup; ignores parse failures. */
     suspend fun restore(value: String?) {
         val level = value?.let { runCatching { LogLevel.valueOf(it) }.getOrNull() } ?: return
         setLevel(level)

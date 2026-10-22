@@ -49,8 +49,8 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
- * 提供商二级页：列表 + 空态提示。新增/编辑由顶栏「+」与点击触发 [ProviderEditorScreen]，左滑删除。
- * 每行为一组圆角卡片，长按内容区域可调整提供商顺序（持久化到 sortOrder）。
+ * Provider sub-page: list + empty-state hint. Adding/editing is triggered by the top bar "+" and by tapping, via [ProviderEditorScreen]; swipe left to delete.
+ * Each row is a group of rounded cards; long-pressing the content area adjusts the provider order (persisted to sortOrder).
  */
 @Composable
 internal fun ProvidersSection(
@@ -85,7 +85,7 @@ internal fun ProvidersSection(
                 state = reorderableState,
                 key = provider.id
             ) { isDragging ->
-                // 拖拽中卡片轻微缩小（对齐 rikkahub 交互）、平滑过渡、阴影提升 + 层级前置，避免盖住相邻卡片
+                // While dragging, the card shrinks slightly (matching the rikkahub interaction), transitions smoothly, and gets raised shadow + higher z-order so it does not cover neighboring cards
                 val dragScale by animateFloatAsState(
                     targetValue = if (isDragging) 0.95f else 1f,
                     animationSpec = tween(durationMillis = if (isDragging) 120 else 220),
@@ -127,7 +127,7 @@ internal fun ProvidersSection(
     }
 }
 
-/** 居中空态提示。 */
+/** Centered empty-state hint. */
 @Composable
 internal fun EmptyHint(text: String) {
     Box(
@@ -145,9 +145,9 @@ internal fun EmptyHint(text: String) {
 }
 
 /**
- * 提供商行：左侧品牌 logo（按提供商名称自动识别），
- * 中部两行（名称 / 类型 + 模型数量 pills），右侧状态 pill + 箭头。
- * 整行点击进入编辑，左滑露出删除按钮；长按左侧信息区域可调整顺序。
+ * Provider row: brand logo on the left (automatically identified from the provider name),
+ * two lines in the middle (name / type + model-count pills), status pill + arrow on the right.
+ * Tapping the whole row opens editing, swiping left reveals the delete button; long-pressing the left information area adjusts the order.
  */
 @Composable
 fun ProviderItem(
@@ -157,7 +157,7 @@ fun ProviderItem(
     dragModifier: Modifier = Modifier
 ) {
     val sortDescription = stringResource(R.string.provider_sort_long_press)
-    // 状态色与 MCP 行一致：启用用主题 tertiary（绿调），停用用 outline（灰）。
+    // Status color matches MCP rows: enabled uses theme tertiary (green tint), disabled uses outline (gray).
     val statusColor = if (provider.isEnabled) MaterialTheme.semanticColors.success else MaterialTheme.colorScheme.outline
 
     SwipeToDeleteRow(
@@ -179,7 +179,7 @@ fun ProviderItem(
                     },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左侧品牌 logo 容器
+                // Left brand logo container
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -197,7 +197,7 @@ fun ProviderItem(
 
                 Spacer(modifier = Modifier.width(Spacing.md))
 
-                // 中间：名称 / 类型 + 模型数量
+                // Middle: name / type + model count
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = provider.name,
@@ -231,7 +231,7 @@ fun ProviderItem(
 
             Spacer(modifier = Modifier.width(Spacing.sm))
 
-            // 启用/停用状态 pill + 右箭头
+            // Enabled/disabled status pill + right arrow
             McpPill(
                 text = stringResource(if (provider.isEnabled) R.string.common_enabled else R.string.common_disabled),
                 textColor = statusColor,

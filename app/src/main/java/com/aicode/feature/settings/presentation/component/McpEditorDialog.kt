@@ -77,15 +77,15 @@ fun McpServerEditDialog(
     onDismiss: () -> Unit,
     onSave: (McpServerConfig, McpScope) -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: 基础设置, 1: 工具
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Basic settings, 1: Tools
 
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var enabled by remember { mutableStateOf(initial?.enabled ?: true) }
     var isStdio by remember { mutableStateOf(initial?.isStdio ?: false) }
-    // 作用域：新增默认当前项目，编辑保持原作用域。
+    // Scope: new entries default to the current project; editing keeps the original scope.
     var scope by remember { mutableStateOf(initialScope ?: McpScope.PROJECT) }
 
-    // HTTP 形态字段
+    // HTTP form fields
     var url by remember { mutableStateOf(initial?.url ?: "") }
     val headers = remember {
         mutableStateListOf<Pair<String, String>>().apply {
@@ -93,7 +93,7 @@ fun McpServerEditDialog(
         }
     }
 
-    // stdio 形态字段
+    // stdio form fields
     var command by remember { mutableStateOf(initial?.command ?: "") }
     val argsList = remember {
         mutableStateListOf<String>().apply { addAll(initial?.args ?: emptyList()) }
@@ -104,12 +104,12 @@ fun McpServerEditDialog(
         }
     }
 
-    // 工具权限字段 (disabledTools)
+    // Tool permission fields (disabledTools)
     val disabledToolsSet = remember {
         mutableStateListOf<String>().apply { addAll(initial?.disabledTools ?: emptyList()) }
     }
 
-    // 名称会拼进 `mcp__<名称>__<工具名>` 送给模型，必须符合 function-calling 命名规范。
+    // The name is embedded into `mcp__<name>__<tool name>` sent to the model, so it must comply with the function-calling naming rules.
     val nameError = name.isNotBlank() && !McpServerConfig.isValidName(name)
 
     val canSave = name.isNotBlank() && !nameError && if (isStdio) command.isNotBlank() else url.isNotBlank()
@@ -132,7 +132,7 @@ fun McpServerEditDialog(
                 .heightIn(max = screenHeight * 0.88f)
                 .imePadding()
         ) {
-                // ── Top Bar：标题绝对居中，右侧按钮浮动，避免按钮数量不同导致标题偏移 ──
+                // ── Top Bar: title is absolutely centered, right-side buttons float, so a different number of buttons does not shift the title ──
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -176,7 +176,7 @@ fun McpServerEditDialog(
                     }
                 }
 
-                // ── Tab Segmented Control（与侧边栏共用同一份滑块分段控件）──
+                // ── Tab Segmented Control (shares the same sliding segmented control as the sidebar) ──
                 SegmentedTabs(
                     selected = selectedTab,
                     labels = listOf(
@@ -197,7 +197,7 @@ fun McpServerEditDialog(
                         .nestedScroll(flingFix)
                 ) {
                     if (selectedTab == 0) {
-                        // Tab 0: 基础设置
+                        // Tab 0: Basic settings
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -206,7 +206,7 @@ fun McpServerEditDialog(
                                 .navigationBarsPadding(),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // 作用域选择（全局 / 当前项目）
+                            // Scope selection (global / current project)
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     text = stringResource(R.string.mcp_scope_label),
@@ -224,7 +224,7 @@ fun McpServerEditDialog(
                                 )
                             }
 
-                            // 是否启用 Card
+                            // Enabled toggle card
                             Card(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
@@ -250,7 +250,7 @@ fun McpServerEditDialog(
                                 }
                             }
 
-                            // 名称字段
+                            // Name field
                             AppTextField(
                                 value = name,
                                 onValueChange = { name = it },
@@ -266,7 +266,7 @@ fun McpServerEditDialog(
                                 }
                             )
 
-                            // 传输类型选择
+                            // Transport type selection
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
                                     text = stringResource(R.string.mcp_transport_type),
@@ -283,7 +283,7 @@ fun McpServerEditDialog(
                                 )
                             }
 
-                            // 具体表单字段
+                            // Specific form fields
                             if (isStdio) {
                                 McpStdioFields(
                                     command = command,
@@ -302,7 +302,7 @@ fun McpServerEditDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                     } else if (tools.isEmpty()) {
-                        // Tab 1: 工具（空状态，垂直居中）
+                        // Tab 1: Tools (empty state, vertically centered)
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -328,7 +328,7 @@ fun McpServerEditDialog(
                             }
                         }
                     } else {
-                        // Tab 1: 工具
+                        // Tab 1: Tools
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -424,8 +424,8 @@ fun McpServerEditDialog(
                     }
                 }
 
-                // ── 底部保存按钮（删除在列表左滑）──
-                // 底部留白向容器编辑弹窗对齐：按钮不贴屏底，下方给一段间距再加导航栏高度。
+                // ── Bottom save button (deletion is via swipe-left in the list) ──
+                // Bottom padding aligns with the container edit sheet: the button does not stick to the bottom of the screen, with a gap below plus the navigation bar height.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

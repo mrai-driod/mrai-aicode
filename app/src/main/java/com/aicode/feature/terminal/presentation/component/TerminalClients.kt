@@ -17,13 +17,13 @@ import com.termux.view.TerminalViewClient
 import kotlin.math.roundToInt
 
 /**
- * 由额外按键行（Esc/Ctrl/Alt 等）驱动的虚拟修饰键状态。
+ * Virtual modifier-key state driven by the extra key row (Esc/Ctrl/Alt, etc.).
  *
- * [TerminalView] 在分发按键/字符时会回调 `readControlKey()` 等读取这些标志，
- * 从而支持手机软键盘上没有的 Ctrl/Alt 组合（如 Ctrl-C）。
+ * [TerminalView] calls back `readControlKey()` etc. to read these flags when dispatching keys/characters,
+ * thereby supporting Ctrl/Alt combinations that a phone soft keyboard does not have (e.g. Ctrl-C).
  *
- * 标志用 Compose 可观察状态承载：额外按键行据此渲染「已按下」高亮，让用户看清当前是否
- * 预置了 Ctrl/Alt。读写都发生在 UI 线程（按键分发、点击、consume 均在主线程），故安全。
+ * The flags are held in Compose observable state: the extra key row renders a pressed highlight from them, so the user can clearly see whether
+ * Ctrl/Alt are currently armed. Reads and writes all happen on the UI thread (key dispatch, clicks, and consume are all on the main thread), so this is safe.
  */
 class TerminalKeyModifiers {
     var ctrl by mutableStateOf(false)
@@ -31,7 +31,7 @@ class TerminalKeyModifiers {
     var shift by mutableStateOf(false)
     var fn by mutableStateOf(false)
 
-    /** 一次性修饰键：发出一个字符后自动复位（贴近物理键盘按一下即用的直觉）。 */
+    /** One-shot modifier keys: automatically reset after one character is sent (matching the tap-once intuition of a physical keyboard). */
     fun consume() {
         ctrl = false
         alt = false
@@ -41,8 +41,8 @@ class TerminalKeyModifiers {
 }
 
 /**
- * [TerminalSessionClient]：会话产生输出/标题/结束等事件时回调。
- * 主要职责是把屏幕刷新转交给 [TerminalView]，并接驳系统剪贴板。
+ * [TerminalSessionClient]: callbacks for when a session produces output/title/finish and other events.
+ * Its main job is to hand screen refreshes to [TerminalView] and bridge the system clipboard.
  */
 class AppTerminalSessionClient(
     private val context: Context,
@@ -57,7 +57,7 @@ class AppTerminalSessionClient(
         viewProvider()?.onScreenUpdated()
     }
 
-    override fun onTitleChanged(changedSession: TerminalSession) { /* 暂不展示标题 */ }
+    override fun onTitleChanged(changedSession: TerminalSession) { /* Title display not implemented yet */ }
 
     override fun onSessionFinished(finishedSession: TerminalSession) {
         onFinished(finishedSession)
@@ -78,7 +78,7 @@ class AppTerminalSessionClient(
         }
     }
 
-    override fun onBell(session: TerminalSession) { /* 忽略响铃 */ }
+    override fun onBell(session: TerminalSession) { /* Ignore the bell */ }
     override fun onColorsChanged(session: TerminalSession) { viewProvider()?.onScreenUpdated() }
     override fun onTerminalCursorStateChange(state: Boolean) {}
     override fun getTerminalCursorStyle(): Int? = cursorStyle
@@ -95,8 +95,8 @@ class AppTerminalSessionClient(
 }
 
 /**
- * [TerminalViewClient]：视图层的输入/手势/缩放回调。
- * 用合理默认值实现，并把 Ctrl/Alt 等虚拟修饰键交给 [TerminalKeyModifiers]。
+ * [TerminalViewClient]: input/gesture/scaling callbacks for the view layer.
+ * Implemented with sensible defaults, and delegates virtual modifier keys such as Ctrl/Alt to [TerminalKeyModifiers].
  */
 class AppTerminalViewClient(
     private val context: Context,
@@ -122,9 +122,9 @@ class AppTerminalViewClient(
         lastFontSizeSp = baseFontSizeSp
     }
 
-    // 捏合：累积增量倍数得到目标字号（钳在 10–22），返回等价预览缩放倍数给视图做画布缩放。
-    // 这里不改字号、不 resize PTY（避免给 shell 连发 SIGWINCH 导致内容错乱），
-    // 手势结束在 onScaleEnd 按最终字号 resize 一次。
+    // Pinch: accumulate the incremental scale to get the target font size (clamped to 10-22), and return the equivalent preview scale factor for the view to scale the canvas.
+    // This does not change the font size or resize the PTY (to avoid sending repeated SIGWINCH to the shell and garbling content);
+    // the gesture ends with a single resize at the final font size in onScaleEnd.
     override fun onScale(scale: Float): Float {
         accumulatedScale *= scale
         val target = (baseFontSizeSp * accumulatedScale).roundToInt().coerceIn(MIN_FONT_SP, MAX_FONT_SP)
@@ -144,9 +144,9 @@ class AppTerminalViewClient(
     }
 
     override fun shouldBackButtonBeMappedToEscape(): Boolean = false
-    // 返回 false → 输入框用 InputType.TYPE_NULL（Termux 上游默认）。这样 Gboard 等多数输入法会把
-    // 方向键/退格等作为真正的 KeyEvent 下发，TerminalView 才能映射成光标移动序列；若返回 true 走
-    // 「字符输入」模式（VISIBLE_PASSWORD），方向键会被输入法吞作内部光标移动，永远到不了终端。
+    // Returning false -> the input field uses InputType.TYPE_NULL (the Termux upstream default). This way most IMEs such as Gboard will deliver
+    // arrow keys/backspace etc. as real KeyEvents, so TerminalView can map them to cursor-movement sequences; if it returned true and used
+    // character-input mode (VISIBLE_PASSWORD), arrow keys would be swallowed by the IME as internal cursor movement and never reach the terminal.
     override fun shouldEnforceCharBasedInput(): Boolean = false
     override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
     override fun isTerminalViewSelected(): Boolean = true
@@ -162,7 +162,7 @@ class AppTerminalViewClient(
     override fun readFnKey(): Boolean = modifiers.fn
 
     override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession?): Boolean {
-        // 字符已发出，复位一次性修饰键
+        // Character sent, reset the one-shot modifier keys
         modifiers.consume()
         return false
     }

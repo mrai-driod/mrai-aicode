@@ -115,13 +115,13 @@ class BrowserManager @Inject constructor(
         private const val DIALOG_TIMEOUT_MS = 30_000L
         const val MAX_TABS = 10
 
-        /** 地址栏输入不像网址时，作为关键词交给该搜索引擎（Bing）。 */
+        /** When address-bar input does not look like a URL, it is handed to this search engine (Bing) as keywords. */
         private const val SEARCH_ENGINE_URL = "https://www.bing.com/search?q="
 
         private const val NIGHT_STYLE_ID = "__bicode_night_css__"
         private val NIGHT_BG_COLOR = 0xFF121212.toInt()
 
-        /** 夜间压暗样式：页面顶层盖一层半透明黑色蒙版，保留原色、只降低亮度（不改色相、不影响 fixed 布局）。 */
+        /** Night darkening style: a translucent black overlay is laid over the top of the page, preserving the original colours and only reducing brightness (no hue change, no effect on fixed layout). */
         private const val NIGHT_CSS =
             "html::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;" +
                 "pointer-events:none;z-index:2147483647;background:rgba(0,0,0,0.2)}"
@@ -160,10 +160,10 @@ class BrowserManager @Inject constructor(
     private var containerView: FrameLayout? = null
     private var hiddenHost: ViewGroup? = null
 
-    /** App 外观是否为深色，由 UI 层通过 [setAppDarkTheme] 推送。 */
+    /** Whether the App appearance is dark, pushed by the UI layer via [setAppDarkTheme]. */
     private var appDarkTheme: Boolean = false
 
-    /** 手动覆盖：null 表示跟随 App 外观，true/false 为用户在浏览器内的显式选择。 */
+    /** Manual override: null means follow the App appearance; true/false is the user's explicit choice inside the browser. */
     private var nightModeOverride: Boolean? = null
 
     private val nightMode: Boolean get() = nightModeOverride ?: appDarkTheme
@@ -171,7 +171,7 @@ class BrowserManager @Inject constructor(
     private val _state = MutableStateFlow(BrowserState())
     val state: StateFlow<BrowserState> = _state.asStateFlow()
 
-    /** 选择器辅助函数，prepend 到所有需要选择器的 JS 中。支持 ref= / text= / text*= / role= / xpath= / CSS。 */
+    /** Selector helper function, prepended to all JS that needs selectors. Supports ref= / text= / text*= / role= / xpath= / CSS. */
     private val selectorHelper = """
         function __resolveSelector(selector){
             if(selector.startsWith('ref=')){
@@ -361,7 +361,7 @@ class BrowserManager @Inject constructor(
 
         wv.settings.javaScriptEnabled = true
         wv.settings.domStorageEnabled = true
-        // 支持导航/渲染 file:// 本地页面；该默认值随 targetSdk 变化，显式开启避免被静默关闭
+        // Support navigating to / rendering local file:// pages; this default varies with targetSdk, so enable it explicitly to avoid it being silently turned off
         wv.settings.allowFileAccess = true
         wv.settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
         wv.settings.builtInZoomControls = true
@@ -374,7 +374,7 @@ class BrowserManager @Inject constructor(
         applyDarkThemeToSettings(wv)
         wv.addJavascriptInterface(BrowserJsBridge(tabId), "__browserBridge__")
 
-        // 设置 Headless 默认尺寸，保证后台与离屏测试可用
+        // Set the Headless default size so background and off-screen tests work
         val density = appContext.resources.displayMetrics.density
         val width = (HEADLESS_WIDTH_DP * density).toInt()
         val height = (HEADLESS_HEIGHT_DP * density).toInt()
@@ -401,7 +401,7 @@ class BrowserManager @Inject constructor(
     }
 
     private fun createTabInternal(id: String, initialUrl: String?): TabHolder {
-        // WebView 依据其上下文主题的 isLightTheme 向网页报告 prefers-color-scheme，必须用专用主题构建
+        // The WebView reports prefers-color-scheme to pages based on the isLightTheme of its context theme, so it must be built with a dedicated theme
         val themedContext = ContextThemeWrapper(appContext, webViewThemeRes(nightMode))
         val wv = WebView(themedContext)
         configureWebView(wv, id)
@@ -409,7 +409,7 @@ class BrowserManager @Inject constructor(
         tabs.add(tab)
         activeTabId = id
 
-        // 若当前前端面板未打开，自动挂到 hiddenHost 激活 Chromium 渲染管线
+        // If the front-end panel is not currently open, automatically attach to hiddenHost to activate the Chromium rendering pipeline
         if (containerView == null && hiddenHost != null) {
             val density = appContext.resources.displayMetrics.density
             val width = (HEADLESS_WIDTH_DP * density).toInt().coerceAtLeast(1)
@@ -434,16 +434,16 @@ class BrowserManager @Inject constructor(
         }
     }
 
-    // ================= 夜间模式 =================
+    // ================= Night mode =================
 
-    /** App 外观变化时调用，重算并应用到所有标签页。 */
+    /** Called when the App appearance changes; recomputes and applies to all tabs. */
     fun setAppDarkTheme(dark: Boolean) {
         if (appDarkTheme == dark) return
         appDarkTheme = dark
         applyNightMode()
     }
 
-    /** 底栏手动切换；切回与 App 外观一致时自动恢复跟随。 */
+    /** Manual toggle in the bottom bar; switching back to match the App appearance automatically restores following it. */
     fun toggleNightMode() {
         val next = !nightMode
         nightModeOverride = if (next == appDarkTheme) null else next
@@ -453,7 +453,7 @@ class BrowserManager @Inject constructor(
     private fun applyNightMode() {
         val night = nightMode
         tabs.forEach { tab ->
-            // 先更新主题，让随后的 settings 变更触发 WebView 重读 prefers-color-scheme
+            // Update the theme first, so the subsequent settings change triggers the WebView to re-read prefers-color-scheme
             tab.themedContext.setTheme(webViewThemeRes(night))
             tab.webView.setBackgroundColor(if (night) NIGHT_BG_COLOR else Color.WHITE)
             applyDarkThemeToSettings(tab.webView)
@@ -462,19 +462,19 @@ class BrowserManager @Inject constructor(
         publishState()
     }
 
-    /** WebView 主题：isLightTheme 决定网页看到的 prefers-color-scheme（见 values/styles.xml）。 */
+    /** WebView theme: isLightTheme determines the prefers-color-scheme pages see (see values/styles.xml). */
     private fun webViewThemeRes(night: Boolean): Int =
         if (night) R.style.Theme_AICode_WebView_Dark else R.style.Theme_AICode_WebView
 
     /**
-     * 内核级暗色设置。prefers-color-scheme 实际由 WebView 主题的 isLightTheme 决定（见 [webViewThemeRes]），
-     * 这里设置算法调暗并借此触发 WebView 重读偏好——夜间模式切换后需要一次 settings 变更才会下发新偏好。
+     * Kernel-level dark settings. prefers-color-scheme is actually determined by the isLightTheme of the WebView theme (see [webViewThemeRes]);
+     * here algorithmic darkening is set, which also triggers the WebView to re-read the preference -- after a night-mode switch, a settings change is needed before the new preference is delivered.
      */
     private fun applyDarkThemeToSettings(wv: WebView) {
         try {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-                // 保持原色，不做内核算法调暗；此处借该开关的值变化触发 WebView 重读偏好——
-                // 夜间模式切换后必须有一次 settings 变更，新的 prefers-color-scheme 才会下发到渲染进程。
+                // Keep the original colours, with no kernel algorithmic darkening; this borrows the value change of this switch to trigger the WebView to re-read the preference --
+                // after a night-mode switch there must be a settings change before the new prefers-color-scheme is delivered to the rendering process.
                 WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, true)
                 WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, false)
             } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
@@ -485,7 +485,7 @@ class BrowserManager @Inject constructor(
         }
     }
 
-    /** 注入或移除夜间压暗蒙版。对已支持原生深色的页面（背景为深色）不压暗。 */
+    /** Injects or removes the night darkening overlay. Pages that already support native dark mode (dark backgrounds) are not darkened. */
     private fun applyNightModeTo(wv: WebView) {
         val js = if (nightMode) {
             """
@@ -552,7 +552,7 @@ class BrowserManager @Inject constructor(
         wv.evaluateJavascript(js, null)
     }
 
-    // ================= 开发者工具 =================
+    // ================= Developer tools =================
 
     private var erudaScriptCache: String? = null
 
@@ -634,7 +634,7 @@ class BrowserManager @Inject constructor(
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         )
 
-        // 把其他非激活 Tab 放回 hiddenHost，保持渲染管线处于就绪状态
+        // Put the other inactive tabs back into hiddenHost, keeping the rendering pipeline ready
         hiddenHost?.let { host ->
             val density = appContext.resources.displayMetrics.density
             val width = (HEADLESS_WIDTH_DP * density).toInt().coerceAtLeast(1)
@@ -648,7 +648,7 @@ class BrowserManager @Inject constructor(
         }
     }
 
-    /** 注册 Activity 级的隐藏宿主容器，让离屏 WebView 在后台也能触发 onAttachedToWindow 激活光栅化渲染。 */
+    /** Registers an Activity-level hidden host container, so an off-screen WebView can trigger onAttachedToWindow in the background and activate rasterized rendering. */
     fun attachHiddenHost(host: ViewGroup) {
         hiddenHost = host
         val density = appContext.resources.displayMetrics.density
@@ -666,7 +666,7 @@ class BrowserManager @Inject constructor(
         hiddenHost = null
     }
 
-    /** Compose UI 挂载容器 */
+    /** Compose UI mount container */
     fun getOrCreateContainerView(context: Context): View {
         val container = containerView ?: FrameLayout(context).also {
             containerView = it
@@ -682,7 +682,7 @@ class BrowserManager @Inject constructor(
         containerView = null
         _state.update { it.copy(attached = false) }
 
-        // 前端面板关闭后，把当前激活 Tab 移回 hiddenHost 保持渲染管线激活
+        // After the front-end panel closes, move the currently active tab back to hiddenHost to keep the rendering pipeline active
         hiddenHost?.let { host ->
             val density = appContext.resources.displayMetrics.density
             val width = (HEADLESS_WIDTH_DP * density).toInt().coerceAtLeast(1)
@@ -721,7 +721,7 @@ class BrowserManager @Inject constructor(
         return wv.parent != null && wv.width > 0 && wv.height > 0
     }
 
-    // ================= 多标签页管理 API =================
+    // ================= Multi-tab management API =================
 
     suspend fun newTab(url: String? = null): String = withContext(Dispatchers.Main) {
         if (tabs.size >= MAX_TABS) {
@@ -751,7 +751,7 @@ class BrowserManager @Inject constructor(
         tabs.remove(tab)
 
         if (tabs.isEmpty()) {
-            // 所有标签都被关闭，自动重置为一个新的空白标签页
+            // All tabs have been closed; automatically reset to a new blank tab
             createTabInternal("tab-${tabSeq++}", null)
         } else if (activeTabId == tabId) {
             val newIndex = (index - 1).coerceAtLeast(0)
@@ -778,17 +778,17 @@ class BrowserManager @Inject constructor(
         return activeTabId
     }
 
-    // ================= 浏览器操作 API =================
+    // ================= Browser operations API =================
 
     suspend fun navigate(url: String, tabId: String? = null): String {
         val target = url.trim()
         val resolved: String? = when {
             target.startsWith("http://") || target.startsWith("https://") -> target
-            // 本地文件：file:// 或裸容器路径，映射为宿主真实文件后再交给 WebView
+            // Local file: a file:// URL or a bare container path, mapped to the real host file before being handed to the WebView
             isLocalPathInput(target) -> withContext(Dispatchers.IO) { resolveLocalFileUrl(target) }
-            // 无协议头的裸域名：先试 https，SSL/连接失败再回退 http
+            // Bare domain with no scheme: try https first, fall back to http on SSL/connection failure
             looksLikeHost(target) -> null
-            // 其余视为搜索关键词，交给内置搜索引擎
+            // Anything else is treated as search keywords and handed to the built-in search engine
             else -> SEARCH_ENGINE_URL + Uri.encode(target)
         }
         return withContext(Dispatchers.Main) {
@@ -796,7 +796,7 @@ class BrowserManager @Inject constructor(
             if (resolved != null) {
                 loadInto(tab, resolved)
             } else {
-                // 无协议头：优先 https，SSL/连接失败再回退 http（部分站点未配置 SSL）
+                // No scheme: prefer https, fall back to http on SSL/connection failure (some sites have no SSL configured)
                 try {
                     loadInto(tab, "https://$target")
                 } catch (e: CancellationException) {
@@ -809,12 +809,12 @@ class BrowserManager @Inject constructor(
     }
 
     /**
-     * 判断无协议头输入是否为裸主机（→ 当网址处理），否则视为搜索关键词。
-     * 含空白一律当搜索词；IPv6 字面量（方括号包裹或含多个冒号）、主机部分含 `.` 或为 `localhost` 时当主机。
+     * Determines whether input without a scheme is a bare host (treated as a URL) or otherwise search keywords.
+     * Anything containing whitespace is treated as a search term; IPv6 literals (wrapped in square brackets or containing multiple colons), or a host part containing `.` or equal to `localhost`, count as a host.
      */
     private fun looksLikeHost(target: String): Boolean {
         if (target.any { it.isWhitespace() }) return false
-        // IPv6 字面量：带方括号，或主机部分含多个冒号（如 ::1、fe80::1）
+        // IPv6 literal: with square brackets, or a host part containing multiple colons (such as ::1, fe80::1)
         if (target.startsWith("[")) return true
         val hostPort = target.substringBefore('/')
         if (hostPort.count { it == ':' } >= 2) return true
@@ -822,7 +822,7 @@ class BrowserManager @Inject constructor(
         return host == "localhost" || host.contains('.')
     }
 
-    /** 输入是否为本地文件路径：`file://`，或以 `/`、`~`、`./`、`../` 开头的裸路径。 */
+    /** Whether the input is a local file path: `file://`, or a bare path starting with `/`, `~`, `./` or `../`. */
     private fun isLocalPathInput(input: String): Boolean =
         input.startsWith("file://") ||
             input.startsWith("/") ||
@@ -831,12 +831,12 @@ class BrowserManager @Inject constructor(
             input.startsWith("../")
 
     /**
-     * 把本地文件输入解析为 WebView 可加载的 `file://` URL。
+     * Resolves local file input to a `file://` URL the WebView can load.
      *
-     * WebView 跑在 App 宿主进程，只能读设备真实文件系统，看不到容器的 PRoot 视图。因此这里先按宿主真实路径
-     * 查找（如 `/storage/emulated/0/...`），命中即用；否则经 [FileAccessProvider] 把容器路径（`~/workspace/...`、
-     * `/etc/...`）映射为宿主真实文件——本地模式直接落到真实文件（相对子资源可正常加载），远程模式下载到临时文件
-     * （仅页面本身可加载，相对子资源会失效）。解析失败时回退为原路径的 `file://`，交由 WebView 报错。
+     * The WebView runs in the App host process and can only read the device's real file system; it cannot see the container's PRoot view. So first look up the real host path
+     * here (such as `/storage/emulated/0/...`) and use it on a hit; otherwise map the container path (`~/workspace/...`,
+     * `/etc/...`) to a real host file via [FileAccessProvider] -- in local mode it lands directly on a real file (relative sub-resources load normally); in remote mode it downloads to a temporary file
+     * (only the page itself can load; relative sub-resources will break). On resolution failure, fall back to a `file://` URL of the original path and let the WebView report the error.
      */
     private fun resolveLocalFileUrl(input: String): String {
         val rawPath = if (input.startsWith("file://")) Uri.decode(input.removePrefix("file://")) else input
@@ -851,7 +851,7 @@ class BrowserManager @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FileLogger.w(TAG, "本地文件路径解析失败，按原路径加载: $rawPath", e)
+            FileLogger.w(TAG, "Failed to resolve local file path; loading the original path: $rawPath", e)
             return Uri.fromFile(File(expanded)).toString()
         }
         return Uri.fromFile(host).toString()
@@ -870,9 +870,9 @@ class BrowserManager @Inject constructor(
         val deferred = CompletableDeferred<String>()
         tab.pendingJsCalls[callId] = deferred
 
-        // 彻底废除 eval，改用 async IIFE 包装并直接 await。
-        // 单表达式自动补 return（支持 Promise 自动展开等待，且不受 CSP unsafe-eval 限制）；
-        // 语句体（顶层含 ; / 换行或以语句关键字开头）原样放入函数体，值由脚本自行 return。
+        // Completely abolish eval; wrap in an async IIFE and await directly instead.
+        // A single expression automatically gets a return prepended (supports automatic Promise unwrapping/awaiting, and is not limited by CSP unsafe-eval);
+        // a statement body (containing `;` / a newline at the top level, or starting with a statement keyword) is placed into the function body as-is, and the script returns its own value.
         val trimmed = script.trim()
         val body = if (isExpressionScript(trimmed)) {
             val expr = trimmed.trimEnd().removeSuffix(";").trimEnd()
@@ -909,7 +909,7 @@ class BrowserManager @Inject constructor(
         val tab = resolveTab(tabId)
         val wv = tab.webView
 
-        // 步骤 1：先在 JS 层面解析元素、平滑滚动到视口中心并获取视口几何坐标
+        // Step 1: first resolve the element at the JS level, smooth-scroll it to the centre of the viewport, and get the viewport geometric coordinates
         val prepareScript = """
             $selectorHelper
             (function(sel){
@@ -946,7 +946,7 @@ class BrowserManager @Inject constructor(
         val beforeUrl = (prep?.get("beforeUrl") as? JsonPrimitive)?.content.orEmpty()
         val density = appContext.resources.displayMetrics.density
 
-        // 步骤 2：若元素具有可见尺寸，使用 Android 原生 MotionEvent 模拟真实物理触摸（isTrusted: true）
+        // Step 2: if the element has a visible size, use a native Android MotionEvent to simulate a real physical touch (isTrusted: true)
         val nativeClicked = if (w > 0f && h > 0f) {
             val clickX = x * density
             val clickY = y * density
@@ -961,7 +961,7 @@ class BrowserManager @Inject constructor(
             downHandled || upHandled
         } else false
 
-        // 步骤 3：若物理点击未生效或元素尺寸为 0，回退到 JS dispatchEvent
+        // Step 3: if the physical click had no effect or the element's size is 0, fall back to JS dispatchEvent
         if (!nativeClicked) {
             val fallbackScript = """
                 $selectorHelper
@@ -979,7 +979,7 @@ class BrowserManager @Inject constructor(
             wv.evaluateJavascriptSync(fallbackScript)
         }
 
-        // 等待 300ms 检测是否有 SPA 路由切换
+        // Wait 300ms to check whether an SPA route change happened
         delay(300)
         val afterUrl = wv.url.orEmpty()
         val navigatedTo = if (afterUrl.isNotEmpty() && afterUrl != beforeUrl) afterUrl else null
@@ -1173,7 +1173,7 @@ class BrowserManager @Inject constructor(
         val tab = resolveTab(tabId)
         val wv = tab.webView
 
-        // 异步渲染沉淀等待：若页面仍处于加载态，等待最多 2000ms
+        // Asynchronous rendering settle wait: if the page is still loading, wait up to 2000ms
         if (tab.loading) {
             val deadline = System.currentTimeMillis() + 2_000L
             while (tab.loading && System.currentTimeMillis() < deadline) {
@@ -1202,7 +1202,7 @@ class BrowserManager @Inject constructor(
         var result = wv.evaluateJavascriptSync(js)
         var text = unescapeJsString(result).trim()
 
-        // 若正文为空且页面可能在异步挂载中，等待最多 1000ms 沉淀
+        // If the body text is empty and the page may still be mounting asynchronously, wait up to 1000ms for it to settle
         if (text.isEmpty() && selector == null) {
             val deadline = System.currentTimeMillis() + 1_000L
             while (text.isEmpty() && System.currentTimeMillis() < deadline) {
@@ -1219,7 +1219,7 @@ class BrowserManager @Inject constructor(
         val tab = resolveTab(tabId)
         val wv = tab.webView
 
-        // 异步渲染沉淀等待：若页面仍处于加载态，等待最多 2000ms
+        // Asynchronous rendering settle wait: if the page is still loading, wait up to 2000ms
         if (tab.loading) {
             val deadline = System.currentTimeMillis() + 2_000L
             while (tab.loading && System.currentTimeMillis() < deadline) {
@@ -1460,7 +1460,7 @@ class BrowserManager @Inject constructor(
         val tab = resolveTab(tabId)
         val wv = tab.webView
 
-        // 离屏兜底尺寸：若未被系统布局过（w/h <= 0），手动测量布局
+        // Off-screen fallback size: if it has never been laid out by the system (w/h <= 0), measure and lay it out manually
         if (wv.width <= 0 || wv.height <= 0) {
             val density = appContext.resources.displayMetrics.density
             val width = (HEADLESS_WIDTH_DP * density).toInt().coerceAtLeast(1)
@@ -1473,14 +1473,14 @@ class BrowserManager @Inject constructor(
         }
         if (wv.width <= 0 || wv.height <= 0) return@withContext null
 
-        // 等待视觉状态就绪（API 23+ 原生机制，保证光栅化合成完毕）
+        // Wait for the visual state to be ready (a native API 23+ mechanism, guaranteeing rasterized compositing has finished)
         waitForVisualState(wv)
 
         val bitmap = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // 关键：WebView 处于硬件层时，software Canvas 回读不到 GPU 帧缓冲——离屏未挂载、或挂载到窗口（打开过浏览器面板）都会白屏；
-        // 因此截图期间一律临时切为 LAYER_TYPE_SOFTWARE 遍历 display list 真实绘制到 Bitmap，画完还原。
+        // Key point: when the WebView is on a hardware layer, a software Canvas cannot read back the GPU frame buffer -- being off-screen and unmounted, or mounted to a window (after the browser panel has been opened), both produce a white screen;
+        // so during screenshots, always temporarily switch to LAYER_TYPE_SOFTWARE, walk the display list and really draw to a Bitmap, then restore it afterwards.
         val oldLayerType = wv.layerType
         wv.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         try {
@@ -1505,7 +1505,7 @@ class BrowserManager @Inject constructor(
         try {
             withTimeout(timeoutMs) { deferred.await() }
         } catch (_: Exception) {
-            // 超时兜底，直接继续绘制
+            // Timeout fallback: just continue drawing
         }
     }
 
@@ -1555,7 +1555,7 @@ class BrowserManager @Inject constructor(
             try {
                 withTimeout(GO_LOAD_TIMEOUT_MS) { deferred.await() }
             } catch (e: Exception) {
-                // 同文档导航不会触发 onPageFinished，超时后直接继续
+                // Same-document navigation does not trigger onPageFinished; after the timeout, just continue
             }
         }
         if (tab.loadDeferred === deferred) tab.loadDeferred = null
@@ -1606,8 +1606,8 @@ class BrowserManager @Inject constructor(
     }
 
     /**
-     * 判断脚本是否为单个表达式（可直接 `return (script)` 取值）。
-     * 仅看顶层（括号/花括号深度 0）是否出现 `;` 或换行——IIFE 内部语句的 `;` 不受影响。
+     * Determines whether a script is a single expression (its value can be taken directly with `return (script)`).
+     * Only looks at whether `;` or a newline appears at the top level (brace/parenthesis depth 0) -- the `;` of statements inside the IIFE is unaffected.
      */
     private fun isExpressionScript(script: String): Boolean {
         val s = script.trimEnd().removeSuffix(";").trimEnd()

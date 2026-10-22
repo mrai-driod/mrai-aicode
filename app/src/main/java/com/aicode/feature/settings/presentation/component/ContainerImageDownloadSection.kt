@@ -69,7 +69,7 @@ private fun formatBytes(bytes: Long): String = when {
     else -> "$bytes B"
 }
 
-/** 发行版 logo（与容器与镜像页一致的图标风格）；未识别返回 null（调用方回退通用图标）。 */
+/** Distribution logo (icon style consistent with the Containers & Images page); returns null when unrecognised (the caller falls back to a generic icon). */
 @Composable
 private fun distroLogo(distro: String): Painter? = when (distro) {
     "alpine" -> painterResource(R.drawable.logo_alpine)
@@ -80,10 +80,10 @@ private fun distroLogo(distro: String): Painter? = when (distro) {
 }
 
 /**
- * 下载镜像页：从内置目录（assets/container-images.json）列出可下载镜像。
- * 行样式与「容器与镜像」一致：左侧发行版图标 + 名称/简介 + 右箭头；点击行弹出详情弹窗；
- * 已下载的行可左滑删除（删文件+记录）。下载源在页面右上角底部弹窗切换；
- * 下载异步进行，关闭弹窗后行内继续显示进度；「导入」把镜像加入容器列表，可重复导入。
+ * Download image page: lists downloadable images from the built-in catalogue (assets/container-images.json).
+ * The row style matches "Containers & Images": distribution icon on the left + name/description + right arrow; tapping a row opens the detail sheet;
+ * downloaded rows can be swiped left to delete (file + record). The download source is switched in a bottom sheet from the top-right corner of the page;
+ * downloads proceed asynchronously, and after the sheet is closed the row continues to show progress; "Import" adds the image to the container list and can be imported repeatedly.
  */
 @Composable
 internal fun ContainerImageDownloadSection(
@@ -100,7 +100,7 @@ internal fun ContainerImageDownloadSection(
     val context = LocalContext.current
     var detailEntry by remember { mutableStateOf<ContainerImageEntry?>(null) }
     var deleteEntry by remember { mutableStateOf<ContainerImageEntry?>(null) }
-    // 只显示当前源下可用的镜像；切源后列表自动过滤
+    // Only show images available from the current source; the list is filtered automatically after switching sources
     val visibleCatalog = catalog.filter { it.id !in sourceUnavailableIds }
 
     Column(
@@ -179,7 +179,7 @@ internal fun ContainerImageDownloadSection(
     }
 }
 
-/** 列表行：图标 + 名称（已下载带徽章）/简介（下载中显示进度条）+ 右箭头；所有行可左滑，未下载时删除按钮禁用。 */
+/** List row: icon + name (with a badge when downloaded) / description (a progress bar is shown while downloading) + right arrow; all rows can be swiped left, and the delete button is disabled when not downloaded. */
 @Composable
 private fun DownloadImageRow(
     entry: ContainerImageEntry,
@@ -203,7 +203,7 @@ private fun DownloadImageRow(
                 .padding(horizontal = Spacing.lg, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧发行版图标
+            // Distribution icon on the left
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -233,7 +233,7 @@ private fun DownloadImageRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // 名称 + 简介（下载中显示进度条）
+            // Name + description (a progress bar is shown while downloading)
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -290,7 +290,7 @@ private fun DownloadImageRow(
                 }
             }
 
-            // 右侧箭头
+            // Arrow on the right
             Icon(
                 imageVector = FeatherIcons.ChevronRight,
                 contentDescription = null,
@@ -301,7 +301,7 @@ private fun DownloadImageRow(
     }
 }
 
-/** 镜像详情底部弹窗：信息 + 下载/进度/导入操作区。关闭弹窗不影响后台下载。 */
+/** Image detail bottom sheet: information + download/progress/import action area. Closing the sheet does not affect the background download. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ImageDetailSheet(

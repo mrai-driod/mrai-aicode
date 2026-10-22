@@ -13,14 +13,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 当前激活容器 profile 对应的远程连接配置解析器。
+ * Resolves the remote connection configuration for the currently active container profile.
  *
- * 取代旧的 execution_mode_prefs 连接参数副本：激活 profile 变化、profile 内容变化（编辑远程路径或换绑通道）
- * 或连接表变化（改 host/端口/账号密码）都会重新解析，产出可直接交给 [RemoteSshConnection.connect] 的
- * [RemoteConnectionConfig]，因此改连接即时生效，无需切换容器再切回。
+ * Replaces the old execution_mode_prefs copy of the connection parameters: a change to the active profile, to a
+ * profile's contents (editing the remote path or re-binding its channel), or to the connection table (changing
+ * host/port/account/password) all trigger a re-resolve, producing a [RemoteConnectionConfig] that can be handed
+ * directly to [RemoteSshConnection.connect], so connection edits take effect immediately with no need to switch
+ * containers away and back.
  *
- * 仅按连接自身的 authType 解析认证：密码连接解出密码，密钥连接解出私钥路径与口令，
- * 与工作区同步的 SFTP 通道保持一致。
+ * Authentication is resolved solely from the connection's own authType: password connections yield the password,
+ * key connections yield the private key path and passphrase, consistent with the workspace-synced SFTP channel.
  */
 @Singleton
 class ActiveRemoteConnectionResolver @Inject constructor(
@@ -28,7 +30,7 @@ class ActiveRemoteConnectionResolver @Inject constructor(
     private val dao: RemoteConnectionDao,
     private val loginKeyStore: SshLoginKeyStore
 ) {
-    /** 激活 profile 解析出的连接配置；本地 profile、通道缺失或连接被删时为 null。 */
+    /** The connection configuration resolved from the active profile; null for a local profile, a missing channel, or a deleted connection. */
     val activeConfigFlow: Flow<RemoteConnectionConfig?> = combine(
         containerSettingsRepository.activeProfileIdFlow,
         containerSettingsRepository.customProfilesFlow,

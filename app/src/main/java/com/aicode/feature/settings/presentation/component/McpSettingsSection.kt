@@ -48,8 +48,8 @@ import compose.icons.feathericons.Terminal
 import com.aicode.R
 
 /**
- * MCP 二级页：与提供商/默认模型一致的 iOS 分组列表。
- * 白色分组卡片内每台 server 一行，两行布局（名称+状态 / 类型+摘要），支持左滑删除。
+ * MCP secondary page: an iOS-style grouped list consistent with provider/default-model.
+ * Each server takes one row inside the white group card, in a two-line layout (name+status / type+summary), with swipe-to-delete support.
  */
 @Composable
 internal fun McpSection(
@@ -126,7 +126,7 @@ internal fun McpSection(
 }
 
 /**
- * 单个 MCP server 行：分组内白底行，图标 + 名称/状态 + 类型/摘要 + 右箭头，左滑删除。
+ * Single MCP server row: white row inside the group, icon + name/status + type/summary + right chevron, swipe to delete.
  */
 @Composable
 internal fun McpServerRow(
@@ -164,7 +164,7 @@ internal fun McpServerRow(
     val statusBgColor = statusColor.copy(alpha = 0.12f)
 
     val typeText = if (server.isStdio) stringResource(R.string.mcp_type_stdio) else "HTTP"
-    // HTTP 未连接时不再展示完整地址：URL 很长，在列表里只能看到一截断的头，占位而无信息量。
+    // When HTTP is not connected, no longer show the full address: URLs are long and only a truncated head would be visible in the list, taking space without conveying information.
     val infoText = when {
         isConnected -> stringResource(R.string.mcp_tools_count, status?.toolCount ?: 0)
         server.isStdio -> server.command.orEmpty().ifEmpty { "stdio" }
@@ -181,7 +181,7 @@ internal fun McpServerRow(
                 .padding(horizontal = Spacing.lg, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧容器图标
+            // Left container icon
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -202,7 +202,7 @@ internal fun McpServerRow(
 
             Spacer(modifier = Modifier.width(Spacing.md))
 
-            // 中间：名称 / 类型 + 摘要
+            // Middle: name / type + summary
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = server.name,
@@ -242,7 +242,7 @@ internal fun McpServerRow(
 
             Spacer(modifier = Modifier.width(Spacing.sm))
 
-            // 状态 pill 与右箭头垂直居中，与整行中心对齐
+            // Status pill and right chevron vertically centered, aligned with the row center
             McpPill(
                 text = statusText,
                 textColor = statusColor,
@@ -259,7 +259,7 @@ internal fun McpServerRow(
     }
 }
 
-/** 紧凑 pill 标签：胶囊背景 + 小字，用于状态/类型/摘要。 */
+/** Compact pill label: capsule background + small text, used for status/type/summary. */
 @Composable
 internal fun McpPill(
     text: String,

@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * 新手聚焦引导的 UI 运行状态。
+ * UI runtime state for the focused new-user onboarding flow.
  */
 data class OnboardingUiState(
     val active: Boolean = false,
@@ -15,13 +15,13 @@ data class OnboardingUiState(
 )
 
 /**
- * 新手引导的状态机（纯内存状态，跨进程持久化由 OnboardingRepository 保障）。
+ * State machine for new-user onboarding (pure in-memory state; cross-process persistence is handled by OnboardingRepository).
  */
 class OnboardingStateHolder {
     private val _state = MutableStateFlow(OnboardingUiState())
     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
 
-    /** 启动引导：从第一步 [OnboardingStep.OPEN_SIDEBAR] 开始。 */
+    /** Starts onboarding: begins from the first step, [OnboardingStep.OPEN_SIDEBAR]. */
     fun start() {
         _state.value = OnboardingUiState(
             active = true,
@@ -30,7 +30,7 @@ class OnboardingStateHolder {
         )
     }
 
-    /** 前进到下一步；如果是最后一步则完成引导。 */
+    /** Moves forward to the next step; if this is the last step, completes onboarding. */
     fun nextStep() {
         if (!_state.value.active) return
         val current = _state.value.step
@@ -42,13 +42,13 @@ class OnboardingStateHolder {
         }
     }
 
-    /** 回退或跳转到指定引导步骤。 */
+    /** Goes back or jumps to the specified onboarding step. */
     fun goToStep(targetStep: OnboardingStep) {
         if (!_state.value.active) return
         _state.value = _state.value.copy(step = targetStep)
     }
 
-    /** 跳过引导。 */
+    /** Skips onboarding. */
     fun skip() {
         _state.value = OnboardingUiState(
             active = false,
@@ -57,7 +57,7 @@ class OnboardingStateHolder {
         )
     }
 
-    /** 完成引导。 */
+    /** Completes onboarding. */
     fun completeNow() {
         _state.value = OnboardingUiState(
             active = false,
@@ -66,11 +66,11 @@ class OnboardingStateHolder {
         )
     }
 
-    /** 当前是否处于引导中。 */
+    /** Whether onboarding is currently in progress. */
     val isActive: Boolean get() = _state.value.active
 }
 
-/** 返回当前步骤的下一步，若已是末步则返回 null。 */
+/** Returns the step after the current one, or null if already at the last step. */
 internal fun OnboardingStep.next(): OnboardingStep? {
     val nextIndex = ordinal + 1
     return if (nextIndex < OnboardingStep.all.size) OnboardingStep.all[nextIndex] else null

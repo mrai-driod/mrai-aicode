@@ -18,7 +18,7 @@ data class ChatSessionEntity(
     val updatedAt: Long,
     val workspacePath: String = "",
     val mode: String = AgentMode.BUILD.name,
-    /** 进入 PLAN 前的模式（BUILD/ASK）；退出 PLAN 时恢复，null 视为 BUILD。 */
+    /** The mode before entering PLAN (BUILD/ASK); restored when leaving PLAN, null is treated as BUILD. */
     val modeBeforePlan: String? = null,
     val reasoningEffort: String = ReasoningEffort.MEDIUM.name,
     val providerId: String? = null,
@@ -27,9 +27,9 @@ data class ChatSessionEntity(
     val totalOutputTokens: Int = 0,
     val lastInputTokens: Int = 0,
     val isPinned: Boolean = false,
-    /** 子代理会话：父会话 id；null 表示普通根会话。 */
+    /** Sub-agent session: the parent session id; null means an ordinary root session. */
     val parentId: String? = null,
-    /** 子代理会话：派生子代理的类型（如 coder / researcher）；null 表示普通根会话。 */
+    /** Sub-agent session: the type of the spawned sub-agent (e.g. coder / researcher); null means an ordinary root session. */
     val subagentType: String? = null
 ) {
     fun toDomain(): ChatSession = ChatSession(

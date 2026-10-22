@@ -3,21 +3,21 @@ package com.aicode.feature.agent.domain.provider
 import retrofit2.HttpException
 
 /**
- * 把上游返回的 HTTP 错误转换成带**响应体**的异常，便于用户定位 4xx/5xx 的真实原因。
+ * Converts an HTTP error returned by upstream into an exception carrying the **response body**, so the user can pinpoint the real cause of a 4xx/5xx.
  *
- * Retrofit 的 [HttpException] 默认 message 只有 `"HTTP 400 Bad Request"` 这类状态码描述，
- * 服务端写在响应体里的具体原因（如 `model not found`、`invalid api key`、`Invalid value for tools`）
- * 不会被读出，用户只看到一句没用的状态码。这里把 errorBody 读出来拼到 message 里，
- * 原异常作为 cause 保留。
+ * Retrofit's [HttpException] default message is only a status-code description like `"HTTP 400 Bad Request"`;
+ * the concrete reason the server wrote in the response body (e.g. `model not found`, `invalid api key`, `Invalid value for tools`)
+ * is never read out, and the user only sees a useless status code. Here the errorBody is read and appended to the message,
+ * with the original exception kept as the cause.
  *
- * 注意：errorBody 只能读一次，调用后即被消费。
+ * Note: errorBody can only be read once; calling this consumes it.
  */
 fun Throwable.enrichWithHttpErrorBody(): Throwable {
     if (this !is HttpException) return this
     val raw = this.response()?.errorBody()?.string()?.trim()
     val body = runCatching {
         if (raw.isNullOrBlank()) return@runCatching ""
-        // 常见格式：{"error":{"message":"...","type":"..."}} 或 {"message":"..."}；尽量抽出可读文本。
+        // Common formats: {"error":{"message":"...","type":"..."}} or {"message":"..."}; extract readable text as far as possible.
         val obj = com.google.gson.JsonParser.parseString(raw).asJsonObject
         obj.get("error")?.takeIf { it.isJsonObject }?.asJsonObject?.get("message")?.asString
             ?: obj.get("message")?.asString

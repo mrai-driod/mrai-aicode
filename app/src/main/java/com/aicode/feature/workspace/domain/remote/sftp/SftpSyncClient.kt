@@ -26,7 +26,7 @@ class SftpSyncClient(
         private const val READ_TIMEOUT_MS = 15_000
     }
 
-    /** 同一 SFTP 会话上的并发请求会让请求/响应错配，故所有操作串行化。 */
+    /** Concurrent requests on the same SFTP session would mismatch requests/responses, so all operations are serialized. */
     private val mutex = Mutex()
     private var sshClient: SSHClient? = null
     private var sftpClient: SFTPClient? = null
@@ -120,7 +120,7 @@ class SftpSyncClient(
                 val attrs = sftp.statExistence(remotePath)
                 if (attrs != null) {
                     if (attrs.type == FileMode.Type.DIRECTORY) {
-                        // 递归删除暂未实现
+                        // Recursive delete is not implemented yet
                         sftp.rmdir(remotePath)
                     } else {
                         sftp.rm(remotePath)
@@ -139,7 +139,7 @@ class SftpSyncClient(
                 val sftp = sftpClient ?: return@withLock false
                 if (!ssh.isConnected || !ssh.isAuthenticated) return@withLock false
                 try {
-                    // 任何 SFTP 协议响应（含"路径不存在"等业务错误）都证明连接活着；仅传输/socket 异常才判断开
+                    // Any SFTP protocol response (including business errors such as "path does not exist") proves the connection is alive; only transport/socket exceptions count as disconnected
                     sftp.stat(".")
                     true
                 } catch (e: SFTPException) {

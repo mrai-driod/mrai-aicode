@@ -42,9 +42,9 @@ class ToolOutputStore @Inject constructor(
     private val json = Json { encodeDefaults = true }
 
     /**
-     * 设备本地存档目录（宿主路径），仅供本机存储占用统计与清理。
-     * 写入落在当前执行环境（本地即此目录；远程经 SFTP 落到服务器 home 下的 `.aicode/tool-output`），
-     * 故远程模式下本目录为空、实际存档在远端。
+     * The device-local archive directory (host path), used only for local storage-usage statistics and cleanup.
+     * Writes land in the current execution environment (locally, this directory; remotely, via SFTP under `.aicode/tool-output` in the server's home),
+     * so in remote mode this directory is empty and the actual archives are on the remote side.
      */
     val outputDir: File get() = File(containerInstaller.aicodeDir, OUTPUT_DIR)
 
@@ -151,10 +151,10 @@ class ToolOutputStore @Inject constructor(
             fileAccess.mkdirs(dir)
             val path = uniqueOutputPath(dir, toolName, callId)
             fileAccess.writeFile(path, text, overwrite = false)
-            FileLogger.i(TAG, "工具输出已保存: $path (${text.length} chars)")
+            FileLogger.i(TAG, "Tool output saved: $path (${text.length} chars)")
             StoredPathResult(outputPath = path)
         } catch (e: Exception) {
-            FileLogger.w(TAG, "保存工具输出失败: ${e.message}", e)
+            FileLogger.w(TAG, "Failed to save tool output: ${e.message}", e)
             StoredPathResult(storageError = e.message ?: "Failed to save tool output")
         }
     }

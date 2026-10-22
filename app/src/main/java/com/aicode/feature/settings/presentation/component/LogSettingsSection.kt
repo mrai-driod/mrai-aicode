@@ -76,8 +76,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 日志合并页：日志等级（点击弹底部面板）+ 日志文件切换 + 搜索/复制 + 结构化彩色日志列表。
- * 页面布局对齐设置页分组风格；日志行按 logcat 风格渲染（等级徽章 + 时间 + tag + 消息）。
+ * Combined log page: log level (tap to open the bottom sheet) + log file switching + search/copy + structured color-coded log list.
+ * Page layout matches the settings page grouped style; log lines render logcat-style (level badge + time + tag + message).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,7 +105,7 @@ internal fun LogSection(
             .padding(Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        // ── 日志等级 + 日志文件：同一卡片两行 ──
+        // ── Log level + log file: two rows in one card ──
         SettingsGroup {
             SettingsRow(
                 icon = FeatherIcons.FileText,
@@ -148,7 +148,7 @@ internal fun LogSection(
             )
         }
 
-        // ── 搜索 + 复制 ──
+        // ── Search + copy ──
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -166,7 +166,7 @@ internal fun LogSection(
             )
         }
 
-        // ── MCP 过滤徽章（从 MCP 弹窗进入时显示，可清除）──
+        // ── MCP filter badge (shown when entered from the MCP dialog, clearable)──
         state.filterServerName?.let { server ->
             Surface(
                 shape = RoundedCornerShape(Radius.pill),
@@ -196,7 +196,7 @@ internal fun LogSection(
             }
         }
 
-        // ── 日志内容 ──
+        // ── Log content ──
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -238,7 +238,7 @@ internal fun LogSection(
     }
 }
 
-/** 日志内容卡片：loading / 错误 / 空态 / 统计行 + 结构化彩色列表；实时滚动开启时每 3 秒静默刷新并跟随最新日志。 */
+/** Log content card: loading / error / empty states / summary row + structured color-coded list; when live scrolling is on, silently refreshes every 3 seconds and follows the latest logs. */
 @Composable
 private fun LogContent(
     state: LogViewerUiState,
@@ -292,7 +292,7 @@ private fun LogContent(
             var menuIndex by remember { mutableStateOf<Int?>(null) }
             var followLatest by remember { mutableStateOf(true) }
 
-            // 实时滚动：开启时每 3 秒静默刷新，跟随最新日志
+            // Live scrolling: when on, silently refreshes every 3 seconds and follows the latest logs
             LaunchedEffect(followLatest, state.selectedFileName, state.filterServerName) {
                 if (followLatest) {
                     while (true) {
@@ -372,7 +372,7 @@ private fun LogContent(
                 }
             }
 
-            // 长按自定义复制：本条 / 本条及堆栈 / 消息内容
+            // Long-press custom copy: this line / this line plus stack / message content
             menuIndex?.let { index ->
                 val entry = entries.getOrNull(index) ?: return@let
                 val stackLines = entries.drop(index + 1).takeWhile { it.level == null }
@@ -400,7 +400,7 @@ private fun LogContent(
     }
 }
 
-/** 单条日志行：等级徽章（定宽对齐）+ 时间/tag/消息分色拼接，非日志行（堆栈续行/文件头标记）整行灰色。 */
+/** Single log line: level badge (fixed-width aligned) + time/tag/message in separate colors; non-log lines (stack continuations / file-header markers) are gray for the whole line. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LogLine(
@@ -449,7 +449,7 @@ private fun LogLine(
     }
 }
 
-/** 等级徽章：固定宽度、等级色浅底 + 深色文字，logcat 风格。 */
+/** Level badge: fixed width, light level-color background + dark text, logcat style. */
 @Composable
 private fun LogBadge(level: LogLevel) {
     val color = logLevelColor(level)
@@ -472,7 +472,7 @@ private fun LogBadge(level: LogLevel) {
     }
 }
 
-/** 复制按钮：胶囊样式对齐搜索框，点击复制后短暂切换为对勾。 */
+/** Copy button: capsule style aligned with the search field; briefly switches to a checkmark after copying. */
 @Composable
 private fun CopyLogButton(text: String, enabled: Boolean) {
     val clipboard = LocalClipboard.current
@@ -512,7 +512,7 @@ private fun CopyLogButton(text: String, enabled: Boolean) {
     }
 }
 
-/** 日志等级底部面板：6 级单选列表，选中项右侧对勾，底部附文件位置说明。 */
+/** Log level bottom sheet: 6-level single-choice list, checkmark on the right of the selected item, file location note at the bottom. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogLevelSheet(
@@ -584,7 +584,7 @@ private fun LogLevelSheet(
     }
 }
 
-/** 日志文件底部面板：日期列表可滚动选择，选中项右侧对勾。 */
+/** Log file bottom sheet: scrollable date list to choose from, checkmark on the right of the selected item. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogFileSheet(
@@ -645,7 +645,7 @@ private fun LogFileSheet(
     }
 }
 
-/** 日志行长按操作面板：自定义复制范围（本条 / 本条及堆栈 / 仅消息内容）。 */
+/** Log line long-press actions sheet: custom copy scope (this line / this line plus stack / message only). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogLineActionsSheet(
@@ -694,7 +694,7 @@ private fun LogLineActionsSheet(
     }
 }
 
-/** 操作面板行：左侧图标 + 标题，整行可点击。 */
+/** Actions sheet row: icon on the left + title, whole row clickable. */
 @Composable
 private fun LogActionRow(
     icon: ImageVector,
@@ -723,7 +723,7 @@ private fun LogActionRow(
     }
 }
 
-/** 等级主题色：统一使用 LogLevelColors 调色板。 */
+/** Level theme color: uniformly uses the LogLevelColors palette. */
 private fun logLevelColor(level: LogLevel): Color = when (level) {
     LogLevel.VERBOSE -> LogLevelColors.Verbose
     LogLevel.DEBUG -> LogLevelColors.Debug
@@ -733,7 +733,7 @@ private fun logLevelColor(level: LogLevel): Color = when (level) {
     LogLevel.NONE -> LogLevelColors.None
 }
 
-/** 解析后的一条日志。level 为 null 表示非标准日志行（堆栈续行、文件头重置标记等）。 */
+/** One parsed log entry. A null level means a non-standard log line (stack continuation, file-header reset marker, etc.). */
 private data class LogEntry(
     val level: LogLevel?,
     val time: String?,
@@ -742,12 +742,12 @@ private data class LogEntry(
     val raw: String
 )
 
-/** 与 [com.aicode.core.util.FileLogger] 落盘格式匹配：`yyyy-MM-dd HH:mm:ss.SSS LEVEL [TAG] message`。 */
+/** Matches the on-disk format of [com.aicode.core.util.FileLogger]: `yyyy-MM-dd HH:mm:ss.SSS LEVEL [TAG] message`. */
 private val LOG_LINE_REGEX = Regex(
     """^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) (VERBOSE|DEBUG|INFO|WARN|ERROR)(?: \[([^\]]*)\])? (.*)$"""
 )
 
-/** 把日志文本解析为行列表：标准日志行拆出等级/时间/tag/消息，其余行原样保留（堆栈续行、重置标记）。 */
+/** Parses log text into a list of lines: standard log lines are split into level/time/tag/message, other lines are kept as-is (stack continuations, reset markers). */
 private fun parseLogLines(content: String): List<LogEntry> {
     val result = ArrayList<LogEntry>()
     for (line in content.lineSequence()) {
@@ -769,7 +769,7 @@ private fun parseLogLines(content: String): List<LogEntry> {
     return result
 }
 
-/** 日志行显示文本：时间灰、tag 蓝灰、消息主题色；非标准行整行原样。 */
+/** Log line display text: time in gray, tag in blue-gray, message in theme color; non-standard lines are shown as-is for the whole line. */
 private fun LogEntry.displayText(): AnnotatedString {
     val level = level ?: return AnnotatedString(raw)
     return buildAnnotatedString {

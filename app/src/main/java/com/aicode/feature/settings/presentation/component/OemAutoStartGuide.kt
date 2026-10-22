@@ -9,16 +9,16 @@ import android.provider.Settings
 import com.aicode.core.util.FileLogger
 
 /**
- * 厂商自启动管理跳转：国内 ROM（MIUI/EMUI/ColorOS/OriginOS/Flyme）默认禁止应用自启动，
- * 后台进程与前台服务都会被系统回收。设置页「自启动管理」点击后按厂商跳转对应自启动设置页，
- * intent 在对应 ROM 上不可用时回退到本应用详情页（用户可手动开启后台运行/自启动）。
+ * Vendor auto-start management navigation: Chinese ROMs (MIUI/EMUI/ColorOS/OriginOS/Flyme) block apps from auto-starting by default,
+ * and background processes and foreground services are reclaimed by the system. Tapping "Auto-start management" on the settings page navigates to the corresponding vendor auto-start settings page,
+ * and if the intent is unavailable on that ROM, it falls back to this app's details page (where the user can manually enable background running/auto-start).
  */
 object OemAutoStartGuide {
     private const val TAG = "OemAutoStartGuide"
 
     private data class VendorEntry(val component: String, val keywords: List<String>)
 
-    // 各厂商自启动管理页（包名/Activity）。跳转前用 resolveActivity 校验存在性。
+    // Each vendor's auto-start management page (package/Activity). Existence is verified with resolveActivity before navigating.
     private val vendorEntries = listOf(
         VendorEntry(
             "com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity",
@@ -42,7 +42,7 @@ object OemAutoStartGuide {
         )
     )
 
-    /** 尝试跳转厂商自启动管理页；无匹配或跳转失败时回退到应用详情页。 */
+    /** Tries to navigate to the vendor auto-start management page; falls back to the app details page when there is no match or navigation fails. */
     fun openAutoStartSettings(context: Context) {
         val manufacturer = Build.MANUFACTURER.lowercase()
         val entry = vendorEntries.firstOrNull { vendor ->
@@ -56,21 +56,21 @@ object OemAutoStartGuide {
         val (pkg, cls) = component.split("/", limit = 2)
         val intent = Intent().setComponent(ComponentName(pkg, cls))
         if (intent.resolveActivity(context.packageManager) == null) {
-            FileLogger.w(TAG, "自启动设置页不可用: $component")
+            FileLogger.w(TAG, "Auto-start settings page unavailable: $component")
             return false
         }
         return runCatching { context.startActivity(intent) }
-            .onFailure { FileLogger.e(TAG, "跳转自启动设置失败: $component", it) }
+            .onFailure { FileLogger.e(TAG, "Failed to navigate to auto-start settings: $component", it) }
             .isSuccess
     }
 
-    /** 跳转到本应用的系统设置详情页（权限页）。供权限提醒弹窗复用。 */
+    /** Navigates to this app's system settings details page (permissions page). Reused by the permission reminder dialog. */
     internal fun openAppDetails(context: Context) {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.parse("package:${context.packageName}")
         )
         runCatching { context.startActivity(intent) }
-            .onFailure { FileLogger.e(TAG, "跳转应用详情页失败", it) }
+            .onFailure { FileLogger.e(TAG, "Failed to navigate to app details page", it) }
     }
 }

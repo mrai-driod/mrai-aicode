@@ -21,17 +21,17 @@ class CheckpointManager @Inject constructor(
     private val checkpointDao: CheckpointDao,
     private val fileAccess: FileAccessProvider
 ) {
-    // 检查点备份根路径: <filesDir>/checkpoints/<sessionId>/<checkpointId>/
+    // Root path for checkpoint backups: <filesDir>/checkpoints/<sessionId>/<checkpointId>/
     private val baseCheckpointDir: File
         get() = File(context.filesDir, "checkpoints")
 
-    // 活动 checkpoint 必须按会话隔离：多个会话（含父会话与其子代理）会并行跑 workflow，
-    // 用单一字段会被后创建的会话覆盖，导致文件快照挂到别的会话名下，
-    // 那个会话一撤销就会把本会话刚写好的文件还原/删除。
+    // The active checkpoint must be isolated per session: multiple sessions (including a parent session and its sub-agents) run workflows in parallel,
+    // and a single field would be overwritten by a session created later, causing file snapshots to be attached to another session,
+    // so when that session undoes, it would restore/delete files this session has just written.
     private val activeCheckpointIds = ConcurrentHashMap<String, String>()
 
     /**
-     * 在用户发送新消息时调用，创建一个新的 Checkpoint 节点
+     * Called when the user sends a new message; creates a new Checkpoint node
      */
     suspend fun createCheckpoint(
         sessionId: String,
@@ -61,8 +61,8 @@ class CheckpointManager @Inject constructor(
     }
 
     /**
-     * 在工具（editFile/writeFile）将要修改或新建文件前调用。
-     * 若该文件在当前 Checkpoint 周期内未快照过，则保存其原始状态。
+     * Called before a tool (editFile/writeFile) is about to modify or create a file.
+     * If the file has not been snapshotted in the current Checkpoint cycle, its original state is saved.
      */
     suspend fun beforeFileModified(
         sessionId: String,
@@ -70,7 +70,7 @@ class CheckpointManager @Inject constructor(
     ) = withContext(Dispatchers.IO) {
         val checkpointId = activeCheckpointIds[sessionId] ?: return@withContext
 
-        // 查重：同一个 checkpointId 内对同一文件只保留最原始的一次快照
+        // Deduplication: within the same checkpointId, only the earliest snapshot of a given file is kept
         if (checkpointDao.countSnapshot(checkpointId, filePath) > 0) {
             return@withContext
         }
@@ -89,7 +89,7 @@ class CheckpointManager @Inject constructor(
             val originalContent = fileAccess.readFile(filePath)
             snapshotFile.writeText(originalContent)
         } else {
-            snapshotFile.writeText("") // 标示创建空记录
+            snapshotFile.writeText("") // Marks a creation with an empty record
         }
 
         val snapshotEntity = CheckpointFileSnapshotEntity(
@@ -100,11 +100,11 @@ class CheckpointManager @Inject constructor(
             changeType = changeType
         )
         checkpointDao.insertFileSnapshot(snapshotEntity)
-        FileLogger.i(TAG, "快照: session=$sessionId cp=$checkpointId type=$changeType path=$filePath")
+        FileLogger.i(TAG, "Snapshot: session=$sessionId cp=$checkpointId type=$changeType path=$filePath")
     }
 
     /**
-     * 将代码回滚到指定 Checkpoint 节点的初始状态
+     * Rolls the code back to the initial state of the given Checkpoint node
      */
     suspend fun restoreCodeToCheckpoint(
         sessionId: String,
@@ -114,12 +114,12 @@ class CheckpointManager @Inject constructor(
         val targetIndex = allCheckpoints.indexOfFirst { it.id == targetCheckpointId }
         if (targetIndex == -1) return@withContext 0
 
-        // 收集 targetCheckpointId 及其之后所有 Checkpoint 的快照，倒序还原
+        // Collects the snapshots of targetCheckpointId and all Checkpoints after it, and restores them in reverse order
         val checkpointsToRollback = allCheckpoints.subList(targetIndex, allCheckpoints.size).reversed()
         var restoredFileCount = 0
         FileLogger.i(
             TAG,
-            "还原开始: session=$sessionId target=$targetCheckpointId 涉及 ${checkpointsToRollback.size} 个检查点"
+            "Restore started: session=$sessionId target=$targetCheckpointId involving ${checkpointsToRollback.size} checkpoints"
         )
 
         for (cp in checkpointsToRollback) {
@@ -132,24 +132,24 @@ class CheckpointManager @Inject constructor(
                         val content = snapshotFile.readText()
                         fileAccess.writeFile(snapshot.filePath, content, overwrite = true)
                         restoredFileCount++
-                        FileLogger.i(TAG, "还原覆盖: cp=${cp.id} path=${snapshot.filePath}")
+                        FileLogger.i(TAG, "Restore overwrite: cp=${cp.id} path=${snapshot.filePath}")
                     }
                 } else if (snapshot.changeType == "CREATE") {
-                    // 若是原先新建的文件，回滚时安全删除
+                    // If it was a newly created file originally, delete it safely on rollback
                     if (fileAccess.exists(snapshot.filePath)) {
                         fileAccess.delete(snapshot.filePath)
                         restoredFileCount++
-                        FileLogger.i(TAG, "还原删除: cp=${cp.id} path=${snapshot.filePath}")
+                        FileLogger.i(TAG, "Restore delete: cp=${cp.id} path=${snapshot.filePath}")
                     }
                 }
             }
         }
-        FileLogger.i(TAG, "还原结束: session=$sessionId 共处理 $restoredFileCount 个文件")
+        FileLogger.i(TAG, "Restore finished: session=$sessionId processed $restoredFileCount files in total")
         restoredFileCount
     }
 
     /**
-     * 删除 Session 关联的所有 Checkpoint 快照与记录
+     * Deletes all Checkpoint snapshots and records associated with the Session
      */
     suspend fun clearSessionCheckpoints(sessionId: String) = withContext(Dispatchers.IO) {
         activeCheckpointIds.remove(sessionId)

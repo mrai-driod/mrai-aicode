@@ -1,12 +1,12 @@
 package com.aicode.core.util
 
 /**
- * 行级文本差异（LCS）。用于把一次 edit_file 的 old_string→new_string 变更
- * 渲染成「+新增 / −删除 / 上下文」的差异视图，类似 Claude 的 diff 展示。
+ * Line-level text diff (LCS). Used to render an edit_file old_string->new_string change
+ * as a "+added / -removed / context" diff view, similar to Claude's diff display.
  *
- * 统一文本格式：每行第 0 列为标记位（`+` 新增 / `-` 删除 / ` ` 上下文），
- * 其余为原始行内容。这样即便代码本身以 +/- 开头也不会歧义——解析时只取首列作标记、
- * 其余 substring(1) 即原文。
+ * Unified text format: column 0 of each line is the marker (`+` added / `-` removed / ` ` context),
+ * the rest is the original line content. This avoids ambiguity even if the code itself starts with +/- -- when parsing, only the first column is taken as the marker,
+ * and the remaining substring(1) is the original text.
  */
 object LineDiff {
 
@@ -14,14 +14,14 @@ object LineDiff {
 
     data class DiffLine(val type: LineType, val text: String)
 
-    /** 计算 [oldText] → [newText] 的行级差异。 */
+    /** Computes the line-level diff from [oldText] to [newText]. */
     fun diff(oldText: String, newText: String): List<DiffLine> {
         val a = oldText.split("\n")
         val b = newText.split("\n")
         val n = a.size
         val m = b.size
 
-        // LCS 长度表：dp[i][j] = a[i..] 与 b[j..] 的最长公共子序列长度。
+        // LCS length table: dp[i][j] = length of the longest common subsequence of a[i..] and b[j..].
         val dp = Array(n + 1) { IntArray(m + 1) }
         for (i in n - 1 downTo 0) {
             for (j in m - 1 downTo 0) {
@@ -48,7 +48,7 @@ object LineDiff {
         return out
     }
 
-    /** 渲染为统一文本：每行以 `+`/`-`/` ` 起头。 */
+    /** Renders as unified text: each line starts with `+`/`-`/` `. */
     fun toUnified(oldText: String, newText: String): String =
         diff(oldText, newText).joinToString("\n") { line ->
             when (line.type) {

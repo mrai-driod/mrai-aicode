@@ -4,41 +4,41 @@ import com.aicode.core.util.FileLogger
 import com.aicode.feature.workspace.domain.FileAccessProvider
 
 /**
- * 目录型技能源的共享扫描逻辑：递归查找 SKILL.md / CLAUDE.md，
- * 每个含指令文件的目录解析为一个 Skill。
+ * Shared scanning logic for directory-based skill sources: recursively finds SKILL.md / CLAUDE.md,
+ * and parses each directory containing an instruction file into one Skill.
  *
- * 目录经 [FileAccessProvider] 以容器路径访问，本地与远程（SSH）同一套逻辑。
+ * Directories are accessed by container path via [FileAccessProvider], with the same logic for local and remote (SSH).
  */
 object SkillDirectoryScanner {
     private const val TAG = "SkillDirectoryScanner"
 
-    /** 允许一定的嵌套深度（比如 repo/skills/my-skill/SKILL.md）。 */
+    /** Allows some nesting depth (for example repo/skills/my-skill/SKILL.md). */
     private const val MAX_DEPTH = 4
     private const val SKILL_FILE = "SKILL.md"
     private const val CLAUDE_FILE = "CLAUDE.md"
 
     /**
-     * 头部匹配时读取的字符数：frontmatter 只有寥寥几行（name/description/required_tools），
-     * 8K 足够覆盖；超长 frontmatter 截断后匹配不到会走全量回退，不会误判。
+     * Number of characters read for head matching: the frontmatter is only a few lines (name/description/required_tools),
+     * and 8K is enough to cover it; an over-long frontmatter that is truncated and does not match goes through the full fallback, so there is no misjudgement.
      */
     private const val FRONTMATTER_HEAD_CHARS = 8 * 1024
 
-    /** 是否指令文件名（SKILL.md / CLAUDE.md，忽略大小写）。 */
+    /** Whether this is an instruction file name (SKILL.md / CLAUDE.md, case-insensitive). */
     private fun isInstructionFile(relative: String): Boolean {
         val name = relative.substringAfterLast('/')
         return name.equals(SKILL_FILE, ignoreCase = true) || name.equals(CLAUDE_FILE, ignoreCase = true)
     }
 
     /**
-     * 扫描 [root] 目录下所有合法技能，按名称排序。
-     * 目录不存在时返回空列表；扫描过程异常（IO 失败、远程工作区未连接等）时降级为空列表并记日志，
-     * 不向上抛——技能扫描失败不该让调用方（工作区切换、AI 请求）崩溃。
+     * Scans all valid skills under the [root] directory, sorted by name.
+     * Returns an empty list when the directory does not exist; when scanning throws (IO failure, remote workspace not connected, etc.) it degrades to an empty list and logs,
+     * without propagating: a skill scan failure should not crash the caller (workspace switching, AI requests).
      */
     fun scan(provider: FileAccessProvider, root: String): List<Skill> = runCatching {
         val picked = instructionFiles(provider, root)
         if (picked.isEmpty()) return@runCatching emptyList()
 
-        // 一次批量读取（ROOT 通道一次 su 往返取回整批），替代逐个 readFile 的上百次子进程。
+        // One batch read (one su round trip on the ROOT channel fetches the whole batch), instead of the hundreds of subprocesses of reading files one by one with readFile.
         val contents = provider.readFiles(picked.map { it.first })
         picked.mapNotNull { (filePath, dirPath) ->
             val text = contents[filePath] ?: return@mapNotNull null
@@ -46,48 +46,48 @@ object SkillDirectoryScanner {
                 .copy(dirPath = dirPath)
         }.sortedBy { it.name.lowercase() }
     }.getOrElse { e ->
-        FileLogger.w(TAG, "扫描技能目录失败: $root", e)
+        FileLogger.w(TAG, "Failed to scan skill directory: $root", e)
         emptyList()
     }
 
     /**
-     * 精准定位并读取单个技能的正文（loadSkill 专用）：只读各候选文件的**头部**匹配 frontmatter 的
-     * name，命中后再读该文件全文。相比 [scan]「读全部技能全文」，成本从
-     * 「递归列举 + 全量正文批量读」降为「递归列举 + 一批头部读 + 一次全文读」。
+     * Precisely locates and reads a single skill's body (dedicated to loadSkill): it reads only the **head** of each candidate file to match the frontmatter
+     * name, and reads that file in full only after a hit. Compared with [scan] "reading every skill in full", the cost drops from
+     * "recursive listing + batch-reading all bodies" to "recursive listing + one batch of head reads + one full read".
      *
-     * 匹配语义与 [scan] 完全一致：frontmatter 缺 name 时回退目录名；同目录 SKILL.md 优先于 CLAUDE.md。
-     * 头部匹配全部落空时回退 [scan] 全量匹配——frontmatter 超长被截断、或技能确实不存在时
-     * 仍给出与全量扫描一致的结果（技能不存在时这份开销就是一次准确的「未找到」判据）。
+     * The matching semantics are exactly the same as [scan]: when the frontmatter has no name it falls back to the directory name; in the same directory SKILL.md takes priority over CLAUDE.md.
+     * When head matching misses entirely it falls back to a full [scan] match: when an over-long frontmatter was truncated, or the skill genuinely does not exist,
+     * it still gives a result consistent with a full scan (when the skill does not exist, that cost is one accurate "not found" determination).
      */
     fun locateAndRead(provider: FileAccessProvider, root: String, name: String): String? = runCatching {
         val picked = instructionFiles(provider, root)
         if (picked.isEmpty()) return@runCatching null
 
-        // 头部批量读：frontmatter 在文件头，8K 足够；ROOT 通道一次 su 往返取回整批。
+        // Batch head read: the frontmatter is at the head of the file and 8K is enough; one su round trip on the ROOT channel fetches the whole batch.
         val heads = provider.readFileHeads(picked.map { it.first }, FRONTMATTER_HEAD_CHARS)
         for ((filePath, dirPath) in picked) {
             val head = heads[filePath] ?: continue
             val meta = SkillParser.parseText(head, dirPath.substringAfterLast('/').ifBlank { dirPath })
             if (!meta.name.equals(name, ignoreCase = true)) continue
-            // 命中：读全文并用真实 frontmatter 重新解析（头部可能截断了正文与 name 字段）
+            // Hit: read the full text and re-parse with the real frontmatter (the head may have truncated the body and the name field)
             val text = provider.readFiles(listOf(filePath))[filePath] ?: provider.readFile(filePath)
             return@runCatching SkillParser.parseText(text, meta.name).instructions.trim()
         }
-        // 头部匹配不到：回退全量扫描（含「技能不存在」的准确判据）
+        // No head match: fall back to a full scan (including the accurate determination for "skill does not exist")
         scan(provider, root).firstOrNull { it.name.equals(name, ignoreCase = true) }?.instructions
     }.getOrElse { e ->
-        FileLogger.w(TAG, "定位技能失败: $root/$name", e)
+        FileLogger.w(TAG, "Failed to locate skill: $root/$name", e)
         null
     }
 
     /**
-     * 递归列举 [root] 下的指令文件，返回 `(文件容器路径, 目录容器路径)`；
-     * 同目录同时存在 SKILL.md / CLAUDE.md 时与 [scan] 一样只取 SKILL.md。
+     * Recursively lists the instruction files under [root], returning `(file container path, directory container path)`;
+     * when SKILL.md / CLAUDE.md coexist in the same directory, like [scan] it takes only SKILL.md.
      */
     private fun instructionFiles(provider: FileAccessProvider, root: String): List<Pair<String, String>> {
         val base = root.trimEnd('/')
-        // 递归结果里已带文件名（形如 "repo/skills/my-skill/SKILL.md"），直接据此挑出技能文件，
-        // 不再对每个目录回查一次 listFiles——真机 ROOT 通道下那等于每个 skill 多 fork 一个 su 进程。
+        // The recursive results already carry file names (in the form "repo/skills/my-skill/SKILL.md"), so pick the skill files directly from them,
+        // without querying listFiles once per directory again: on a real device's ROOT channel that would fork one extra su process per skill.
         return provider.listFilesRecursive(root, MAX_DEPTH)
             .map { it.removePrefix("./") }
             .filter { isInstructionFile(it) }

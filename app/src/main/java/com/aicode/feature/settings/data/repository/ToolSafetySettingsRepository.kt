@@ -15,20 +15,20 @@ import javax.inject.Singleton
 private val Context.toolSafetyDataStore by preferencesDataStore(name = "tool_safety_prefs")
 
 /**
- * 命令执行授权挡位（作用于 BUILD 模式下 shell 类工具的评估；PLAN/ASK 只读沙盒为物理拦截，不受挡位影响）。
- * - [AUTONOMOUS]：自主执行——由「AI 命令审查器」独立审核每条命令，审查通过直接放行；
- *   审查拒绝/不确定/失败一律转人工审批（拒绝时附审查器给出的危险说明）。
- * - [RULE_BASED]：规则拦截——命中高危拦截规则的命令弹人工确认，其余命令自动执行（默认）。
- * - [FULL_ACCESS]：完全权限——所有命令直接执行，仅保留灾难性删除防护。
+ * Command-execution authorisation level (applies to the evaluation of shell-type tools in BUILD mode; the PLAN/ASK read-only sandbox is a physical block and is not affected by the level).
+ * - [AUTONOMOUS]: Autonomous execution — an "AI command reviewer" independently reviews each command, and commands that pass review are allowed directly;
+ *   a review rejection/uncertainty/failure always falls through to human approval (on rejection, the danger explanation given by the reviewer is attached).
+ * - [RULE_BASED]: Rule-based blocking — commands matching a high-risk blocking rule prompt for human confirmation, all other commands execute automatically (default).
+ * - [FULL_ACCESS]: Full access — all commands execute directly, keeping only catastrophic-deletion protection.
  */
 enum class CommandAuthLevel { AUTONOMOUS, RULE_BASED, FULL_ACCESS }
 
 /**
- * 持久化「禁用安全拦截」开关，默认关闭。
+ * Persists the "disable safety interception" switch, off by default.
  *
- * 开启后，所有模式下连灾难性 `rm`（删除根目录、系统关键目录、工作区根目录等）
- * 也不再拦截，命令一律放行，`Shizuku` 工具也不再逐次弹窗。PLAN/ASK 的写操作
- * 物理沙盒不受影响（那是模式级硬拒绝，不是本开关的可选项）。
+ * When on, even catastrophic `rm` commands (deleting the root directory, critical system directories, the workspace root, etc.) are no longer
+ * blocked in any mode, all commands are allowed, and the `Shizuku` tool no longer prompts each time. PLAN/ASK write operations'
+ * physical sandbox is unaffected (that is a mode-level hard rejection, not an option controlled by this switch).
  */
 @Singleton
 class ToolSafetySettingsRepository @Inject constructor(
@@ -39,7 +39,7 @@ class ToolSafetySettingsRepository @Inject constructor(
         val AUTH_LEVEL_KEY = stringPreferencesKey("command_auth_level")
     }
 
-    /** 当前开关流；未设置时回退到 false（默认保留安全拦截）。 */
+    /** Flow of the current switch value; falls back to false when unset (safety interception is kept by default). */
     val disableSafetyInterceptionFlow: Flow<Boolean> =
         context.toolSafetyDataStore.data.map { it[DISABLED_KEY] ?: false }
 
@@ -47,10 +47,10 @@ class ToolSafetySettingsRepository @Inject constructor(
         context.toolSafetyDataStore.edit { it[DISABLED_KEY] = disabled }
     }
 
-    /** 读取一次当前值（权限评估时用）。 */
+    /** Reads the current value once (used during permission evaluation). */
     suspend fun isSafetyInterceptionDisabled(): Boolean = disableSafetyInterceptionFlow.first()
 
-    /** 当前命令授权挡位流；未设置时回退 [CommandAuthLevel.RULE_BASED]（规则拦截）。 */
+    /** Flow of the current command authorisation level; falls back to [CommandAuthLevel.RULE_BASED] (rule-based blocking) when unset. */
     val commandAuthLevelFlow: Flow<CommandAuthLevel> =
         context.toolSafetyDataStore.data.map { prefs ->
             prefs[AUTH_LEVEL_KEY]?.let { runCatching { CommandAuthLevel.valueOf(it) }.getOrNull() }
@@ -61,6 +61,6 @@ class ToolSafetySettingsRepository @Inject constructor(
         context.toolSafetyDataStore.edit { it[AUTH_LEVEL_KEY] = level.name }
     }
 
-    /** 读取一次当前挡位（权限评估时用）。 */
+    /** Reads the current level once (used during permission evaluation). */
     suspend fun getCommandAuthLevel(): CommandAuthLevel = commandAuthLevelFlow.first()
 }

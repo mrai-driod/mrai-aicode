@@ -4,8 +4,8 @@ import com.aicode.R
 import javax.inject.Inject
 
 /**
- * /compress —— 手动触发当前会话的上下文压缩，
- * 复用 ContextCompactor 的压缩逻辑。
+ * /compress - manually triggers context compaction for the current session,
+ * reusing ContextCompactor's compaction logic.
  */
 class CompressCommandHandler @Inject constructor() : ActionCommandHandler {
     override val name = "compress"

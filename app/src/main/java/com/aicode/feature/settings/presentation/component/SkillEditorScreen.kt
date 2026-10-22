@@ -43,13 +43,13 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.ArrowLeft
 
 /**
- * 技能新建/编辑页：自带顶栏（与 [SubAgentEditorScreen] 一致，不能嵌进设置页的 Scaffold）。
+ * Skill create/edit screen: has its own top bar (consistent with [SubAgentEditorScreen]; cannot be nested inside the settings page's Scaffold).
  *
- * 表单字段对应 `SKILL.md` 的 frontmatter 与正文，保存时由 SkillParser.serialize 写回文件，
- * 所以在 App 内建的技能与手写的技能完全等价，可继续用文本编辑器改。
+ * The form fields correspond to the frontmatter and body of `SKILL.md`; on save, SkillParser.serialize writes them back to the file,
+ * so skills created in the App are fully equivalent to hand-written skills and can continue to be edited with a text editor.
  *
- * @param initial 编辑目标；null 表示新建。
- * @param onSaved 保存成功后回调，带回存盘后的名称（改过名就是新名），供调用方定位详情页。
+ * @param initial the edit target; null means create new.
+ * @param onSaved callback after a successful save, carrying back the saved name (the new name if renamed), so the caller can locate the detail page.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,7 +171,7 @@ internal fun SkillEditorScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        // 作用域决定技能目录落在哪儿，改已有技能的作用域等于搬目录，这里只允许新建时选。
+                        // The scope determines where the skill directory lives; changing the scope of an existing skill would mean moving its directory, so selection is only allowed when creating a new skill.
                         FilterChip(
                             selected = !scopeIsGlobal,
                             enabled = initial == null,

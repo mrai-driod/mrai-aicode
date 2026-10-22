@@ -12,14 +12,14 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 项目级 `.aicode` 配置目录的归属解析。
+ * Ownership resolution for the project-level `.aicode` config directory.
  *
- * - 本地模式：配置随工作区走（`<workspacePath>/.aicode`），可被 AI 直接编辑、可 git 追踪；
- * - 远程模式：工作区在 SSH 服务器上，[java.io.File] 无法在本地创建该目录（写入必失败），
- *   故改存 App 私有目录 `filesDir/aicode/projects/<项目名-标识哈希>/`。标识基于
- *   「IP:端口:远程路径」，不同服务器上的同名路径不会互相覆盖。
+ * - Local mode: config travels with the workspace (`<workspacePath>/.aicode`), can be edited directly by AI and tracked by git;
+ * - Remote mode: the workspace is on an SSH server and [java.io.File] cannot create that directory locally (writes would always fail),
+ *   so it is stored instead in the app-private directory `filesDir/aicode/projects/<project name-identifier hash>/`. The identifier is based on
+ *   "IP:port:remote path", so same-named paths on different servers do not overwrite each other.
  *
- * 与项目级记忆 [com.aicode.feature.agent.domain.memory.ProjectMemorySource] 使用同一套标识算法。
+ * Uses the same identifier algorithm as project-level memory [com.aicode.feature.agent.domain.memory.ProjectMemorySource].
  */
 @Singleton
 class ProjectAicodeRoot @Inject constructor(
@@ -28,10 +28,10 @@ class ProjectAicodeRoot @Inject constructor(
     private val containerInstaller: ContainerInstaller,
     private val remoteSshConnection: RemoteSshConnection
 ) {
-    /** 当前工作区的项目级配置目录。 */
+    /** Project-level config directory for the current workspace. */
     fun current(): File = forPath(workspaceRepository.currentPath())
 
-    /** 指定工作区路径对应的项目级配置目录。 */
+    /** Project-level config directory for the given workspace path. */
     fun forPath(workspacePath: String): File =
         if (isRemote()) {
             File(File(containerInstaller.aicodeDir, PROJECTS_DIR), projectKey(workspacePath))
@@ -39,7 +39,7 @@ class ProjectAicodeRoot @Inject constructor(
             File(workspacePath, AICODE_DIR)
         }
 
-    /** 远程项目级资源在私有目录下的标识：项目名 + 「IP:端口:路径」哈希前 8 位。 */
+    /** Identifier for remote project-level resources in the private directory: project name + first 8 characters of the "IP:port:path" hash. */
     fun projectKey(workspacePath: String): String {
         val name = workspacePath.trimEnd('/').substringAfterLast('/').ifBlank { "default" }
         val cfg = remoteSshConnection.config

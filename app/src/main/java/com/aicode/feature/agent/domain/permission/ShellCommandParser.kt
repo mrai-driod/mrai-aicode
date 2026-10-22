@@ -1,28 +1,29 @@
 package com.aicode.feature.agent.domain.permission
 
 /**
- * shell 命令的安全静态分析器——授权系统的安全核心。
+ * Safe static analyzer for shell commands — the security core of the authorization system.
  *
- * 职责：把一条命令行拆成「顶层段」并分词，同时判断这条命令是否**可被静态判定**。
- * 自动放行只在「可判定 且 每一段都命中 ALLOW 规则」时发生；任何无法静态判定的构造都把命令
- * 降级为「必须弹窗、不可记忆」，避免授权被绕过。
+ * Responsibility: split a command line into "top-level segments" and tokenize it, while also judging whether
+ * the command **can be statically analyzed**. Auto-allow only happens when the command is "analyzable and every
+ * segment hits an ALLOW rule"; any construct that cannot be statically analyzed downgrades the command to
+ * "must show a dialog, cannot be remembered", preventing authorization bypasses.
  *
- * 安全约定（务必维持）：
- * - 引号感知：单/双引号内的 `&& || | ;` 等不视为分隔符，不会被错误拆段。
- * - 不可静态判定（[Analysis.analyzable] = false）的触发条件：
- *     · 命令替换 `$(...)`、反引号 `` `...` ``（双引号内仍生效，单引号内不生效）；
- *     · 子shell/分组括号 `(` `)`、进程替换 `<(` `>(`（均以裸 `(` 命中）；
- *     · 输出重定向到**绝对路径**（`> /...`、`>> /...`，含引号包裹的绝对路径）——可绕过 cwd 写到工作区外；
- *     · 未闭合的引号。
- *   相对重定向（落在 cwd=工作区内）视为安全。输入重定向 `<` 不触发（读取风险较低）。
- * - 匹配按**字面首 token**：`/usr/bin/node` 不会被 `node` 规则命中（宁可多问，不误放）。
- * - 段首的环境赋值（`FOO=bar cmd`）在取程序名/匹配时被跳过，使 `FOO=bar git ...` 仍按 `git` 处理。
+ * Safety conventions (must be maintained):
+ * - Quote-aware: `&& || | ;` etc. inside single/double quotes are not treated as separators and are not split by mistake.
+ * - Triggers for "not statically analyzable" ([Analysis.analyzable] = false):
+ *     · Command substitution `$(...)`, backticks `` `...` `` (still effective inside double quotes, not inside single quotes);
+ *     · Subshell/grouping parentheses `(` `)`, process substitution `<(` `>(` (all hit by a bare `(`);
+ *     · Output redirection to an **absolute path** (`> /...`, `>> /...`, including quoted absolute paths) — can bypass the cwd and write outside the workspace;
+ *     · Unclosed quotes.
+ *   Relative redirects (landing in cwd = inside the workspace) are treated as safe. Input redirection `<` does not trigger (read risk is lower).
+ * - Matching is by the **literal first token**: `/usr/bin/node` is not hit by a `node` rule (rather ask too often than allow by mistake).
+ * - Environment assignments at the start of a segment (`FOO=bar cmd`) are skipped when taking the program name / matching, so `FOO=bar git ...` is still handled as `git`.
  */
 object ShellCommandParser {
 
     /**
-     * @param segments 顶层每一段的 token 列表（已去引号、按空白分词；重定向算子不入 token）。
-     * @param analyzable 是否可静态判定；false 表示永不自动放行/记忆，只能单次放行。
+     * @param segments The token list of each top-level segment (quotes removed, split on whitespace; redirection operators are not included as tokens).
+     * @param analyzable Whether the command can be statically analyzed; false means it is never auto-allowed/remembered and can only be allowed for a single use.
      */
     data class Analysis(
         val segments: List<List<String>>,
@@ -33,7 +34,7 @@ object ShellCommandParser {
     private const val SINGLE = 1
     private const val DOUBLE = 2
 
-    /** 段首环境赋值形如 `NAME=value`。 */
+    /** An environment assignment at the start of a segment, of the form `NAME=value`. */
     private val ENV_ASSIGN = Regex("^[A-Za-z_][A-Za-z0-9_]*=.*$")
 
     fun analyze(command: String): Analysis {
@@ -43,7 +44,7 @@ object ShellCommandParser {
         var tokenStarted = false
         var analyzable = true
         var quote = NONE
-        // 上一个算子是输出重定向（`>`/`>>`）时为 true：下一个 token 若是绝对路径则判定为不可静态判定。
+        // True when the previous operator was an output redirect (`>`/`>>`): if the next token is an absolute path, the command is judged not statically analyzable.
         var expectRedirectTarget = false
         var i = 0
         val n = command.length
@@ -78,7 +79,7 @@ object ShellCommandParser {
                 DOUBLE -> {
                     when {
                         c == '"' -> { quote = NONE; tokenStarted = true; i++ }
-                        // 双引号内命令替换/反引号仍会执行 → 不可静态判定。
+                        // Command substitution/backticks inside double quotes still execute -> not statically analyzable.
                         c == '`' -> { analyzable = false; token.append(c); tokenStarted = true; i++ }
                         c == '$' && i + 1 < n && command[i + 1] == '(' -> {
                             analyzable = false; token.append(c); tokenStarted = true; i++
@@ -86,27 +87,27 @@ object ShellCommandParser {
                         else -> { token.append(c); tokenStarted = true; i++ }
                     }
                 }
-                else -> { // 引号外
+                else -> { // Outside quotes
                     when {
                         c == '\'' -> { quote = SINGLE; tokenStarted = true; i++ }
                         c == '"' -> { quote = DOUBLE; tokenStarted = true; i++ }
                         c == '\\' -> {
-                            // 行末续行 `\<newline>`：整体跳过；其余转义取下一字符字面值。
+                            // Line continuation `\<newline>` at end of line: skip as a whole; other escapes take the next character literally.
                             if (i + 1 < n) {
                                 val nx = command[i + 1]
                                 if (nx != '\n') { token.append(nx); tokenStarted = true }
                                 i += 2
                             } else i++
                         }
-                        // 反引号 / 分组括号 / 进程替换 `<( >(`（均含裸 `(`）→ 不可静态判定。
+                        // Backticks / grouping parentheses / process substitution `<( >(` (all containing a bare `(`) -> not statically analyzable.
                         c == '`' || c == '(' || c == ')' -> {
                             analyzable = false; token.append(c); tokenStarted = true; i++
                         }
-                        // 顶层段分隔符。
+                        // Top-level segment separator.
                         c == '\n' || c == ';' -> { flushSegment(); i++ }
                         c == '&' -> { flushSegment(); i += if (i + 1 < n && command[i + 1] == '&') 2 else 1 }
                         c == '|' -> { flushSegment(); i += if (i + 1 < n && command[i + 1] == '|') 2 else 1 }
-                        // 重定向：算子本身不入 token；输出重定向标记，待目标 token 判定是否绝对路径。
+                        // Redirection: the operator itself is not a token; output redirects are flagged, pending a check of whether the target token is an absolute path.
                         c == '>' -> { flushToken(); i += if (i + 1 < n && command[i + 1] == '>') 2 else 1; expectRedirectTarget = true }
                         c == '<' -> { flushToken(); i++ }
                         c.isWhitespace() -> { flushToken(); i++ }
@@ -115,25 +116,26 @@ object ShellCommandParser {
                 }
             }
         }
-        if (quote != NONE) analyzable = false // 未闭合引号：不可信
+        if (quote != NONE) analyzable = false // Unclosed quote: not trustworthy
         flushSegment()
         return Analysis(segments, analyzable)
     }
 
-    /** 跳过段首环境赋值后的有效 token（用于取程序名与匹配）。 */
+    /** The effective tokens after skipping leading environment assignments (used to get the program name and for matching). */
     private fun effectiveTokens(tokens: List<String>): List<String> {
         var idx = 0
         while (idx < tokens.size && ENV_ASSIGN.matches(tokens[idx])) idx++
         return if (idx == 0) tokens else tokens.subList(idx, tokens.size)
     }
 
-    /** 该段默认记忆的命令前缀 = 程序名 token；空段返回 null。 */
+    /** The command prefix remembered by default for this segment = the program-name token; returns null for an empty segment. */
     fun programPrefix(tokens: List<String>): String? = effectiveTokens(tokens).firstOrNull()
 
     /**
-     * 已知的「子命令分发器」程序：其第一个非 flag 参数是子命令（`git pull`/`npm install`/`cargo build`）。
-     * 对这类程序，「始终允许」应连子命令一起记忆，避免仅记 `git` 就把 `git push`/`git reset --hard` 等
-     * 一并放行。非分发器程序仍按程序名整体记忆（`cat`/`ls` 等）。
+     * Known "subcommand dispatcher" programs: their first non-flag argument is a subcommand (`git pull`/`npm install`/`cargo build`).
+     * For these programs, "Always allow" should remember the subcommand along with the program, to avoid remembering
+     * only `git` and thereby also allowing `git push`/`git reset --hard` etc. Non-dispatcher programs are still
+     * remembered by program name as a whole (`cat`/`ls` etc.).
      */
     private val SUBCOMMAND_DISPATCHERS = setOf(
         "git", "gh",
@@ -155,7 +157,7 @@ object ShellCommandParser {
         val targetPaths: List<String>
     )
 
-    /** 解析该命令段是否为 rm 删除操作及其参数信息（是否递归、通配以及操作目标路径）。 */
+    /** Parses whether this command segment is an rm deletion operation, and its argument info (whether recursive, whether it has wildcards, and the target paths). */
     fun parseRmInfo(tokens: List<String>): RmInfo {
         val eff = effectiveTokens(tokens)
         val program = eff.firstOrNull()
@@ -187,14 +189,16 @@ object ShellCommandParser {
     }
 
     /**
-     * 「始终允许」可记忆的命令前缀：
-     * - rm 命令精细处理：递归/通配符删除不可记忆；普通单文件删除精细记忆为完整命令前缀；
-     * - 非分发器程序：仅程序名（`cat`/`ls`），与 [programPrefix] 一致；
-     * - 子命令分发器：程序名 + 紧随其后的第一个非 flag 子命令（`git pull`/`git clone`/`npm install`），
-     *   程序名后紧跟 flag（如 `git --version`）时退化为仅程序名。空段返回 null。
+     * The command prefix that "Always allow" can remember:
+     * - rm commands get fine-grained handling: recursive/wildcard deletions cannot be remembered; an ordinary
+     *   single-file deletion is remembered precisely as the full command prefix;
+     * - Non-dispatcher programs: only the program name (`cat`/`ls`), consistent with [programPrefix];
+     * - Subcommand dispatchers: program name + the first non-flag subcommand immediately following it
+     *   (`git pull`/`git clone`/`npm install`); when a flag immediately follows the program name (e.g. `git --version`)
+     *   it degrades to just the program name. Returns null for an empty segment.
      *
-     * 匹配仍走 [matches] 的 token 前缀语义：`git pull` 命中 `git pull origin main`，但不命中 `git clone`，
-     * 故不同子命令各自独立记忆、互不串放。
+     * Matching still uses the token-prefix semantics of [matches]: `git pull` matches `git pull origin main`, but
+     * not `git clone`, so different subcommands are each remembered independently and do not cross-allow each other.
      */
     fun rememberablePrefix(tokens: List<String>): String? {
         val eff = effectiveTokens(tokens)
@@ -211,7 +215,7 @@ object ShellCommandParser {
         return "$program $subcommand"
     }
 
-    /** token 前缀匹配：规则 [pattern] 的 token 序列是该段有效 token 序列的前缀即命中。 */
+    /** Token-prefix matching: a match occurs when the token sequence of the rule [pattern] is a prefix of this segment's effective token sequence. */
     fun matches(pattern: String, segmentTokens: List<String>): Boolean {
         val patternTokens = pattern.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (patternTokens.isEmpty()) return false

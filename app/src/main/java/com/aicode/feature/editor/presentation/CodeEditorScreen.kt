@@ -89,8 +89,10 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 import kotlin.math.abs
 
 /**
- * 独立全屏代码编辑页。支持语法高亮、撤销/重做、底部符号快捷栏与保存。
- * 保存直接覆盖写回，不做外部并发写检测——AI 工具或终端可能同时改同一文件。
+ * Standalone full-screen code editing page. Supports syntax highlighting, undo/redo,
+ * a bottom symbol shortcut bar, and saving.
+ * Saving overwrites the file directly, with no external concurrent-write detection --
+ * AI tools or the terminal may modify the same file at the same time.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,7 +110,7 @@ fun CodeEditorScreen(
     var canUndo by remember { mutableStateOf(false) }
     var canRedo by remember { mutableStateOf(false) }
     var dirty by remember { mutableStateOf(false) }
-    // 已保存（或刚加载）的内容。脏标记按与它的差异判定，撤销回原样时才能自行复位。
+    // The saved (or just loaded) content. The dirty flag is determined by the difference from it, so undoing back to the original can reset it automatically.
     val baselineText = remember { mutableStateOf("") }
     var pendingSaveText by remember { mutableStateOf("") }
     var pendingExit by remember { mutableStateOf(false) }
@@ -124,7 +126,7 @@ fun CodeEditorScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
 
-    // 切换文件时重置编辑态，避免旧文件的撤销/脏标记残留到新文件。
+    // Resets editing state when switching files, to avoid the previous file's undo/dirty state carrying over to the new file.
     LaunchedEffect(path) {
         canUndo = false
         canRedo = false
@@ -298,8 +300,8 @@ fun CodeEditorScreen(
                     }
                 )
                 if (previewMode) {
-                    // 预览覆盖在编辑器上方（编辑器保留在组合中不销毁，切回源码不丢状态）。
-                    // 进入预览时快照编辑器当前文本，确保反映未保存的编辑。
+                    // The preview overlays on top of the editor (the editor stays in the composition and is not destroyed, so switching back to source does not lose state).
+                    // When entering preview, snapshot the editor's current text to ensure unsaved edits are reflected.
                     val previewText = remember(previewMode) {
                         editorRef.value?.text?.toString() ?: s.content
                     }
@@ -357,7 +359,7 @@ fun CodeEditorScreen(
     }
 }
 
-/** 导航栏下方的文件名小栏：左侧文件名（未保存时名前加星号），右侧行:列与文件编码。 */
+/** Small file name bar below the navigation bar: file name on the left (with an asterisk prefix when unsaved), line:column and file encoding on the right. */
 @Composable
 private fun FileTitleBar(fileName: String, dirty: Boolean, line: Int, column: Int) {
     Row(
@@ -412,11 +414,11 @@ private fun EditorSurface(
     onCursorChanged: (line: Int, column: Int) -> Unit,
     onContentChanged: (canUndo: Boolean, canRedo: Boolean, dirty: Boolean) -> Unit
 ) {
-    // 与实际渲染出的 Compose 主题保持一致，而非跟随系统设置——应用内可单独切换主题。
+    // Stays consistent with the Compose theme actually rendered, rather than following the system setting -- the theme can be switched separately within the app.
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val themeSurface = MaterialTheme.colorScheme.surface
-    // sora 的语法分析在后台线程跑，首帧必然还没上色。用一次渐显护住这段窗口，
-    // 把「先纯文本后突然上色」的跳变变成内容渐现。
+    // sora's grammar analysis runs on a background thread, so the first frame is inevitably not yet colored. Use a single fade-in to cover this window,
+    // turning the "plain text first, then suddenly colored" jump into a gradual content reveal.
     var revealed by remember(state.content) { mutableStateOf(false) }
     LaunchedEffect(state.content) { revealed = true }
     val contentAlpha by animateFloatAsState(
@@ -425,20 +427,20 @@ private fun EditorSurface(
         label = "editor-reveal"
     )
 
-    // 用户自己滚过之后就不再自动定位到目标行。View 只创建一次，标记要用实例稳定的 State
-    // 承载（factory 闭包捕获的是首次那个实例），换文件时由下面的 effect 显式复位。
+    // After the user has scrolled themselves, no longer automatically jump to the target line. The View is created only once, so the flag must be held in
+    // instance-stable State (the factory closure captures the first instance), and is explicitly reset by the effect below when the file changes.
     val scrolledByUser = remember { mutableStateOf(false) }
 
     AndroidView(
         modifier = modifier.graphicsLayer { alpha = contentAlpha },
         factory = { ctx ->
             TextMateSetup.applyTheme(dark)
-            // sora 默认把 8 秒内的连续输入并成一条撤销记录，一次撤销会吞掉整段输入。
+            // By default sora merges continuous input within 8 seconds into a single undo record, so one undo would swallow an entire stretch of input.
             UndoManager.setMergeTimeLimit(UNDO_MERGE_WINDOW_MS)
             CodeEditor(ctx).apply {
-                // sora 的 getScrollMaxY() 在 LayoutParams 为空或高度是 WRAP_CONTENT 时会跳过
-                // verticalExtraSpaceFactor，底部额外滚动空间（下面那行设的半屏留白）就没了。
-                // Compose 的 AndroidView 添加子 View 时用的正是默认 WRAP_CONTENT，必须显式改掉。
+                // sora's getScrollMaxY() skips verticalExtraSpaceFactor when LayoutParams is null or the height is WRAP_CONTENT,
+                // so the extra scroll space at the bottom (the half-screen blank space set on the line below) would be lost.
+                // Compose's AndroidView uses the default WRAP_CONTENT when adding child Views, so it must be changed explicitly.
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -447,11 +449,11 @@ private fun EditorSurface(
                 typefaceText = Typeface.MONOSPACE
                 setTextSize(settings.fontSizeSp.toFloat())
                 setWordwrap(settings.wordWrap)
-                // 关闭光标移动动画：切换行/列时当前行高亮原位消失、目标位出现，不逐行滑动。
+                // Disables the cursor movement animation: when switching line/column, the current line highlight disappears in place and appears at the target position, without sliding line by line.
                 isCursorAnimationEnabled = false
-                // 行号左侧固定预留一点间距，避免数字贴边。
+                // Reserves a fixed small margin to the left of line numbers, to keep digits from touching the edge.
                 setLineNumberMarginLeft(spToPx(ctx, LINE_NUMBER_MARGIN_SP))
-                // 滚到底后仍可再上滑一段：额外视口空间为半屏（sora 默认值，显式固定）。
+                // After scrolling to the bottom, can still scroll up a bit further: the extra viewport space is half a screen (sora's default value, explicitly pinned).
                 verticalExtraSpaceFactor = VERTICAL_EXTRA_SPACE_FACTOR
                 isBlockLineEnabled = settings.showIndentGuide
                 nonPrintablePaintingFlags =
@@ -462,12 +464,12 @@ private fun EditorSurface(
                 state.scopeName?.let { scope ->
                     setEditorLanguage(TextMateLanguage.create(scope, false))
                 }
-                // 先 setText 再订阅：初始设置不计入脏标记，只有用户后续编辑才触发。
+                // Call setText before subscribing: the initial set does not count toward the dirty flag; only subsequent user edits trigger it.
                 setText(state.content)
                 val editorView = this
                 subscribeAlways(ContentChangeEvent::class.java) {
-                    // UndoManager 先改文本、后移动栈指针，事件回调里同帧读 canUndo/canRedo 拿到的
-                    // 是移动前的旧值（撤销后重做键不亮、撤销到底后撤销键仍亮），延后一帧才准。
+                    // UndoManager changes the text first, then moves the stack pointer, so reading canUndo/canRedo in the same frame
+                    // inside the event callback returns the old values from before the move (after undo the redo button does not light up, after undoing to the bottom the undo button still lights up); deferring by one frame makes it accurate.
                     editorView.post {
                         val baseline = baselineText.value
                         val text = editorView.text
@@ -482,9 +484,9 @@ private fun EditorSurface(
                     onCursorChanged(cursor.leftLine + 1, cursor.leftColumn + 1)
                 }
                 subscribeAlways(ScrollEvent::class.java) { event ->
-                    // sora 在尺寸变化后会经 touchHandler 做一次滚动 clamp，事件 cause 同样是
-                    // CAUSE_USER_DRAG 但首尾坐标相同（y=0->0）。编辑器刚打开就会连发几条这种
-                    // 零位移事件，只看 cause 会把它们当成「用户已手动滚动」而放弃行号定位。
+                    // After a size change, sora performs a scroll clamp via touchHandler, and the event cause is likewise
+                    // CAUSE_USER_DRAG but with identical start and end coordinates (y=0->0). Right after the editor opens it fires several such
+                    // zero-displacement events in a row; looking only at the cause would treat them as "user has manually scrolled" and give up on line-number positioning.
                     val moved = event.startY != event.endY || event.startX != event.endX
                     if (moved &&
                         (event.cause == ScrollEvent.CAUSE_USER_DRAG ||
@@ -504,7 +506,7 @@ private fun EditorSurface(
 
     LaunchedEffect(state.content) { baselineText.value = state.content }
 
-    // 深浅主题切换时重设配色，而非重建编辑器——保住未保存内容与撤销栈。
+    // When the light/dark theme switches, reset the color scheme instead of rebuilding the editor -- preserving unsaved content and the undo stack.
     val editor = editorRef.value
     LaunchedEffect(dark, themeSurface, editor) {
         editor ?: return@LaunchedEffect
@@ -521,14 +523,14 @@ private fun EditorSurface(
     LaunchedEffect(settings.wordWrap, editor) {
         editor?.setWordwrap(settings.wordWrap)
     }
-    // 从聊天区链接带行号打开时跳到目标行并滚动到可视区（行号 1 基，sora 为 0 基）。
+    // When opened from a chat-area link with a line number, jump to the target line and scroll it into the visible area (line numbers are 1-based, sora is 0-based).
     //
-    // 必须等编辑器完成首次布局：ensurePositionVisible 按 getHeight() 算滚动量，而 onSizeChanged
-    // 会按新尺寸 clamp 滚动偏移、自动换行下还会重建整个布局——宽高仍为 0 时跳的那一下会被随后的
-    // 首次布局抹掉，表现就是「停在文件开头没跳过去」。
+    // Must wait for the editor to complete its first layout: ensurePositionVisible calculates the scroll amount from getHeight(), while onSizeChanged
+    // clamps the scroll offset to the new size and, with word wrap, also rebuilds the entire layout -- a jump made while width/height are still 0 would be erased by the subsequent
+    // first layout, manifesting as "stays at the start of the file and never jumped".
     //
-    // 字号与自动换行读自 DataStore，真实值往往比首帧晚到，setTextSize / setWordwrap 同样重建布局
-    // 打乱位置，所以它们也进 key 重新定位一次；用户自己滚动过之后（scrolledByUser）不再拽回目标行。
+    // Font size and word wrap are read from DataStore, and the real values often arrive later than the first frame; setTextSize / setWordwrap likewise rebuild the layout
+    // and disturb the position, so they are also included in the key to reposition once; after the user has scrolled themselves (scrolledByUser), do not pull back to the target line again.
     LaunchedEffect(state.content, initialLine) { scrolledByUser.value = false }
     LaunchedEffect(editor, initialLine, state.content, settings.wordWrap, settings.fontSizeSp) {
         val editorView = editor ?: return@LaunchedEffect
@@ -544,8 +546,8 @@ private fun EditorSurface(
             return@LaunchedEffect
         }
         val line = (initialLine - 1).coerceIn(0, (editorView.lineCount - 1).coerceAtLeast(0))
-        // 定位后校验目标行是否真的停在期望位置，没停上就重试：布局重建（设置迟到、语法
-        // 分析完成、自动换行重排）会把刚定好的位置冲掉，单次定位不够。
+        // After positioning, verify that the target line really stopped at the expected position, and retry if it did not: layout rebuilds (late-arriving settings, grammar
+        // analysis completion, word-wrap reflow) can wash away the position just set, so a single positioning attempt is not enough.
         var attempt = 0
         while (attempt < LINE_JUMP_MAX_ATTEMPTS && !scrolledByUser.value) {
             editorView.setSelection(line, 0)
@@ -553,7 +555,7 @@ private fun EditorSurface(
             if (desired != null) {
                 scrollVerticallyTo(editorView, desired)
             } else {
-                // 拿不到布局信息时退回官方的「仅保证可见」，无动画避免被布局重建打断在半路。
+                // When layout information is unavailable, fall back to the official "ensure visible only" behaviour, without animation to avoid being interrupted mid-way by a layout rebuild.
                 editorView.ensurePositionVisible(line, 0, true)
             }
             repeat(LINE_JUMP_VERIFY_FRAMES) { withFrameNanos { } }
@@ -662,10 +664,10 @@ private fun HintText(text: String) {
 }
 
 /**
- * 给编辑器底色掺入当前主题的表面色。
+ * Blends the current theme's surface color into the editor's background color.
  *
- * TextMate 主题的背景（Dark+ 的 #1E1E1E、Light+ 的纯白）是照 VSCode 的中性色调的，
- * 原样使用会让编辑器在带色温的主题下明显脱离其余界面。保留一成原色以维持编辑区的基调。
+ * The TextMate theme backgrounds (Dark+'s #1E1E1E, Light+'s pure white) follow VSCode's neutral tones;
+ * using them as-is would make the editor stand out noticeably from the rest of the UI under a color-temperature theme. Retain ten percent of the original color to preserve the editing area's tone.
  */
 private fun applyThemedBackground(editor: CodeEditor, themeSurface: Color) {
     val scheme = editor.colorScheme
@@ -683,13 +685,13 @@ private fun applyLineNumberBackground(editor: CodeEditor, dark: Boolean) {
     scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, lerp(base, target, 0.08f).toArgb())
 }
 
-/** 行号 gutter 背景与编辑区拉开一点亮度差便于区分。基于编辑器背景色自适应，随主题走。 */
+/** Creates a slight brightness difference between the line-number gutter background and the editing area for easier distinction. Adapts based on the editor background color and follows the theme. */
 
-/** 把 sp 换算为像素，用于行号左边距等需 px 的 sora API。 */
+/** Converts sp to pixels, for sora APIs that need px such as the line-number left margin. */
 private fun spToPx(context: android.content.Context, sp: Float): Float =
     TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, context.resources.displayMetrics)
 
-/** 根据“显示空白符号”与“显示自动换行箭头”开关合成 sora 的非打印字符绘制标志。 */
+/** Combines sora's non-printable character drawing flags from the "show whitespace" and "show wrap arrow" toggles. */
 private fun nonPrintableFlags(showWhitespace: Boolean, showWrapArrow: Boolean): Int {
     var flags = 0
     if (showWhitespace) {
@@ -705,7 +707,7 @@ private fun nonPrintableFlags(showWhitespace: Boolean, showWrapArrow: Boolean): 
     return flags
 }
 
-/** 符号栏方向键：把光标水平移动一个字符，跨越行首/行尾时换到相邻行。 */
+/** Symbol bar direction keys: moves the cursor horizontally by one character, wrapping to the adjacent line when crossing the start/end of a line. */
 private fun moveCursorHorizontally(editor: CodeEditor, forward: Boolean) {
     val cursor = editor.cursor
     val line = cursor.leftLine
@@ -724,7 +726,7 @@ private fun moveCursorHorizontally(editor: CodeEditor, forward: Boolean) {
     }
 }
 
-/** 底部快捷栏的常用符号，点击在光标处插入。 */
+/** Common symbols for the bottom shortcut bar; tapping inserts at the cursor. */
 private val EDITOR_SYMBOLS = listOf(
     "{", "}", "(", ")", "[", "]", "<", ">",
     "=", "+", "-", "*", "/", "\\",
@@ -732,48 +734,48 @@ private val EDITOR_SYMBOLS = listOf(
     "|", "&", "!", "?", "@", "#", "\$", "%"
 )
 
-/** 内容渐显时长：给后台语法分析留出窗口，同时不致于让用户觉得打开变慢。 */
+/** Content fade-in duration: leaves a window for background grammar analysis, without making opening feel slow to the user. */
 private const val HIGHLIGHT_REVEAL_MS = 200
 
-/** 撤销合并窗口：间隔超过它的输入不再并入上一条撤销记录，撤销才是分步的。sora 默认 8000ms。 */
+/** Undo merge window: input separated by more than this is no longer merged into the previous undo record, so undo is stepwise. sora's default is 8000ms. */
 private const val UNDO_MERGE_WINDOW_MS = 500L
 
-/** 行号左侧预留间距（sp）。 */
+/** Reserved margin to the left of line numbers (sp). */
 private const val LINE_NUMBER_MARGIN_SP = 2f
 
-/** 文件名小栏高度与左右内边距。 */
+/** File name bar height and horizontal padding. */
 private val FILE_TITLE_BAR_HEIGHT = 16.dp
 private val FILE_TITLE_HORIZONTAL_PADDING = 12.dp
 
-/** 文件读写统一按 UTF-8，小栏右侧展示用。 */
+/** File reads/writes uniformly use UTF-8; used for display on the right side of the bar. */
 private const val FILE_ENCODING = "UTF-8"
 
-/** 垂直额外视口空间系数（占编辑器高度的比例，取值 [0,1]），用于底部过度滚动。 */
+/** Vertical extra viewport space factor (proportion of the editor height, range [0,1]), used for overscroll at the bottom. */
 private const val VERTICAL_EXTRA_SPACE_FACTOR = 0.5f
 
-/** 编辑器底色向主题表面色靠拢的比例。 */
+/** Proportion by which the editor background color moves toward the theme surface color. */
 private const val EDITOR_THEME_TINT = 0.9f
 
-/** 带行号打开时等编辑器完成首次布局的最多帧数，避免宽高迟迟不就绪时死等。 */
+/** Maximum number of frames to wait for the editor to complete its first layout when opened with a line number, to avoid waiting forever if width/height never become ready. */
 private const val LINE_JUMP_LAYOUT_WAIT_FRAMES = 30
 
-/** 定位后校验目标行是否停在期望位置的重试次数，以及每次校验前等待的帧数。 */
+/** Number of retries for verifying after positioning whether the target line stopped at the expected position, and the number of frames to wait before each verification. */
 private const val LINE_JUMP_MAX_ATTEMPTS = 8
 private const val LINE_JUMP_VERIFY_FRAMES = 3
 
 /**
- * 让目标行居中所需的垂直滚动量（已按可滚范围收敛，文件首尾附近自然贴边）。
- * 布局尚不可用时返回 null，由调用方退回官方的「仅保证可见」。
+ * The vertical scroll amount needed to center the target line (already clamped to the scrollable range, naturally hugging the edge near the start/end of the file).
+ * Returns null when the layout is not yet available, and the caller falls back to the official "ensure visible only" behaviour.
  */
 private fun centerScrollOffset(editor: CodeEditor, line: Int): Int? = runCatching {
-    // getCharLayoutOffset 返回的 [0] 是该行所在 row 的底部 y。
+    // The [0] returned by getCharLayoutOffset is the bottom y of the row containing that line.
     val rowBottom = editor.layout.getCharLayoutOffset(line, 0)[0]
     val rowTop = rowBottom - editor.rowHeight
     (rowTop - (editor.height - editor.rowHeight) / 2f).toInt()
         .coerceIn(0, editor.scrollMaxY.coerceAtLeast(0))
 }.getOrNull()
 
-/** 无动画落位到指定垂直滚动量，与 sora 内部 ensurePositionVisible 的无动画分支同款做法。 */
+/** Lands on the specified vertical scroll amount without animation, using the same approach as the no-animation branch of sora's internal ensurePositionVisible. */
 private fun scrollVerticallyTo(editor: CodeEditor, offsetY: Int) {
     val scroller = editor.scroller
     scroller.startScroll(editor.offsetX, editor.offsetY, 0, offsetY - editor.offsetY, 0)

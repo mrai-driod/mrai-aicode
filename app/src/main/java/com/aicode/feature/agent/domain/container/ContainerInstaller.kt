@@ -22,9 +22,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 负责把打进 assets 的 Alpine rootfs 与 PRoot 二进制安装到 App 私有目录。
+ * Responsible for installing the Alpine rootfs and PRoot binaries packed into assets into the App's private directory.
  *
- * 自动根据设备架构（ARM / x86）加载对应资源。targetSdk 锁定 28，数据目录文件才可执行（见 build.gradle.kts）。
+ * Automatically loads the corresponding resources based on the device architecture (ARM / x86). targetSdk is locked to 28, so files in the data directory can be executed (see build.gradle.kts).
  */
 @Singleton
 class ContainerInstaller @Inject constructor(
@@ -36,10 +36,10 @@ class ContainerInstaller @Inject constructor(
         @Volatile private var docsExtractedSession = false
 
         /**
-         * 从 assets 提取文档到 ~/.aicode/docs (内置使用指导)，支持 guide/ advanced/ 等分类子目录。
+         * Extracts docs from assets to ~/.aicode/docs (built-in usage guidance), supporting category subdirectories such as guide/ advanced/.
          *
-         * 提取前先整目录删除：文档按功能分类，版本间调整分类会改变文件路径，只覆盖不清理会让
-         * 上个版本的同名旧文件残留在别的路径下，AI 可能读到过期内容。
+         * Deletes the whole directory before extraction: docs are categorized by feature, and category adjustments between versions change file paths; overwriting without cleaning would leave
+         * same-named old files from the previous version at other paths, and the AI might read stale content.
          */
         fun extractDocs(context: Context) {
             if (docsExtractedSession) return
@@ -50,15 +50,15 @@ class ContainerInstaller @Inject constructor(
                 extractAssetsRecursive(context, "docs", destDir)
                 docsExtractedSession = true
             }.onFailure {
-                FileLogger.w(TAG, "提取内置文档失败: ${it.message}", it)
+                FileLogger.w(TAG, "Failed to extract built-in docs: ${it.message}", it)
             }
         }
 
         /**
-         * 从 assets 提取内置提示词到 ~/.aicode/prompts/，每次启动全量覆盖，使 App 升级后提示词随之更新。
+         * Extracts built-in prompts from assets to ~/.aicode/prompts/, fully overwriting on every startup, so prompts update with App upgrades.
          *
-         * 用户自定义覆盖放在 ~/.aicode/prompts.custom/（同名即覆盖），本方法不触碰该目录，
-         * 故用户重写的片段不会被升级覆盖。参见 [com.aicode.feature.agent.domain.prompt.SystemPromptProvider]。
+         * User custom overrides are placed in ~/.aicode/prompts.custom/ (same name overrides), and this method does not touch that directory,
+         * so fragments rewritten by the user are not overwritten by upgrades. See [com.aicode.feature.agent.domain.prompt.SystemPromptProvider].
          */
         fun extractPrompts(context: Context) {
             val destDir = File(File(context.filesDir, "aicode"), "prompts")
@@ -66,11 +66,11 @@ class ContainerInstaller @Inject constructor(
             runCatching {
                 extractAssetsRecursive(context, "prompts", destDir)
             }.onFailure {
-                FileLogger.w(TAG, "提取内置提示词失败: ${it.message}", it)
+                FileLogger.w(TAG, "Failed to extract built-in prompts: ${it.message}", it)
             }
         }
 
-        /** 递归复制 assets 下的目录到目标目录，支持子目录（如 prompts/agent/、docs/guide/）。 */
+        /** Recursively copies a directory under assets to the target directory, supporting subdirectories (e.g. prompts/agent/, docs/guide/). */
         private fun extractAssetsRecursive(context: Context, assetDir: String, destDir: File) {
             val entries = context.assets.list(assetDir) ?: return
             destDir.mkdirs()
@@ -82,15 +82,15 @@ class ContainerInstaller @Inject constructor(
                         destFile.outputStream().use { output -> input.copyTo(output) }
                     }
                 } catch (e: IOException) {
-                    // 目录项：assets.open 对目录抛 IOException，递归处理
+                    // Directory entry: assets.open throws IOException for directories, so handle recursively
                     extractAssetsRecursive(context, assetPath, destFile)
                 }
             }
         }
 
         /**
-         * 从 assets 提取内置子代理定义（如 Explore）到 ~/.aicode/agents/。
-         * 若文件已存在则不覆盖，以保留用户的修改与删除后的重建选择。
+         * Extracts built-in sub-agent definitions (e.g. Explore) from assets to ~/.aicode/agents/.
+         * If a file already exists it is not overwritten, preserving the user's modifications and their choice to rebuild after deletion.
          */
         fun extractAgents(context: Context) {
             val destDir = File(File(context.filesDir, "aicode"), "agents")
@@ -106,13 +106,13 @@ class ContainerInstaller @Inject constructor(
                     }
                 }
             }.onFailure {
-                FileLogger.w(TAG, "提取内置子代理定义失败: ${it.message}", it)
+                FileLogger.w(TAG, "Failed to extract built-in sub-agent definitions: ${it.message}", it)
             }
         }
 
         /**
-         * 从 assets 提取内置脚本（如面板 demo_balance.py）到 ~/.aicode/scripts/。
-         * 若文件已存在则不覆盖，以保留用户的修改。
+         * Extracts built-in scripts (e.g. the panel demo_balance.py) from assets to ~/.aicode/scripts/.
+         * If a file already exists it is not overwritten, preserving the user's modifications.
          */
         fun extractScripts(context: Context) {
             val destDir = File(File(context.filesDir, "aicode"), "scripts")
@@ -129,20 +129,20 @@ class ContainerInstaller @Inject constructor(
                     }
                 }
             }.onFailure {
-                FileLogger.w(TAG, "提取内置脚本失败: ${it.message}", it)
+                FileLogger.w(TAG, "Failed to extract built-in scripts: ${it.message}", it)
             }
         }
 
         /**
-         * 从 assets 提取自定义 git credential helper 到 ~/.aicode/git-credential-aicode 并赋可执行位。
+         * Extracts the custom git credential helper from assets to ~/.aicode/git-credential-aicode and sets the executable bit.
          *
-         * 经 [LinuxContainerEngine] 的 -b 绑定即容器内 /root/.aicode/git-credential-aicode，
-         * 由容器初始化菜单（provision.sh）在 `.gitconfig` 里登记为第二个 credential.helper，
-         * 排在 `store` 之后兜底未登录（双保险）。helper 详行为见 assets/aicode/git-credential-aicode。
+         * Via [LinuxContainerEngine]'s -b binding it is /root/.aicode/git-credential-aicode inside the container,
+         * registered by the container initialization menu (provision.sh) in `.gitconfig` as the second credential.helper,
+         * after `store` as a backstop for not-logged-in (double safety). For the helper's detailed behaviour see assets/aicode/git-credential-aicode.
          *
-         * 启动即提取、独立于 provisioning 成败：provisioning 失败时 git 没装上，helper 配置不存在也无所谓；
-         * 一旦 git 装好且配置登记，helper 立即可用。提取失败仅告警不抛（helper 缺席仅导致未登录时无弹窗，
-         * git 仍能裸跑报认证失败，不致命）。
+         * Extracted at startup, independent of provisioning success: if provisioning fails git is not installed, so the helper configuration not existing does not matter;
+         * once git is installed and the configuration is registered, the helper is immediately usable. Extraction failure only warns and does not throw (a missing helper only means no dialog when not logged in;
+         * git can still run bare and report an authentication failure, which is not fatal).
          */
         fun extractCredentialHelper(context: Context) {
             val dest = File(File(context.filesDir, "aicode"), "git-credential-aicode")
@@ -151,23 +151,23 @@ class ContainerInstaller @Inject constructor(
                 context.assets.open("aicode/git-credential-aicode").use { input ->
                     dest.outputStream().use { output -> input.copyTo(output) }
                 }
-                // 对所有用户赋可执行位（proot 进程以 App uid 运行，参照 [copyAsset] 的 0o111 模式）。
+                // Set the executable bit for all users (the proot process runs with the App uid; see the 0o111 pattern in [copyAsset]).
                 if (!dest.setExecutable(true, false)) {
-                    FileLogger.w(TAG, "setExecutable 返回 false: ${dest.absolutePath}")
+                    FileLogger.w(TAG, "setExecutable returned false: ${dest.absolutePath}")
                 }
             }.onFailure {
-                FileLogger.w(TAG, "提取 git credential helper 失败: ${it.message}", it)
+                FileLogger.w(TAG, "Failed to extract git credential helper: ${it.message}", it)
             }
         }
 
         /**
-         * 从 assets 提取容器初始化依赖安装脚本到 ~/.aicode/provision.sh 并赋可执行位。
+         * Extracts the container initialization dependency installation script from assets to ~/.aicode/provision.sh and sets the executable bit.
          *
-         * 经 [LinuxContainerEngine] 的 -b 绑定即容器内 /root/.aicode/provision.sh，由
-         * 首次进入终端的初始化菜单以 `sh` 执行——脚本按包管理器
-         * （apk/apt-get/dnf/yum/pacman）安装基础包，包清单维护在脚本内而非代码里。
-         * 启动即提取、每次覆盖写（脚本随 App 版本更新）。提取失败仅告警不抛：
-         * 缺脚本时初始化菜单不会出现，用户可手动安装基础工具。
+         * Via [LinuxContainerEngine]'s -b binding it is /root/.aicode/provision.sh inside the container, executed with `sh` by
+         * the initialization menu on first entering the terminal - the script installs base packages per package manager
+         * (apk/apt-get/dnf/yum/pacman); the package list is maintained inside the script rather than in code.
+         * Extracted at startup and overwritten every time (the script updates with the App version). Extraction failure only warns and does not throw:
+         * without the script the initialization menu will not appear, and the user can install base tools manually.
          */
         fun extractProvisionScript(context: Context) {
             val dest = File(File(context.filesDir, "aicode"), "provision.sh")
@@ -177,31 +177,31 @@ class ContainerInstaller @Inject constructor(
                     dest.outputStream().use { output -> input.copyTo(output) }
                 }
                 if (!dest.setExecutable(true, false)) {
-                    FileLogger.w(TAG, "setExecutable 返回 false: ${dest.absolutePath}")
+                    FileLogger.w(TAG, "setExecutable returned false: ${dest.absolutePath}")
                 }
             }.onFailure {
-                FileLogger.w(TAG, "提取 provision 脚本失败: ${it.message}", it)
+                FileLogger.w(TAG, "Failed to extract provision script: ${it.message}", it)
             }
         }
 
         /**
-         * 从 assets 提取环境工具（`aicode` 命令 + 共享库 lib/）到 ~/.aicode/bin 与 ~/.aicode/lib 并赋可执行位。
+         * Extracts the environment tool (`aicode` command + shared library lib/) from assets to ~/.aicode/bin and ~/.aicode/lib and sets executable bits.
          *
-         * 经 [LinuxContainerEngine] 的 -b 绑定即容器内 /root/.aicode/bin/aicode（在 PATH 中，见
-         * buildContainerEnv）与 /root/.aicode/lib/（env-common.sh、android-sdk.sh 与 scenarios/ 子目录），
-         * 供用户随时执行 `aicode` 安装开发环境（场景化）。每次覆盖写（随 App 版本更新）；提取失败仅告警
-         * 不抛：缺工具时容器初始化菜单（provision.sh）会提示未就绪，用户重启 App 即可重新提取。
+         * Via [LinuxContainerEngine]'s -b binding it is /root/.aicode/bin/aicode inside the container (on PATH, see
+         * buildContainerEnv) and /root/.aicode/lib/ (env-common.sh, android-sdk.sh and the scenarios/ subdirectory),
+         * for the user to run `aicode` at any time to install development environments (scenario-based). Overwritten every time (updates with the App version); extraction failure only warns
+         * and does not throw: when the tool is missing, the container initialization menu (provision.sh) prompts that it is not ready, and the user can restart the App to re-extract.
          */
         fun extractEnvTool(context: Context) {
             runCatching {
                 extractDirOverwrite(context, "aicode/bin", File(File(context.filesDir, "aicode"), "bin"), executable = true)
                 extractDirOverwrite(context, "aicode/lib", File(File(context.filesDir, "aicode"), "lib"), executable = false)
             }.onFailure {
-                FileLogger.w(TAG, "提取环境工具失败: ${it.message}", it)
+                FileLogger.w(TAG, "Failed to extract environment tool: ${it.message}", it)
             }
         }
 
-        /** 递归复制 assets 下某目录到 [destDir]（每次覆盖，支持子目录如 lib/scenarios/）；[executable] 时对每个文件赋可执行位。 */
+        /** Recursively copies a directory under assets to [destDir] (overwrites every time, supports subdirectories such as lib/scenarios/); when [executable], sets the executable bit on each file. */
         private fun extractDirOverwrite(context: Context, assetDir: String, destDir: File, executable: Boolean) {
             val entries = context.assets.list(assetDir) ?: return
             destDir.mkdirs()
@@ -213,109 +213,109 @@ class ContainerInstaller @Inject constructor(
                         dest.outputStream().use { output -> input.copyTo(output) }
                     }
                     if (executable && !dest.setExecutable(true, false)) {
-                        FileLogger.w(TAG, "setExecutable 返回 false: ${dest.absolutePath}")
+                        FileLogger.w(TAG, "setExecutable returned false: ${dest.absolutePath}")
                     }
                 } catch (e: IOException) {
-                    // 目录项：assets.open 对目录抛 IOException，递归复制（如 lib/scenarios/）
+                    // Directory entry: assets.open throws IOException for directories, so copy recursively (e.g. lib/scenarios/)
                     extractDirOverwrite(context, assetPath, dest, executable)
                 }
             }
         }
 
         /**
-         * 与 assets 里 alpine-rootfs 版本对应的 apk 分支，用于拼镜像源地址。
-         * 固定 v3.21：与 [INSTALL_VERSION]（alpine-3.21.3）一致；该版本 apk-tools 2.14 在 proot 下可靠。
+         * The apk branch corresponding to the alpine-rootfs version in assets, used to build mirror source addresses.
+         * Fixed at v3.21: consistent with [INSTALL_VERSION] (alpine-3.21.3); that version's apk-tools 2.14 is reliable under proot.
          */
         /**
-         * 安装版本。换 rootfs / proot 或改安装逻辑时 +1，触发重新解压。
-         * 与 assets 里实际放的 Alpine 版本保持一致以便排查。
+         * Installation version. Increment by 1 when changing rootfs / proot or the installation logic, triggering re-extraction.
+         * Keep it consistent with the Alpine version actually placed in assets for troubleshooting.
          */
         private const val INSTALL_VERSION = "alpine-3.21.3-v6"
 
-        /** 删 rootfs 时每删这么多条目回调一次进度（太密会刷爆 UI 状态流）。 */
+        /** When deleting a rootfs, call back progress once per this many entries deleted (too frequent would flood the UI state flow). */
         private const val DELETE_PROGRESS_STEP = 2000
     }
 
-    /** assets 内的架构特定目录 */
+    /** Architecture-specific directory within assets */
     val ASSET_DIR: String
         get() {
-            // 优先按设备 ABI 选对应镜像目录。
-            // 但 release 包按 flavor 拆分后，单架构包只含一套镜像（armsolo→arm、x86solo→x86）：
-            // 若该套不在 assets 里（例如 armsolo 包被装到只报 x86 的设备），下面会 fallback
-            // 到实际存在的那套，避免 open() 直接崩溃——proot 能否真正运行由设备 ABI 决定，
-            // 但至少 asset 查找层不会挂。
+            // Prefer selecting the corresponding image directory by device ABI.
+            // But after release packages are split by flavor, a single-architecture package contains only one image set (armsolo->arm, x86solo->x86):
+            // if that set is not in assets (e.g. an armsolo package installed on a device reporting only x86), the code below falls back
+            // to the set that actually exists, avoiding open() crashing directly - whether proot can actually run is decided by the device ABI,
+            // but at least the asset lookup layer will not break.
             val preferX86 = android.os.Build.SUPPORTED_ABIS.any { it.contains("x86") }
             val first = if (preferX86) "container/x86" else "container/arm"
             val fallback = if (preferX86) "container/arm" else "container/x86"
             return if (assetExists(first)) first else fallback
         }
 
-    /** 轻量探测某 asset 路径是否被打进当前 APK（用于 [ASSET_DIR] 的 fallback 判断） */
+    /** Lightweight probe of whether an asset path is packed into the current APK (for [ASSET_DIR]'s fallback judgement) */
     private fun assetExists(path: String): Boolean =
         context.assets.list(path.substringBeforeLast('/'))?.any { it == path.substringAfterLast('/') } == true
 
-    // 故意用中性的 .bin 后缀：AGP 的 asset 合并会把 .tar.gz/.tgz 当归档自动解压并改名，
-    // 导致运行时 open("...tar.gz") 找不到文件。.bin 让它当普通二进制原样打包。
+    // Deliberately uses the neutral .bin suffix: AGP's asset merging treats .tar.gz/.tgz as archives, automatically extracting and renaming them,
+    // causing runtime open("...tar.gz") to not find the file. .bin makes it be packed as-is as an ordinary binary.
     val ASSET_ROOTFS: String get() = "$ASSET_DIR/alpine-rootfs.bin"
 
-    /** rootfs 解压根目录 */
+    /** Root directory for rootfs extraction */
     val rootfsDir: File
         get() = File(context.filesDir, "rootfs")
 
     /**
-     * AI 配置数据根目录（skill 指令 + MCP 配置），固定在 app 私有 filesDir。
+     * AI configuration data root directory (skill instructions + MCP configuration), fixed in the app's private filesDir.
      *
-     * 刻意**独立于 [rootfsDir]**：rootfs 在容器版本升级时会被整体删除重装（见 [installRootfsIfNeed]），
-     * 而本目录承载用户数据，必须跨升级保留。它由 [com.aicode.feature.agent.domain.container.LinuxContainerEngine]
-     * 绑定到容器内 `/root/.aicode`，故 AI / 终端看到的 `/root/.aicode` 实际落在这里。
+     * Deliberately **independent of [rootfsDir]**: the rootfs is deleted as a whole and reinstalled on a container version upgrade (see [installRootfsIfNeed]),
+     * while this directory carries user data and must be preserved across upgrades. It is bound by [com.aicode.feature.agent.domain.container.LinuxContainerEngine]
+     * to `/root/.aicode` inside the container, so the `/root/.aicode` seen by the AI / terminal actually lands here.
      */
     val aicodeDir: File
         get() = File(context.filesDir, "aicode")
 
     /**
-     * proot 全套所在目录：APK 内 `lib/<abi>/lib*.so` 由安装器解压到此（见 build.gradle.kts 的
-     * jniLibs sourceSet 与 useLegacyPackaging）。**不能改回 filesDir**——它是 App 目录里唯一
-     * 允许 execve 的位置，filesDir 下的文件在 targetSdk 29+ 会被 W^X 拒绝执行。
+     * Directory holding the full proot set: the APK's `lib/<abi>/lib*.so` are extracted here by the installer (see build.gradle.kts's
+     * jniLibs sourceSet and useLegacyPackaging). **Must not be changed back to filesDir** - it is the only location in the App directory
+     * where execve is allowed; files under filesDir are refused execution by W^X on targetSdk 29+.
      */
     private val nativeLibDir: File
         get() = File(context.applicationInfo.nativeLibraryDir)
 
-    /** PRoot 可执行文件（Termux 构建，含 statx，动态链接 libtalloc/libandroid-shmem） */
+    /** PRoot executable (Termux build, includes statx, dynamically links libtalloc/libandroid-shmem) */
     val prootBin: File
         get() = File(nativeLibDir, "libproot.so")
 
-    /** PRoot 的 64/32 位 loader（Termux proot loader 分离，由 PROOT_LOADER/_32 指向）。 */
+    /** PRoot's 64/32-bit loaders (Termux proot has a separate loader, pointed to by PROOT_LOADER/_32). */
     val prootLoader: File
         get() = File(nativeLibDir, "libproot-loader.so")
     val prootLoader32: File
         get() = File(nativeLibDir, "libproot-loader32.so")
 
-    /** proot 的动态依赖库目录（libtalloc.so / libandroid-shmem.so），由 LD_LIBRARY_PATH 指向。 */
+    /** proot's dynamic dependency library directory (libtalloc.so / libandroid-shmem.so), pointed to by LD_LIBRARY_PATH. */
     val prootLibDir: File
         get() = nativeLibDir
 
     /**
-     * 内置容器的 PRoot 临时目录（Android 没有 /tmp）。**私有**：容器启动一律走 [prootTmpDirFor]，
-     * 免得又把别的容器指到内置 rootfs 里来。
-     * 放在 rootfs 的 /tmp（宿主 filesDir/rootfs/tmp）：cache 目录会被系统清理（清缓存后 proot
-     * 找不到临时目录报 can't canonicalize），files 目录稳定。
+     * The built-in container's PRoot temp directory (Android has no /tmp). **Private**: container startup always goes through [prootTmpDirFor],
+     * to avoid pointing other containers into the built-in rootfs again.
+     * Placed at the rootfs's /tmp (host filesDir/rootfs/tmp): the cache directory is cleaned by the system (after cache clearing, proot
+     * cannot find the temp directory and reports can't canonicalize), while the files directory is stable.
      */
     private val prootTmpDir: File
         get() = File(rootfsDir, "tmp")
 
     /**
-     * [profile] 自己 rootfs 里的 /tmp，即该容器的 `PROOT_TMP_DIR`。
+     * The /tmp inside [profile]'s own rootfs, i.e. that container's `PROOT_TMP_DIR`.
      *
-     * 必须按 profile 取：这是宿主路径，各容器 rootfs 目录相互隔离，共用内置容器的 tmp 会在内置 rootfs
-     * 被重置删掉后让其它容器一起报 can't canonicalize（内置 rootfs 存在时能跑通只是巧合）。
+     * Must be obtained per profile: this is a host path and each container's rootfs directory is isolated; sharing the built-in container's tmp would, after the built-in rootfs
+     * is reset and deleted, make the other containers all report can't canonicalize too (that it works while the built-in rootfs exists is just coincidence).
      */
     fun prootTmpDirFor(profile: ContainerProfile): File = File(rootfsDirFor(profile), "tmp")
 
-    /** 标记文件，内容是已安装的版本号 */
+    /** Marker file; its content is the installed version number */
     private val installedMarker: File
         get() = File(rootfsDir, ".installed")
 
-    /** 检查 rootfs 是否已按当前版本解压就绪（proot 随 APK 安装，不属于安装状态） */
+    /** Checks whether the rootfs has been extracted and is ready at the current version (proot is installed with the APK and is not part of the installation state) */
     fun isInstalled(): Boolean {
         if (!rootfsDir.isDirectory) return false
         val marker = installedMarker
@@ -323,29 +323,29 @@ class ContainerInstaller @Inject constructor(
     }
 
     /**
-     * 若未安装（或版本不匹配）则从 assets 解压安装。幂等，可在每次执行命令前调用。
+     * If not installed (or the version does not match), extracts and installs from assets. Idempotent; can be called before each command execution.
      *
-     * [onProgress] 在真正解压的各阶段被回调以更新 [ContainerInitState]；已安装的快路径不会调用。
+     * [onProgress] is called back at each stage of actual extraction to update [ContainerInitState]; the fast path when already installed does not call it.
      */
     suspend fun installRootfsIfNeed(
         onProgress: (ContainerInitState) -> Unit = {}
     ) = withContext(Dispatchers.IO) {
         if (isInstalled()) {
-            FileLogger.d(TAG, "rootfs 已是当前版本（$INSTALL_VERSION），跳过解压")
+            FileLogger.d(TAG, "rootfs is already the current version ($INSTALL_VERSION), skipping extraction")
             return@withContext
         }
 
         val startedAt = System.currentTimeMillis()
         FileLogger.i(
             TAG,
-            "开始安装容器 rootfs（版本 $INSTALL_VERSION，asset=$ASSET_ROOTFS，目标=${rootfsDir.absolutePath}，" +
-                "父目录可用空间=${usableSpaceMb(rootfsDir.parentFile)}MB）"
+            "Starting container rootfs installation (version $INSTALL_VERSION, asset=$ASSET_ROOTFS, target=${rootfsDir.absolutePath}, " +
+                "parent directory available space=${usableSpaceMb(rootfsDir.parentFile)}MB)"
         )
         try {
-            // 版本不匹配时清掉旧的，保证干净安装（大 rootfs 删一遍很慢，带进度报给界面）
+            // On version mismatch, clear the old one to ensure a clean install (deleting a large rootfs is slow, so report progress to the UI)
             purgeRootfs(rootfsDir, installedMarker) { onProgress(ContainerInitState.CleaningOldRootfs(it)) }
             rootfsDir.mkdirs()
-            if (!rootfsDir.isDirectory) FileLogger.e(TAG, "rootfs 目录创建失败：${rootfsDir.absolutePath}")
+            if (!rootfsDir.isDirectory) FileLogger.e(TAG, "Failed to create rootfs directory: ${rootfsDir.absolutePath}")
 
             val entries = extractRootfs(onProgress)
             configureResolvConf()
@@ -353,38 +353,38 @@ class ContainerInstaller @Inject constructor(
             installedMarker.writeText(INSTALL_VERSION)
             FileLogger.i(
                 TAG,
-                "容器 rootfs 安装完成：$entries 个条目，耗时 ${System.currentTimeMillis() - startedAt}ms，" +
-                    "标记=${installedMarker.absolutePath}"
+                "Container rootfs installation complete: $entries entries, took ${System.currentTimeMillis() - startedAt}ms, " +
+                    "marker=${installedMarker.absolutePath}"
             )
         } catch (e: Exception) {
             FileLogger.e(
                 TAG,
-                "容器 rootfs 安装失败（耗时 ${System.currentTimeMillis() - startedAt}ms，" +
-                    "剩余空间=${usableSpaceMb(rootfsDir.parentFile)}MB）",
+                "Container rootfs installation failed (took ${System.currentTimeMillis() - startedAt}ms, " +
+                    "remaining space=${usableSpaceMb(rootfsDir.parentFile)}MB)",
                 e
             )
             throw e
         }
     }
 
-    /** 目录可用空间（MB），用于解压失败时判断是否磁盘不足；路径取不到时返回 -1。 */
+    /** A directory's usable space (MB), used to judge whether disk is insufficient when extraction fails; returns -1 when the path cannot be obtained. */
     private fun usableSpaceMb(dir: File?): Long =
         runCatching { (dir ?: return -1).usableSpace / (1024 * 1024) }.getOrDefault(-1)
 
     /**
-     * 按 [profile] 返回 rootfs 目录：内置仍是 [rootfsDir]（不动），自定义本地镜像用 filesDir/rootfs_<id>。
-     * 远程 SSH profile 无本地 rootfs，返回一个占位目录（不会被使用/创建）。
-     * 目录隔离——内置与自定义互不共享、互不删除，切回内置时其 rootfs 原封不动。
+     * Returns the rootfs directory for [profile]: built-in is still [rootfsDir] (unchanged), custom local images use filesDir/rootfs_<id>.
+     * A remote SSH profile has no local rootfs, so a placeholder directory is returned (it will not be used/created).
+     * Directory isolation - built-in and custom do not share with or delete each other, and switching back to built-in leaves its rootfs untouched.
      */
     fun rootfsDirFor(profile: ContainerProfile): File =
         if (profile.isBuiltin) rootfsDir
         else File(context.filesDir, "rootfs_${profile.id}")
 
-    /** 自定义镜像的已安装标记（独立于内置 .installed，避免混淆）。 */
+    /** Installed marker for a custom image (independent of the built-in .installed, to avoid confusion). */
     private fun customInstalledMarker(profile: ContainerProfile): File =
         File(rootfsDirFor(profile), ".installed_custom")
 
-    /** 按 [profile] 判断是否已安装就绪：内置走现有版本校验，自定义本地看目录与标记，远程 SSH 恒就绪。 */
+    /** Judges for [profile] whether it is installed and ready: built-in uses the existing version check, custom local checks directory and marker, remote SSH is always ready. */
     fun isInstalledFor(profile: ContainerProfile): Boolean =
         when {
             profile.isBuiltin -> isInstalled()
@@ -393,10 +393,10 @@ class ContainerInstaller @Inject constructor(
         }
 
     /**
-     * 按 [profile] 解压安装 rootfs。内置走 assets 全流程（rootfs/resolv/apk 源）；自定义本地镜像只解压
-     * tar.gz + 写 DNS（不写 apk 源）。两者都不自动装包——基础工具由进入终端时的
-     * 初始化菜单（assets/aicode/provision.sh）引导用户选择安装。远程 SSH profile 无本地 rootfs，直接返回
-     * （命令执行走 [RemoteSshEngine]，不需本地 rootfs）。
+     * Extracts and installs the rootfs for [profile]. Built-in uses the full assets flow (rootfs/resolv/apk sources); custom local images only extract
+     * tar.gz + write DNS (do not write apk sources). Neither installs packages automatically - base tools are installed via the user's choice guided by the initialization menu
+     * on entering the terminal (assets/aicode/provision.sh). A remote SSH profile has no local rootfs and returns directly
+     * (command execution goes through [RemoteSshEngine] and needs no local rootfs).
      */
     suspend fun installRootfsIfNeed(
         profile: ContainerProfile,
@@ -404,7 +404,7 @@ class ContainerInstaller @Inject constructor(
     ) = withContext(Dispatchers.IO) {
         if (isInstalledFor(profile)) return@withContext
 
-        // rootfs 将被重新解压，容器系统可能变化，清掉旧的识别缓存让下次运行重新检测。
+        // The rootfs will be re-extracted and the container OS may change, so clear the old identification cache to let the next run re-detect.
         containerOsDetector.clear(profile.id)
 
         if (profile.isBuiltin) {
@@ -412,11 +412,11 @@ class ContainerInstaller @Inject constructor(
             return@withContext
         }
 
-        // 远程 SSH profile：无本地 rootfs 可解压，视为就绪。
+        // Remote SSH profile: no local rootfs to extract, treated as ready.
         if (profile.rootfsSource is RootfsSource.RemoteSsh) return@withContext
 
         val dest = rootfsDirFor(profile)
-        FileLogger.i(TAG, "安装自定义容器 rootfs：${profile.id} -> ${dest.absolutePath}")
+        FileLogger.i(TAG, "Installing custom container rootfs: ${profile.id} -> ${dest.absolutePath}")
         purgeRootfs(dest, customInstalledMarker(profile)) { onProgress(ContainerInitState.CleaningOldRootfs(it)) }
         dest.mkdirs()
 
@@ -430,20 +430,20 @@ class ContainerInstaller @Inject constructor(
                     CompressedFormat.XZ else CompressedFormat.GZIP
                 context.contentResolver.openInputStream(uri)?.use {
                     extractRootfsTo(dest, it, format, onProgress)
-                } ?: FileLogger.w(TAG, "打开导入的 rootfs uri 失败: ${src.uri}")
+                } ?: FileLogger.w(TAG, "Failed to open imported rootfs uri: ${src.uri}")
             }
-            is RootfsSource.RemoteSsh -> { /* 无本地 rootfs，上面已提前 return */ }
+            is RootfsSource.RemoteSsh -> { /* No local rootfs; already returned early above */ }
         }
         configureResolvConf(dest)
         prootTmpDirFor(profile).mkdirs()
         repairRootfsCompatibility(dest)
         customInstalledMarker(profile).writeText("custom")
-        FileLogger.i(TAG, "自定义容器 rootfs 安装完成：${profile.id}")
+        FileLogger.i(TAG, "Custom container rootfs installation complete: ${profile.id}")
     }
 
     /**
-     * rootfs 兼容性巡检（幂等，失败静默）：修复已知的 Ubuntu 25.10+ 布局问题。
-     * 所有容器统一调用，作用面由内部存在性检测收敛——非命中容器零改动。
+     * Rootfs compatibility inspection (idempotent, silent on failure): repairs known Ubuntu 25.10+ layout problems.
+     * Called uniformly for all containers; its scope is converged by internal existence checks - non-matching containers get zero changes.
      */
     fun repairRootfsCompatibility(rootfs: File) {
         fixCoreutilsPermissions(rootfs)
@@ -462,22 +462,22 @@ class ContainerInstaller @Inject constructor(
                     Files.setPosixFilePermissions(p, target)
                     fixed++
                 }
-            }.onFailure { FileLogger.w(TAG, "修复 coreutils 权限失败: ${path.absolutePath}", it) }
+            }.onFailure { FileLogger.w(TAG, "Failed to fix coreutils permissions: ${path.absolutePath}", it) }
         }
         fix(File(rootfs, "usr/lib/cargo"))
         fix(File(rootfs, "usr/lib/cargo/bin"))
         fix(coreutilsDir)
         coreutilsDir.listFiles()?.forEach { fix(it) }
         if (fixed > 0) {
-            FileLogger.i(TAG, "已修复容器 coreutils 权限: $fixed 个文件（${coreutilsDir.absolutePath}）")
+            FileLogger.i(TAG, "Fixed container coreutils permissions: $fixed files (${coreutilsDir.absolutePath})")
         }
     }
 
     /**
-     * 修复 Ubuntu 26.04 仓库打包 bug：node-glob 10.3.6 用 `dist/cjs/src -> .` 自引用软链做打包
-     * 拍平，node 22+ 的 realpath 判定 ELOOP，npm 启动即报 MODULE_NOT_FOUND（与 PRoot 无关，
-     * 原生 Ubuntu 26.04 同样中招）。真机布局下的修复：把 package.json 入口从 dist/cjs/src/
-     * 改指真实打平文件所在 dist/cjs/。幂等：入口已正常则不动。
+     * Repairs an Ubuntu 26.04 repository packaging bug: node-glob 10.3.6 uses a `dist/cjs/src -> .` self-referencing symlink for packaging
+     * flattening; node 22+'s realpath judges it ELOOP, and npm reports MODULE_NOT_FOUND on startup (unrelated to PRoot;
+     * native Ubuntu 26.04 is also affected). The fix under the real-device layout: change the package.json entry from dist/cjs/src/
+     * to point to dist/cjs/, where the actually flattened files are. Idempotent: if the entry is already normal, it is not touched.
      */
     private fun fixNodeGlobEntry(rootfs: File) {
         val candidates = listOf(
@@ -490,21 +490,21 @@ class ContainerInstaller @Inject constructor(
                 val text = f.readText()
                 if (text.contains("dist/cjs/src/")) {
                     f.writeText(text.replace("dist/cjs/src/", "dist/cjs/"))
-                    FileLogger.i(TAG, "已修复 node-glob 入口: ${f.absolutePath}")
+                    FileLogger.i(TAG, "Fixed node-glob entry: ${f.absolutePath}")
                 }
-            }.onFailure { FileLogger.w(TAG, "修复 node-glob 入口失败: ${f.absolutePath}", it) }
+            }.onFailure { FileLogger.w(TAG, "Failed to fix node-glob entry: ${f.absolutePath}", it) }
         }
     }
 
     /**
-     * 删除自定义 profile 的 rootfs 目录（删 profile 时调用）。内置 rootfs 不可删，远程 SSH 无 rootfs 可删。
-     * [onProgress] 报告已删条目数，供界面显示进度。
+     * Deletes a custom profile's rootfs directory (called when deleting the profile). The built-in rootfs cannot be deleted; remote SSH has no rootfs to delete.
+     * [onProgress] reports the number of entries deleted, for the UI to show progress.
      */
     suspend fun deleteCustomRootfs(
         profile: ContainerProfile,
         onProgress: (Int) -> Unit = {}
     ) = withContext(Dispatchers.IO) {
-        // profile 被删除或换镜像，缓存随之作废（重新运行时重新检测）。
+        // The profile was deleted or its image changed, so the cache is invalidated with it (re-detected on rerun).
         containerOsDetector.clear(profile.id)
         if (profile.isBuiltin) return@withContext
         if (profile.rootfsSource is RootfsSource.RemoteSsh) return@withContext
@@ -512,14 +512,14 @@ class ContainerInstaller @Inject constructor(
     }
 
     /**
-     * 重置内置 Alpine 容器：删除其 rootfs 目录（含 .installed / .provisioned 标记），
-     * 下次 [ensureInstalled] 会重新解压；进入终端时由初始化菜单重新引导安装。供内置镜像「重置」按钮调用。
+     * Resets the built-in Alpine container: deletes its rootfs directory (including the .installed / .provisioned markers);
+     * the next [ensureInstalled] will re-extract it, and entering the terminal will re-guide installation via the initialization menu. Called by the built-in image's "Reset" button.
      */
     suspend fun resetBuiltinRootfs(onProgress: (Int) -> Unit = {}) = withContext(Dispatchers.IO) {
         purgeRootfs(rootfsDir, installedMarker, onProgress)
     }
 
-    /** 按 [profile] 统一重置 rootfs：内置走 [resetBuiltinRootfs]，自定义本地删其 rootfs 目录，远程 SSH 无本地数据不操作。 */
+    /** Uniformly resets the rootfs for [profile]: built-in goes through [resetBuiltinRootfs], custom local deletes its rootfs directory, remote SSH has no local data and does nothing. */
     suspend fun resetRootfs(profile: ContainerProfile, onProgress: (Int) -> Unit = {}) {
         if (profile.isBuiltin) {
             resetBuiltinRootfs(onProgress)
@@ -529,25 +529,25 @@ class ContainerInstaller @Inject constructor(
     }
 
     /**
-     * 删空一个 rootfs 目录，[onProgress] 报告累计已删条目数。
+     * Empties a rootfs directory; [onProgress] reports the cumulative number of entries deleted.
      *
-     * 先删 [marker]：装满工具的 rootfs 有十万级 inode，删一遍要几十秒，万一中途进程被杀，标记
-     * 已经没了，残缺目录不会再被 [isInstalledFor] 当成装好的容器，下次进容器会先删干净再重新解压。
+     * Deletes [marker] first: a rootfs full of tools has on the order of a hundred thousand inodes, and deleting it takes tens of seconds; if the process is killed midway, the marker
+     * is already gone, so the incomplete directory will not be treated by [isInstalledFor] as an installed container, and the next container entry will delete it cleanly and re-extract.
      */
     private fun purgeRootfs(dir: File, marker: File, onProgress: (Int) -> Unit) {
         if (!dir.exists()) return
         marker.delete()
         val count = deleteTree(dir, 0, onProgress)
-        FileLogger.i(TAG, "已删除 rootfs ${dir.name}，共 $count 项")
+        FileLogger.i(TAG, "Deleted rootfs ${dir.name}, $count entries in total")
     }
 
     /**
-     * 递归删除 [root]，返回从 [startCount] 起算的累计已删条目数，每 [DELETE_PROGRESS_STEP] 项回调一次。
+     * Recursively deletes [root], returning the cumulative number of deleted entries counted from [startCount], calling back once per [DELETE_PROGRESS_STEP] entries.
      *
-     * 不用 [File.deleteRecursively]：它按 `File.isDirectory` 判断，会跟随符号链接下钻——rootfs 的
-     * /bin、/usr/lib 下满是 symlink，跟随不仅白跑一遍链接目标（大容器上慢出好几倍），指向自身祖先时
-     * 还会一路下钻到路径超长才停，更别说链接指向 rootfs 外面时会删掉别处的数据。这里用
-     * NOFOLLOW_LINKS 判定目录，符号链接一律当普通条目 unlink。
+     * Does not use [File.deleteRecursively]: it judges by `File.isDirectory` and follows symlinks downwards - a rootfs's
+     * /bin and /usr/lib are full of symlinks; following them not only wastes a pass over the link targets (several times slower on large containers), but when a link points to its own ancestor
+     * it keeps descending until the path is too long, not to mention deleting data elsewhere when a link points outside the rootfs. Here
+     * NOFOLLOW_LINKS is used to judge directories, and symlinks are always unlinked as ordinary entries.
      */
     private fun deleteTree(root: File, startCount: Int, onProgress: (Int) -> Unit): Int {
         var count = startCount
@@ -564,7 +564,7 @@ class ContainerInstaller @Inject constructor(
                 if (count % DELETE_PROGRESS_STEP == 0) onProgress(count)
             }
         }
-        // 目录得等自己空了才删得掉：dirs 按自浅入深的发现顺序入队，从队尾往回删即先深后浅。
+        // A directory can only be deleted once it is empty itself: dirs are enqueued in discovery order from shallow to deep, and deleting from the tail backwards is deepest first.
         while (dirs.isNotEmpty()) {
             if (dirs.removeLast().delete()) count++
         }
@@ -572,7 +572,7 @@ class ContainerInstaller @Inject constructor(
         return count
     }
 
-    /** 是否真目录：符号链接即便指向目录也返回 false，防止删除时跟着链接下钻。 */
+    /** Whether it is a real directory: a symlink returns false even if it points to a directory, preventing deletion from following the link downwards. */
     private fun isRealDirectory(file: File): Boolean = runCatching {
         Files.readAttributes(file.toPath(), BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS).isDirectory
     }.getOrDefault(false)
@@ -586,31 +586,31 @@ class ContainerInstaller @Inject constructor(
         }
     }
 
-    /** 从 assets 提取文档到 ~/.aicode/docs (内置使用指导) */
+    /** Extracts docs from assets to ~/.aicode/docs (built-in usage guidance) */
     fun extractDocs() = extractDocs(context)
 
-    /** 从 assets 提取 git credential helper 到 ~/.aicode/git-credential-aicode 并赋可执行位。 */
+    /** Extracts the git credential helper from assets to ~/.aicode/git-credential-aicode and sets the executable bit. */
     fun extractCredentialHelper() = extractCredentialHelper(context)
 
-    /** 从 assets 提取容器初始化依赖安装脚本到 ~/.aicode/provision.sh 并赋可执行位。 */
+    /** Extracts the container initialization dependency installation script from assets to ~/.aicode/provision.sh and sets the executable bit. */
     fun extractProvisionScript() = extractProvisionScript(context)
 
-    /** 从 assets 提取环境工具（aicode 命令 + 共享库）到 ~/.aicode/{bin,lib} 并赋可执行位。 */
+    /** Extracts the environment tool (aicode command + shared library) from assets to ~/.aicode/{bin,lib} and sets executable bits. */
     fun extractEnvTool() = extractEnvTool(context)
 
-    /** 解压 alpine-minirootfs.tar.gz，正确处理目录/文件/符号链接/硬链接与权限位；返回解压条目数。 */
+    /** Extracts alpine-minirootfs.tar.gz, correctly handling directories/files/symlinks/hard links and permission bits; returns the number of extracted entries. */
     private fun extractRootfs(onProgress: (ContainerInitState) -> Unit): Int {
         context.assets.open(ASSET_ROOTFS).use { rawIn ->
             return extractRootfsTo(rootfsDir, rawIn, CompressedFormat.GZIP, onProgress)
         }
     }
 
-    /** 镜像压缩格式：内置 Alpine 用 gzip，用户导入的可能是 gzip 或 xz。 */
+    /** Image compression format: the built-in Alpine uses gzip; user-imported ones may be gzip or xz. */
     enum class CompressedFormat { GZIP, XZ }
 
     /**
-     * 把 tar.gz / tar.xz 流解压到 [destDir]，正确处理目录/文件/符号链接/硬链接与权限位。
-     * 内置 Alpine（[extractRootfs] 传 assets 流）与用户自定义镜像（[installRootfsIfNeed] 传 content uri 流）共用。
+     * Extracts a tar.gz / tar.xz stream to [destDir], correctly handling directories/files/symlinks/hard links and permission bits.
+     * Shared by the built-in Alpine ([extractRootfs] passes an assets stream) and user custom images ([installRootfsIfNeed] passes a content uri stream).
      */
     fun extractRootfsTo(
         destDir: File,
@@ -637,7 +637,7 @@ class ContainerInstaller @Inject constructor(
         }
         FileLogger.i(
             TAG,
-            "解压到 ${destDir.absolutePath} 完成：$processed 个条目，耗时 ${System.currentTimeMillis() - startedAt}ms"
+            "Extraction to ${destDir.absolutePath} complete: $processed entries, took ${System.currentTimeMillis() - startedAt}ms"
         )
         return processed
     }
@@ -649,12 +649,12 @@ class ContainerInstaller @Inject constructor(
     ) {
         val outFile = File(destDir, entry.name)
 
-        // 防 zip-slip：确保解压目标落在 destDir 内
+        // Prevent zip-slip: ensure the extraction target lands inside destDir
         val canonicalRoot = destDir.canonicalPath
         if (!outFile.canonicalPath.startsWith(canonicalRoot + File.separator) &&
             outFile.canonicalPath != canonicalRoot
         ) {
-            FileLogger.w(TAG, "跳过越界条目: ${entry.name}")
+            FileLogger.w(TAG, "Skipping out-of-bounds entry: ${entry.name}")
             return
         }
 
@@ -663,21 +663,21 @@ class ContainerInstaller @Inject constructor(
 
             entry.isSymbolicLink -> {
                 outFile.parentFile?.mkdirs()
-                // symlink 的目标可能是相对/绝对路径，原样创建（在容器内由 proot 解析）
+                // A symlink's target may be a relative/absolute path; create it as-is (resolved by proot inside the container)
                 if (outFile.exists()) outFile.delete()
                 runCatching { Os.symlink(entry.linkName, outFile.absolutePath) }
-                    .onFailure { FileLogger.w(TAG, "symlink 失败 ${entry.name} -> ${entry.linkName}: ${it.message}") }
+                    .onFailure { FileLogger.w(TAG, "symlink failed ${entry.name} -> ${entry.linkName}: ${it.message}") }
             }
 
             entry.isLink -> {
-                // 硬链接：linkName 指向 tar 内已解压的另一文件
+                // Hard link: linkName points to another file already extracted from the tar
                 outFile.parentFile?.mkdirs()
                 val target = File(destDir, entry.linkName)
                 if (outFile.exists()) outFile.delete()
                 runCatching { Os.link(target.absolutePath, outFile.absolutePath) }
                     .onFailure {
-                        // 退化为复制，保证文件存在
-                        FileLogger.w(TAG, "hardlink 失败 ${entry.name} -> ${entry.linkName}，改为复制: ${it.message}")
+                        // Degrade to copying, ensuring the file exists
+                        FileLogger.w(TAG, "hardlink failed ${entry.name} -> ${entry.linkName}, copying instead: ${it.message}")
                         runCatching { target.copyTo(outFile, overwrite = true) }
                     }
             }
@@ -688,26 +688,26 @@ class ContainerInstaller @Inject constructor(
                 applyMode(outFile, entry.mode)
             }
 
-            else -> FileLogger.d(TAG, "忽略不支持的条目类型: ${entry.name}")
+            else -> FileLogger.d(TAG, "Ignoring unsupported entry type: ${entry.name}")
         }
     }
 
-    /** 按 tar entry 的 mode 设置可执行位（owner 有 x 位则对所有人开放执行） */
+    /** Sets executable bits per the tar entry's mode (if the owner has the x bit, execution is opened to everyone) */
     private fun applyMode(file: File, mode: Int) {
         val ownerExecutable = (mode and 0b001_000_000) != 0 // 0100
         if (ownerExecutable) {
             file.setExecutable(true, false)
         }
         file.setReadable(true, false)
-        // owner 写位
+        // owner write bit
         if ((mode and 0b010_000_000) != 0) file.setWritable(true, false)
     }
 
     /**
-     * 写入容器内 DNS，否则 apk/npm 等联网操作会因无法解析域名而失败。
-     * 用阿里云公共 DNS：国内解析更快/更稳，8.8.8.8 在部分网络环境会被拦截。
-     * 已是有效配置（普通文件且含 nameserver）则不动，尊重容器内已有设置；
-     * 空文件或坏链（Ubuntu/Debian base 常把 resolv.conf 链到 systemd-resolved 的 stub，PRoot 下不可用）先删再写。
+     * Writes DNS inside the container, otherwise network operations such as apk/npm will fail because domain names cannot be resolved.
+     * Uses Alibaba Cloud public DNS: resolution is faster/more stable in China, and 8.8.8.8 is blocked in some network environments.
+     * If it is already a valid configuration (a regular file containing nameserver) it is left alone, respecting the existing in-container setting;
+     * an empty file or bad link (Ubuntu/Debian bases often link resolv.conf to systemd-resolved's stub, which is unusable under PRoot) is deleted first and then written.
      */
     private fun configureResolvConf(rootfs: File = rootfsDir) {
         val etc = File(rootfs, "etc").apply { mkdirs() }
@@ -715,13 +715,13 @@ class ContainerInstaller @Inject constructor(
         if (conf.isFile) {
             runCatching {
                 if (conf.readText().contains("nameserver")) {
-                    FileLogger.d(TAG, "resolv.conf 已有有效配置，保持不动：${conf.absolutePath}")
+                    FileLogger.d(TAG, "resolv.conf already has a valid configuration, leaving it unchanged: ${conf.absolutePath}")
                     return
                 }
             }
         }
         conf.delete()
         conf.writeText("nameserver 223.5.5.5\nnameserver 223.6.6.6\n")
-        FileLogger.i(TAG, "已写入容器 DNS 配置：${conf.absolutePath}")
+        FileLogger.i(TAG, "Wrote container DNS configuration: ${conf.absolutePath}")
     }
 }

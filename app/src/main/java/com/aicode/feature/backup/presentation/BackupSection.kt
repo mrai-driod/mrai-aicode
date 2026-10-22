@@ -107,7 +107,7 @@ internal fun BackupSection(viewModel: BackupViewModel) {
             .padding(horizontal = Spacing.lg)
             .padding(bottom = Spacing.xl)
     ) {
-        // 导出数据范围：开关即持久化
+        // Export data scope: toggles are persisted immediately
         SettingsGroupHeader(text = stringResource(R.string.backup_select_data))
         SettingsGroup {
             SettingsRow(
@@ -205,7 +205,7 @@ internal fun BackupSection(viewModel: BackupViewModel) {
         }
     }
 
-    // 导出：输口令（可留空）
+    // Export: enter password (may be left empty)
     if (pendingAction == PendingAction.ExportPassword) {
         PasswordDialog(
             title = stringResource(R.string.backup_set_password),
@@ -227,7 +227,7 @@ internal fun BackupSection(viewModel: BackupViewModel) {
         )
     }
 
-    // 导入口令弹窗（SAF 选完文件后弹出）
+    // Import password dialog (shown after a file is picked via SAF)
     if (pendingAction == PendingAction.Import && pendingImportUri != null) {
         PasswordDialog(
             title = stringResource(R.string.backup_password_input),
@@ -251,7 +251,7 @@ internal fun BackupSection(viewModel: BackupViewModel) {
         )
     }
 
-    // 导出完成 → 提示并复位
+    // Export complete → toast and reset
     LaunchedEffect(state) {
         if (state is BackupState.ExportDone) {
             Toast.makeText(context, context.getString(R.string.backup_exported), Toast.LENGTH_SHORT).show()

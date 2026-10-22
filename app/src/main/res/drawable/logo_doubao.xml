@@ -3,7 +3,7 @@
     android:height="128dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-  <!-- 豆包 Doubao / Volces — 多色花瓣 -->
+  <!-- Doubao / Volces — multicolor petals -->
   <path
       android:pathData="M5.31,15.756c0.172,-3.75 1.883,-5.999 2.549,-6.739 -3.26,2.058 -5.425,5.658 -6.358,8.308v1.12C1.501,21.513 4.226,24 7.59,24a6.59,6.59 0,0 0,2.2 -0.375c0.353,-0.12 0.7,-0.248 1.039,-0.378 0.913,-0.899 1.65,-1.91 2.243,-2.992 -4.877,2.431 -7.974,0.072 -7.763,-4.5l0.002,0.001z"
       android:fillColor="#1E37FC"/>

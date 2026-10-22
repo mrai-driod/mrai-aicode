@@ -92,8 +92,8 @@ import kotlinx.coroutines.launch
 private const val TAG = "BrowserScreen"
 
 /**
- * 界面触发的浏览器操作统一走此兜底：navigate/reload/newTab 等在加载失败时会抛出异常，
- * 未捕获会直接让 UI 协程崩溃。失败信息已由 BrowserManager 写入 tab.error 展示给用户，这里仅记录日志。
+ * All browser operations triggered from the UI go through this fallback: navigate/reload/newTab and similar throw on load failure,
+ * and an uncaught exception would crash the UI coroutine directly. The failure details are already written by BrowserManager into tab.error for display to the user; here we only log them.
  */
 private fun CoroutineScope.launchBrowserOp(block: suspend () -> Unit) {
     launch {
@@ -102,7 +102,7 @@ private fun CoroutineScope.launchBrowserOp(block: suspend () -> Unit) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FileLogger.e(TAG, "浏览器界面操作失败", e)
+            FileLogger.e(TAG, "Browser UI operation failed", e)
         }
     }
 }
@@ -123,12 +123,12 @@ fun BrowserScreen(
 
     var isEditingAddress by rememberSaveable { mutableStateOf(false) }
 
-    // 标签页切换时退出编辑态
+    // Exit editing mode when the tab switches
     LaunchedEffect(state.activeTabId) {
         isEditingAddress = false
     }
 
-    // 拦截物理/手势返回键：若处于地址栏编辑态，优先退出编辑态
+    // Intercept the physical/gesture back key: if the address bar is in editing mode, exit editing mode first
     BackHandler(enabled = isEditingAddress) {
         isEditingAddress = false
     }
@@ -182,7 +182,7 @@ fun BrowserScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // 当地址栏处于编辑态时覆盖遮罩，拦截手势并支持轻点任意空白区域退出编辑态
+            // While the address bar is in editing mode, overlay a scrim that intercepts gestures and lets a tap on any empty area exit editing mode
             if (isEditingAddress) {
                 Box(
                     modifier = Modifier
@@ -197,7 +197,7 @@ fun BrowserScreen(
                 )
             }
 
-            // 错误提示
+            // Error message
             if (activeTab?.error != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -227,7 +227,7 @@ fun BrowserScreen(
                 }
             }
 
-            // 空白标签页状态：引导输入网址
+            // Blank tab state: prompts the user to enter a URL
             if (activeTab != null && activeTab.url.isEmpty() && !activeTab.loading && activeTab.error == null) {
                 Box(
                     modifier = Modifier
@@ -257,7 +257,7 @@ fun BrowserScreen(
         }
     }
 
-    // 多标签页管理抽屉
+    // Multi-tab management sheet
     if (showTabsSheet) {
         ModalBottomSheet(
             onDismissRequest = { showTabsSheet = false },
@@ -332,7 +332,7 @@ fun BrowserScreen(
 }
 
 /**
- * 顶部栏独立组件：将输入态和文字变化隔离在此处，避免打字导致整屏重组卡顿。
+ * Standalone top-bar component: isolates the input state and text changes here, so typing does not cause full-screen recomposition jank.
  */
 @Composable
 private fun BrowserTopBar(
@@ -356,19 +356,19 @@ private fun BrowserTopBar(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // 标签页切换或新建时，重置输入框内容
+    // When a tab is switched or created, reset the input field's content
     LaunchedEffect(tabId) {
         addressInput = TextFieldValue(url, selection = TextRange(0, url.length))
     }
 
-    // 当非编辑态下 URL 变更时同步
+    // Sync when the URL changes while not in editing mode
     LaunchedEffect(url, isEditing) {
         if (!isEditing) {
             addressInput = TextFieldValue(url, selection = TextRange(0, url.length))
         }
     }
 
-    // 处理编辑态切换聚焦与键盘
+    // Handle focus and keyboard when editing mode toggles
     LaunchedEffect(isEditing) {
         if (isEditing) {
             addressInput = TextFieldValue(url, selection = TextRange(0, url.length))
@@ -398,7 +398,7 @@ private fun BrowserTopBar(
                     .padding(horizontal = Spacing.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左侧：返回 / 取消编辑
+                // Left side: Back / Cancel editing
                 IconButton(onClick = {
                     if (isEditing) {
                         onEditingChange(false)
@@ -414,7 +414,7 @@ private fun BrowserTopBar(
                     )
                 }
 
-                // 中间：标题与输入胶囊框
+                // Centre: title and input capsule
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -515,7 +515,7 @@ private fun BrowserTopBar(
                     }
                 }
 
-                // 右侧：开发者工具 + 刷新按钮
+                // Right side: developer tools + reload button
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = onToggleDevTools,
@@ -572,7 +572,7 @@ private fun BrowserTopBar(
 }
 
 /**
- * 底部操作栏独立组件
+ * Standalone bottom action bar component
  */
 @Composable
 private fun BrowserBottomBar(
@@ -609,7 +609,7 @@ private fun BrowserBottomBar(
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. 后退
+                // 1. Back
                 IconButton(
                     onClick = onGoBack,
                     enabled = canGoBack
@@ -621,7 +621,7 @@ private fun BrowserBottomBar(
                     )
                 }
 
-                // 2. 前进
+                // 2. Forward
                 IconButton(
                     onClick = onGoForward,
                     enabled = canGoForward
@@ -633,7 +633,7 @@ private fun BrowserBottomBar(
                     )
                 }
 
-                // 3. 新建标签页
+                // 3. New tab
                 IconButton(onClick = onNewTab) {
                     Icon(
                         FeatherIcons.Plus,
@@ -643,7 +643,7 @@ private fun BrowserBottomBar(
                     )
                 }
 
-                // 4. 夜间模式切换
+                // 4. Night mode toggle
                 IconButton(onClick = onToggleNightMode) {
                     Icon(
                         if (nightMode) FeatherIcons.Sun else FeatherIcons.Moon,
@@ -655,7 +655,7 @@ private fun BrowserBottomBar(
                     )
                 }
 
-                // 5. 标签页管理按钮（数字方框徽标）
+                // 5. Tab management button (numeric square badge)
                 Box(
                     modifier = Modifier
                         .size(28.dp)

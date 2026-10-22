@@ -64,7 +64,7 @@ internal fun MessageActionsBottomSheet(
 
             Spacer(modifier = Modifier.height(Spacing.xs))
 
-            // 编辑消息
+            // Edit message
             MessageActionItem(
                 icon = FeatherIcons.Edit2,
                 title = stringResource(R.string.chat_action_edit),
@@ -74,7 +74,7 @@ internal fun MessageActionsBottomSheet(
                 }
             )
 
-            // 复制文本：纯图片消息没有文字可复制，隐藏该项
+            // Copy text: image-only messages have no text to copy, so this item is hidden
             if (message.content.hasVisibleContent()) {
                 MessageActionItem(
                     icon = FeatherIcons.Copy,
@@ -86,7 +86,7 @@ internal fun MessageActionsBottomSheet(
                 )
             }
 
-            // 删除消息
+            // Delete message
             MessageActionItem(
                 icon = FeatherIcons.Trash2,
                 title = stringResource(R.string.chat_action_delete),

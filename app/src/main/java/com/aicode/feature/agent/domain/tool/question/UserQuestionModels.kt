@@ -1,10 +1,10 @@
 package com.aicode.feature.agent.domain.tool.question
 
 /**
- * AI 调用 ask_user_question 工具后，挂起等待用户回答的请求对象。
+ * The request object suspended waiting for the user's answer after the AI calls the ask_user_question tool.
  *
- * @param id 本次调用的唯一标识（对应 ToolCall.id），用于 resolve 时配对。
- * @param questions 本次要问用户的 1-4 个问题。
+ * @param id The unique identifier of this call (corresponding to ToolCall.id), used to pair on resolve.
+ * @param questions The 1-4 questions to ask the user this time.
  */
 data class PendingUserQuestion(
     val id: String,
@@ -12,12 +12,12 @@ data class PendingUserQuestion(
 )
 
 /**
- * 单个问题。
+ * A single question.
  *
- * @param question 完整问题文本，如「该用哪个库做 HTTP 请求？」
- * @param header 短标签（≤12 字符），展示为 Chip/Tag，如「库」「方案」。
- * @param options 2-4 个预设选项（UI 会自动追加一个「其他」选项）。
- * @param multiSelect 是否允许多选。false = 单选 RadioButton，true = 多选 Checkbox。
+ * @param question The full question text, such as "Which library should be used for HTTP requests?"
+ * @param header A short label (<=12 characters), shown as a Chip/Tag, such as "Library" or "Plan".
+ * @param options 2-4 preset options (the UI automatically appends an "Other" option).
+ * @param multiSelect Whether multiple selection is allowed. false = single-choice RadioButton, true = multi-choice Checkbox.
  */
 data class QuestionItem(
     val question: String,
@@ -27,10 +27,10 @@ data class QuestionItem(
 )
 
 /**
- * 单个选项。
+ * A single option.
  *
- * @param label 选项标签（简短 1-5 个词），如「OkHttp（推荐）」。
- * @param description 选项说明，解释选它的含义或利弊。
+ * @param label The option label (short, 1-5 words), such as "OkHttp (recommended)".
+ * @param description The option description, explaining what choosing it means or its pros and cons.
  */
 data class QuestionOption(
     val label: String,
@@ -38,20 +38,20 @@ data class QuestionOption(
 )
 
 /**
- * 用户对一次 ask_user_question 的全部回答。
+ * All of the user's answers to one ask_user_question call.
  *
- * @param answers 每个问题对应一个 [SingleAnswer]。若用户点了「补充」，此列表为空。
+ * @param answers Each question corresponds to one [SingleAnswer]. If the user chose to add more detail, this list is empty.
  */
 data class UserQuestionAnswer(
     val answers: List<SingleAnswer>
 )
 
 /**
- * 对单个问题的回答。
+ * The answer to a single question.
  *
- * @param question 原问题文本（便于 AI 对应回答是针对哪个问题的）。
- * @param selected 用户选中的选项 label 列表（单选=1 个元素，多选可能多个）。
- * @param customText 若用户选了「其他」并输入了自定义文本，存于此字段；否则为 null。
+ * @param question The original question text (so the AI can tell which question the answer is for).
+ * @param selected The list of option labels the user selected (single choice = 1 element; multiple choice may be several).
+ * @param customText If the user selected "Other" and entered custom text, it is stored in this field; otherwise null.
  */
 data class SingleAnswer(
     val question: String,

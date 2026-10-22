@@ -41,7 +41,7 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.Check
 
 /**
- * 偏好设置：集中放置不属于单个提供商配置、也不针对某个专用模型的全局偏好。
+ * Preferences: centrally holds global preferences that do not belong to a single provider configuration nor target a specific dedicated model.
  */
 @Composable
 internal fun GeneralSettingsSection(
@@ -322,14 +322,14 @@ internal fun GeneralSettingsSection(
     }
 }
 
-/** 超时值的行尾展示：0（或负数）视为不限制。 */
+/** Trailing display for timeout values: 0 (or a negative number) is treated as no limit. */
 @Composable
 private fun timeoutLabel(sec: Int): String =
     if (sec <= 0) stringResource(R.string.settings_timeout_unlimited)
     else stringResource(R.string.settings_timeout_seconds, sec)
 
 /**
- * 数值输入弹窗：只接受非负整数，留空或填 0 按 0 处理（由调用方决定 0 的语义）。
+ * Numeric input dialog: only accepts non-negative integers; leaving it blank or entering 0 is treated as 0 (the caller decides the semantics of 0).
  */
 @Composable
 private fun NumberInputDialog(
@@ -343,7 +343,7 @@ private fun NumberInputDialog(
 ) {
     var text by remember { mutableStateOf(if (initialValue > 0) initialValue.toString() else "") }
     val parsed = text.trim().toIntOrNull()
-    // 留空按 [minValue] 的语义处理：允许 0 的场景（超时/重试）视为不限制，否则视为未填。
+    // Blank input is handled with [minValue] semantics: in scenarios that allow 0 (timeout/retry) it is treated as no limit, otherwise as not filled in.
     val isValid = if (text.isBlank()) minValue <= 0 else parsed != null && parsed in minValue..maxValue
 
     AlertDialog(

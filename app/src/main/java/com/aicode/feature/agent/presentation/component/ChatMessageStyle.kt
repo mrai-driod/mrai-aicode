@@ -53,68 +53,68 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 消息区（DSH 扁平文档流风格）的共用尺寸与色板。
+ * Shared dimensions and palette for the message area (DSH flat document-flow style).
  *
- * 设计基线：整块对话区不再用「每段文字各套一个描边卡片」的堆叠，而是**一页文档**——
- * 助手正文直接铺在页面底色上，用户消息是一枚浅色药丸，工具调用是带 1px 细线的扁平行，
- * 只有代码/差异这类「内容块」才升起来变成带描边的白底卡。
+ * Design baseline: the whole conversation area no longer stacks "one outlined card per paragraph", but is instead **one page of a document** -
+ * assistant body text lies directly on the page background, a user message is a pale pill, a tool call is a flat row with a 1px hairline,
+ * and only "content blocks" such as code/diffs are raised into white cards with an outline.
  *
- * 颜色全部取自当前主题的语义槽位（不写死 hex），因此四套预设 + 深色模式 + 莫奈取色
- * 都能自动适配；深色下的色阶关系由 `copy(alpha)` 叠在主题表面上得到，与浅色同构。
+ * All colours come from the current theme's semantic slots (no hardcoded hex), so the four presets + dark mode + Monet colour extraction
+ * all adapt automatically; the tonal relationships in dark mode are obtained by layering `copy(alpha)` over theme surfaces, isomorphic with light mode.
  */
 internal object ChatStyle {
-    /** 细线/描边宽度：扁平风格里唯一的分隔手段。 */
+    /** Hairline/outline width: the flat style's only means of separation. */
     val hairline = 1.dp
 
-    /** 用户药丸圆角。 */
+    /** Corner radius of the user pill. */
     val bubbleCorner = 14.dp
 
-    /** 代码卡/差异卡圆角。 */
+    /** Corner radius of code cards / diff cards. */
     val cardCorner = 10.dp
 
-    /** 行内小面板（指令、结果）圆角。 */
+    /** Corner radius of small inline panels (command, result). */
     val panelCorner = 8.dp
 
-    // ——— 预建共享 Shape ———
-    // 组合期现场 RoundedCornerShape(...) 每次重组都新建一个 CornerBasedShape（内含 4 个
-    // CornerSize）。快速 fling 时可见 item 反复重组，累积成每秒数千次分配 → 堆锯齿 → GC 暂停
-    // 掉帧。这些圆角都是编译期常量，Shape 本身不可变且无状态，可安全全局共享一份。
+    // ——— Pre-built shared Shapes ———
+    // Creating a RoundedCornerShape(...) on the spot during composition builds a new CornerBasedShape (holding 4
+    // CornerSize values) on every recomposition. During a fast fling, visible items recompose repeatedly, accumulating into thousands of allocations per second -> heap sawtooth -> GC pauses
+    // and dropped frames. These radii are all compile-time constants and a Shape is immutable and stateless, so one instance can safely be shared globally.
     val bubbleShape = RoundedCornerShape(bubbleCorner)
     val cardShape = RoundedCornerShape(cardCorner)
     val panelShape = RoundedCornerShape(panelCorner)
 
-    /** 工具行最小高度：保证指腹可点，布局紧凑不松散。 */
+    /** Minimum tool-row height: keeps it fingertip-tappable while the layout stays compact, not loose. */
     val toolRowMinHeight = 32.dp
 
-    /** 代码卡头部高度。 */
+    /** Code card header height. */
     val codeHeaderHeight = 36.dp
 
-    /** 行首图标格：思考行 / 工具行 / 工具分组头共用同一格宽，三行的图标与后续文字才会左右对齐。 */
+    /** Leading icon cell: the thinking row / tool row / tool group header share the same cell width, so the three rows' icons and following text align horizontally. */
     val rowIconSize = 16.dp
 }
 
-/** 用户消息底色：浅色主题下即主题容器色（默认蓝即参考图那种淡蓝），深色下自动变深。 */
+/** User message background: in light themes it is the theme container colour (the default blue is the pale blue of the reference image); in dark themes it deepens automatically. */
 @Composable
 internal fun chatUserBubbleColor(): Color = MaterialTheme.colorScheme.primaryContainer
 
-/** 用户消息文字：压在浅药丸上的深色文字，不再用白字反白。 */
+/** User message text: dark text sitting on the pale pill, no longer white reversed-out text. */
 @Composable
 internal fun chatUserBubbleTextColor(): Color = MaterialTheme.colorScheme.onPrimaryContainer
 
-/** 1px 细线：扁平风格里唯一的分组手段。 */
+/** 1px hairline: the flat style's only means of grouping. */
 @Composable
 internal fun chatHairlineColor(): Color = MaterialTheme.colorScheme.outlineVariant
 
-/** 弱面板底色（工具结果、代码区底）：浅色下接近 `#F9FAFB`。 */
+/** Weak panel background (tool results, code area base): close to `#F9FAFB` in light themes. */
 @Composable
 internal fun chatMutedSurfaceColor(): Color =
     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
 
-/** 内容卡底色（差异/代码卡）：浅色下是白底 + 细线，深色下降一档成为「纸面」。 */
+/** Content card background (diff/code cards): in light themes a white base + hairline; in dark themes it drops one level to become the "paper surface". */
 @Composable
 internal fun chatCardSurfaceColor(): Color = MaterialTheme.colorScheme.surface
 
-/** 横向 1px 细线，占满可用宽度。 */
+/** Horizontal 1px hairline filling the available width. */
 @Composable
 internal fun ChatHairline(modifier: Modifier = Modifier) {
     Box(
@@ -125,7 +125,7 @@ internal fun ChatHairline(modifier: Modifier = Modifier) {
     )
 }
 
-/** 消息下方的时间 / token / 耗时小字，统一 12sp 弱化灰。 */
+/** The small time / token / elapsed text below a message, uniformly 12sp in dimmed grey. */
 @Composable
 internal fun ChatMetaText(
     text: String,
@@ -144,13 +144,13 @@ internal fun ChatMetaText(
 
 private val CHAT_CLOCK_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-/** 气泡下方的时间戳（如 `17:55`）。 */
+/** Timestamp below a bubble (e.g. `17:55`). */
 internal fun formatClockTime(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(CHAT_CLOCK_FORMATTER)
 
 /**
- * 「思考」字形：矢量原子/思考图标（对齐用户参考图）。
- * 资源载入 R.drawable.ic_thinking，颜色跟随调用方给的主题色 tint，等比缩放到指定尺寸。
+ * "Thinking" glyph: a vector atom/thinking icon (matching the user's reference image).
+ * Loads the resource R.drawable.ic_thinking, its colour follows the theme-colour tint given by the caller, scaled proportionally to the requested size.
  */
 @Composable
 internal fun ThinkingGlyph(
@@ -167,10 +167,10 @@ internal fun ThinkingGlyph(
 }
 
 /**
- * 内容卡：白底 + 1px 细线 + 可选头部（标题 + 复制）与页脚统计。
+ * Content card: white base + 1px hairline + an optional header (title + copy) and footer statistics.
  *
- * 参考图里「写入 .dsh-write-test.txt」下面那块就是它：头部一行放文件路径与「复制」，
- * 正文是等宽代码/差异，页脚给 `+3 −0 · 1 个文件` 这类汇总。
+ * The block below "Write .dsh-write-test.txt" in the reference image is exactly this: the header row holds the file path and "Copy",
+ * the body is monospace code/diff, and the footer gives a summary such as `+3 -0 · 1 file`.
  */
 @Composable
 internal fun ChatCodeCard(
@@ -225,7 +225,7 @@ internal fun ChatCodeCard(
     }
 }
 
-/** 行内等宽小面板：工具「指令」「结果」这类不需要复制按钮的次要内容块。 */
+/** Small inline monospace panel: secondary content blocks such as a tool's "command" / "result" that need no copy button. */
 @Composable
 internal fun ChatMonoPanel(
     modifier: Modifier = Modifier,
@@ -243,7 +243,7 @@ internal fun ChatMonoPanel(
 }
 
 /**
- * 手指拖动允许在边界接力外层；松手后的惯性不得越过内层窗口。
+ * A finger drag may hand off to the outer scroller at the boundary; the fling inertia after release must not overshoot the inner window.
  */
 @Composable
 internal fun rememberBoundNestedScrollConnection(scrollState: ScrollState): NestedScrollConnection {
@@ -261,16 +261,16 @@ internal fun rememberBoundNestedScrollConnection(scrollState: ScrollState): Nest
     }
 }
 
-/** 兼容旧引用的兜底。 */
+/** Fallback for compatibility with old references. */
 internal val InnerScrollConsumeRemainder = object : NestedScrollConnection {
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
 }
 
 /**
- * 卡片头部的「复制」文字按钮：点完短暂变成「已复制」。
+ * "Copy" text button in a card header: briefly changes to "Copied" after being tapped.
  *
- * 高度取 32dp（含内边距后命中区约 36dp）：这是密度很高的消息区里的次级动作，
- * 与工具行 40dp 的主命中区错开层级，避免整屏都是 44dp 的大按钮。
+ * Height is 32dp (hit area about 36dp including padding): this is a secondary action in a very dense message area,
+ * staggered in level from the tool row's 40dp primary hit area, so the whole screen is not full of big 44dp buttons.
  */
 @Composable
 internal fun ChatCopyAction(

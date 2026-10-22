@@ -123,17 +123,17 @@ internal fun LogTab(
     }
     val commits = filteredCommits
 
-    // 泳道调色板：按列号循环取色，分支越多颜色越丰富。
+    // Lane palette: colours cycle by column index; the more branches, the richer the colours.
     val laneColors = rememberLaneColors(graph.maxLane + 1)
-    // 每个提交到其父提交的边列表（按提交索引分组），供 Canvas 绘制连线。
+    // Edge list from each commit to its parents (grouped by commit index), for the Canvas to draw the connecting lines.
     val edgesByCommit = remember(graph) { groupEdgesByCommit(graph) }
-    // Canvas 宽度：每个泳道一列，加左右内边距。线性历史（无分叉/合并）时收紧泳道宽度，
-    // 让出更多空间给提交信息；有分叉时每泳道 16dp。节点在泳道内自动居中，无需改绘制。
+    // Canvas width: one column per lane, plus left/right padding. For a linear history (no forks/merges) the lane width is tightened
+    // to leave more room for the commit information; with forks each lane is 16dp. Nodes are automatically centred within their lane, so drawing needs no change.
     val laneWidth = if (graph.maxLane == 0) 10.dp else 16.dp
     val canvasWidth = laneWidth * (graph.maxLane + 1) + Spacing.xs * 2
-    // 每行高度，用于计算连线纵向跨度（节点居中）。
+    // Row height, used to compute the vertical span of the connecting lines (nodes are centred).
     val rowHeight = 72.dp
-    // 预拉取下一页：列表滑动至接近底部（剩余 20 项）且还有更多提交时提前发起后台拉取，消除滑到底部等待停顿。
+    // Prefetch the next page: when the list has scrolled close to the bottom (20 items remaining) and there are more commits, start a background fetch early, eliminating the wait when hitting the bottom.
     val shouldLoadMore by remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -171,9 +171,9 @@ internal fun LogTab(
             )
         }
         SectionHeader(stringResource(R.string.git_commit_count, commits.size))
-        // 滚动容器占满整屏（与状态/分支页一致）：白色卡片是滚动内容的一部分——
-        // 内容少时卡片收缩在顶部；滚动时整卡可滚过 tab 被渐变蒙版渐隐，
-        // 滚到底卡片底部停在 tab 上方（底部 70dp 留白）。
+        // The scroll container fills the whole screen (consistent with the Status/Branches pages): the white card is part of the scrolling content —
+        // when there is little content the card shrinks at the top; when scrolling, the whole card can scroll past the tab and be faded by the gradient mask,
+        // and at the bottom the card's bottom edge stops above the tab (70dp of bottom padding).
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -248,7 +248,7 @@ internal fun LogTab(
         }
     }
 
-    // 提交详情弹层：不打断列表布局，泳道保持完整。
+    // Commit detail sheet: does not interrupt the list layout, and the lanes stay intact.
     detailHash?.let { hash ->
         val commit = graph.commits.find { it.hash == hash }
         if (commit != null) {
@@ -278,7 +278,7 @@ private fun GraphCommitRow(
     laneWidth: Dp,
     rowHeight: Dp,
     refs: List<GitGraphRef>,
-    /** 列表第一行（最新提交）：上方无更多提交，不画向上延伸的竖线。 */
+    /** The first row of the list (the newest commit): there are no commits above it, so no vertical line is drawn extending upward. */
     isTopTerminal: Boolean,
     onOpen: () -> Unit
 ) {
@@ -296,7 +296,7 @@ private fun GraphCommitRow(
                 .clickable(onClick = onOpen),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧拓扑图区域：Canvas 绘制节点 + 上下连线。
+            // Left topology-graph area: the Canvas draws nodes + connecting lines above and below.
             GraphCanvas(
                 edges = edges,
                 activeTopLanes = activeTopLanes,
@@ -311,14 +311,14 @@ private fun GraphCommitRow(
                     .width(canvasWidth)
                     .fillMaxHeight()
             )
-            // 右侧提交信息。上下留白只作用于内容，Canvas 撑满整行保证泳道跨行连续。
+            // Right commit information. Vertical padding applies only to the content; the Canvas fills the whole row to keep lanes continuous across rows.
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .padding(vertical = Spacing.sm)
                     .padding(end = Spacing.lg)
             ) {
-                // 引用标签行（分支/标签 pill）。
+                // Ref label row (branch/tag pills).
                 if (refs.isNotEmpty()) {
                     RefPills(refs = refs)
                     Spacer(Modifier.height(Spacing.xs))
@@ -384,13 +384,13 @@ private fun GraphCommitRow(
 }
 
 /**
- * 拓扑图 Canvas：绘制当前提交的节点圆点 + 分支连线。
+ * Topology graph Canvas: draws the current commit's node dot + branch connecting lines.
  *
- * 绘制顺序（后绘制覆盖先绘制，保证节点压在线上）：
- * 1. 分段竖线：结合 [activeTopLanes] 与 [activeBottomLanes]，对每个泳道按需画全长（0→height）、
- *    上半段（0→centerY）或下半段（centerY→height）竖线，避免在分叉/合并节点处竖线悬空延伸。
- * 2. 跨列连线：画从节点中心到下半段目标列的贝塞尔曲线。
- * 3. 节点圆点：合并提交画环形双圈，普通提交画实心圆。
+ * Drawing order (later drawing covers earlier drawing, ensuring nodes sit on top of lines):
+ * 1. Segmented vertical lines: combining [activeTopLanes] and [activeBottomLanes], for each lane draw, as needed, the full length (0→height),
+ *    the upper half (0→centerY) or the lower half (centerY→height) as a vertical line, avoiding vertical lines hanging in mid-air at fork/merge nodes.
+ * 2. Cross-column lines: draw a Bézier curve from the node centre to the target column in the lower half.
+ * 3. Node dot: merge commits are drawn as a double ring, ordinary commits as a filled circle.
  */
 @Composable
 private fun GraphCanvas(
@@ -402,7 +402,7 @@ private fun GraphCanvas(
     laneColors: List<Color>,
     canvasWidth: Dp,
     laneWidth: Dp,
-    /** 第一行（最新提交）：不画上半段竖线，避免节点上方悬空延伸。 */
+    /** First row (newest commit): do not draw the upper-half vertical line, to avoid it hanging above the node. */
     suppressTopLane: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -414,16 +414,16 @@ private fun GraphCanvas(
         val centerY = size.height / 2f
         val stroke = 2.5.dp.toPx()
 
-        // 所有相关泳道（包含 top 和 bottom 的并集）
+        // All relevant lanes (the union of top and bottom)
         val allLanes = (activeTopLanes + activeBottomLanes + lane).toSet()
 
-        // 跨列边（出边与入边）均在下半段绘制贝塞尔曲线。
-        // curveBotLanes 记录被曲线接替下半段竖线的列：仅当该列上半段无竖线（非贯穿通道）时才排除，
-        // 避免孤立半段；若该列上半段已有竖线（主干穿过），则保留下半段竖线使其贯穿，曲线叠画在上方。
+        // Cross-column edges (both out-edges and in-edges) are drawn as Bézier curves in the lower half.
+        // curveBotLanes records the columns whose lower-half vertical line is replaced by a curve: a column is excluded only when its upper half has no vertical line (not a through channel),
+        // to avoid an isolated half segment; if the column's upper half already has a vertical line (the main line passes through), keep the lower-half vertical line so it runs through, with the curve drawn on top.
         val crossEdgeToLanes = edges.filter { it.fromLane != it.toLane }.map { it.toLane }.toSet()
         val curveBotLanes = crossEdgeToLanes.filterNot { it in activeTopLanes }.toSet()
 
-        // 1. 分段竖线绘制：精细控制 0->centerY 与 centerY->height
+        // 1. Segmented vertical-line drawing: precisely controls 0->centerY and centerY->height
         for (l in allLanes) {
             val inTop = l in activeTopLanes
             val inBot = l in activeBottomLanes && l !in curveBotLanes
@@ -431,7 +431,7 @@ private fun GraphCanvas(
             val x = l * lanePx + lanePx / 2f + padPx
 
             if (inTop && inBot) {
-                // 贯穿整行；第一行不画上半段（上方无提交）。
+                // Runs through the whole row; the first row does not draw the upper half (no commits above).
                 if (suppressTopLane) {
                     drawLine(
                         color = color,
@@ -450,7 +450,7 @@ private fun GraphCanvas(
                     )
                 }
             } else if (inTop) {
-                // 仅上半段（到达节点终止，或下半段转为斜曲线）；第一行不画。
+                // Upper half only (terminates at the node, or the lower half turns into a diagonal curve); not drawn for the first row.
                 if (!suppressTopLane) {
                     drawLine(
                         color = color,
@@ -461,7 +461,7 @@ private fun GraphCanvas(
                     )
                 }
             } else if (inBot) {
-                // 仅下半段（从该节点新分出/延伸）
+                // Lower half only (newly forked/extended from this node)
                 drawLine(
                     color = color,
                     start = Offset(x, centerY),
@@ -472,7 +472,7 @@ private fun GraphCanvas(
             }
         }
 
-        // 2. 跨列连线（均在下半段）：出边从节点中心→目标列底部，入边从目标列底部→节点中心
+        // 2. Cross-column lines (all in the lower half): out-edges from the node centre → the bottom of the target column, in-edges from the bottom of the target column → the node centre
         for (edge in edges) {
             if (edge.fromLane == edge.toLane) continue
             val color = laneColors.getOrElse(edge.lane) { Color.Gray }
@@ -481,7 +481,7 @@ private fun GraphCanvas(
             val midY = centerY + (size.height - centerY) * 0.5f
             val path = Path().apply {
                 if (edge.isMergeIn) {
-                    // 合并入边：父支线从目标列底部弯入本节点中心
+                    // Merge in-edge: the parent side line curves in from the bottom of the target column to this node's centre
                     moveTo(toX, size.height)
                     cubicTo(
                         toX, midY,
@@ -489,7 +489,7 @@ private fun GraphCanvas(
                         fromX, centerY
                     )
                 } else {
-                    // 出边：本节点从中心向目标列底部分叉
+                    // Out-edge: this node forks from its centre towards the bottom of the target column
                     moveTo(fromX, centerY)
                     cubicTo(
                         fromX, midY,
@@ -505,7 +505,7 @@ private fun GraphCanvas(
             )
         }
 
-        // 3. 节点圆点：合并提交画环形双圈，普通提交画实心圆。
+        // 3. Node dot: merge commits are drawn as a double ring, ordinary commits as a filled circle.
         val nodeRadius = if (isMerge) 7.dp.toPx() else 5.dp.toPx()
         if (isMerge) {
             drawCircle(
@@ -529,7 +529,7 @@ private fun GraphCanvas(
     }
 }
 
-/** 提交引用标签行：当前分支高亮 primary，其余用各分支色。 */
+/** Commit ref label row: the current branch is highlighted in primary, the rest use their branch colours. */
 @Composable
 private fun RefPills(refs: List<GitGraphRef>) {
     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
@@ -570,8 +570,8 @@ private fun RefPills(refs: List<GitGraphRef>) {
 }
 
 /**
- * 泳道调色板：按列数生成一组区分度高的颜色，循环复用。
- * 颜色取自常见 IDE 分支配色，深浅适中以适配明暗主题。
+ * Lane palette: generates a set of highly distinguishable colours by column count, reused cyclically.
+ * Colours are taken from common IDE branch palettes, moderate in lightness to suit light and dark themes.
  */
 @Composable
 private fun rememberLaneColors(count: Int): List<Color> {
@@ -582,15 +582,15 @@ private fun rememberLaneColors(count: Int): List<Color> {
 }
 
 /**
- * 把 [GitGraph.edges] 按来源提交索引分组。[GitRepository.computeLanes] 按提交顺序为每个提交
- * 生成 `parents.size` 条边（根提交 0 条），故 edges 是扁平有序的，按父数累积分组即可重建对应。
- * 返回 `Map<提交索引, List<GraphEdge>>`，供 [GraphCommitRow] 绘制本行连线。
+ * Group [GitGraph.edges] by source commit index. [GitRepository.computeLanes] generates, in commit order,
+ * `parents.size` edges for each commit (0 for a root commit), so edges are flat and ordered, and grouping by the cumulative parent count rebuilds the correspondence.
+ * Returns a `Map<commit index, List<GraphEdge>>`, for [GraphCommitRow] to draw this row's lines.
  */
 private fun groupEdgesByCommit(graph: GitGraph): Map<Int, List<GraphEdge>> {
     val result = mutableMapOf<Int, List<GraphEdge>>()
     var edgeIdx = 0
     graph.commits.forEachIndexed { commitIdx, commit ->
-        // 根提交无边；非根提交有 parents.size 条边。
+        // A root commit has no edges; a non-root commit has parents.size edges.
         val n = if (commit.parents.isEmpty()) 0 else commit.parents.size
         val list = mutableListOf<GraphEdge>()
         repeat(n) {
@@ -686,7 +686,7 @@ private fun CommitFileRow(file: GitFileChange, indent: Dp, onClick: () -> Unit =
     }
 }
 
-/** 提交详情底部弹层：完整信息 + 复制哈希 + 改动文件清单（点击文件进 diff）。 */
+/** Commit detail bottom sheet: full information + copy hash + changed file list (tap a file to open its diff). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CommitDetailSheet(
@@ -890,7 +890,7 @@ private fun CommitDetailSheet(
                 }
             }
 
-            // 深度操作按钮行：基于此提交建分支 / 打标签 / 重置
+            // Deep-action button row: create a branch / tag / reset from this commit
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)

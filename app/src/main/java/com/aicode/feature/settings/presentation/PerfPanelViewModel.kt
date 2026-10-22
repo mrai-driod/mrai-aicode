@@ -12,9 +12,9 @@ import java.io.File
 import javax.inject.Inject
 
 /**
- * 性能面板：直接转发 [PerfMonitor] 的状态流，操作也全部委托。
- * 聚合（模块均值/峰值）故意放在 UI 层现算——采样流每秒只变一次，计算量可忽略，
- * 换来的是聚合口径改动不需要动 ViewModel。
+ * Performance panel: directly forwards [PerfMonitor]'s state flow, and delegates all actions too.
+ * Aggregation (per-module mean/peak) is deliberately computed on the fly in the UI layer — the sample flow changes only once per second, so the cost is negligible,
+ * and in return, changing the aggregation rules does not require touching the ViewModel.
  */
 @HiltViewModel
 class PerfPanelViewModel @Inject constructor(

@@ -1,20 +1,20 @@
 package com.aicode.feature.agent.domain.model
 
 /**
- * Agent 的工作模式（对齐 Claude Code 的 Build / Plan / Ask 三段式）：
- * - [BUILD] 构建：可读写文件、执行命令；是否弹窗授权由「授权挡位 + 高危规则」等权限设置决定，
- *   模式本身不再内置放行策略（原 AUTO 的「全放行」语义由「完全权限」挡位承担）。
- * - [PLAN] 计划：只读探索 + 输出实施方案，经计划审查面板批准后才进入构建执行。
- * - [ASK] 提问：只读问答，禁止一切写操作，不进入计划执行流程（对齐 Claude Code 的 Ask）。
+ * The working mode of the Agent (aligned with the three-part Build / Plan / Ask of Claude Code):
+ * - [BUILD] Build: can read and write files and execute commands; whether an authorization popup appears is decided by permission settings such as "authorization tier + high-risk rules",
+ *   and the mode itself no longer has a built-in allow policy (the original AUTO "allow everything" semantics are carried by the "full permissions" tier).
+ * - [PLAN] Plan: read-only exploration + outputting an implementation plan, only entering build execution after approval by the plan review panel.
+ * - [ASK] Ask: read-only question answering, forbidding all write operations, and not entering the plan execution flow (aligned with the Ask of Claude Code).
  */
 enum class AgentMode {
-    BUILD, // 构建模式（默认）：允许所有授权操作，具体授权口径见 ToolPermissionPolicyEngine
-    PLAN,  // 计划模式，拦截修改类操作，只读/探索为主
-    ASK    // 提问模式，只读问答；写操作被物理拦截，且不允许 AI 自行切换计划模式
+    BUILD, // Build mode (default): allows all authorized operations; see ToolPermissionPolicyEngine for the exact authorization rules
+    PLAN,  // Plan mode, intercepts modification operations, mainly read-only/exploration
+    ASK    // Ask mode, read-only question answering; write operations are physically intercepted, and the AI is not allowed to switch to plan mode on its own
 }
 
 /**
- * 一次独立的聊天会话。消息通过 sessionId 归属到会话，切换会话即切换聊天历史。
+ * A single independent chat session. Messages belong to a session via sessionId; switching sessions switches the chat history.
  */
 data class ChatSession(
     val id: String,
@@ -23,7 +23,7 @@ data class ChatSession(
     val updatedAt: Long,
     val workspacePath: String = "",
     val mode: AgentMode = AgentMode.BUILD,
-    /** 进入 PLAN 前的模式（BUILD 或 ASK）；退出 PLAN 时恢复，null 视为 BUILD。 */
+    /** The mode before entering PLAN (BUILD or ASK); restored when leaving PLAN, null is treated as BUILD. */
     val modeBeforePlan: AgentMode? = null,
     val reasoningEffort: ReasoningEffort = ReasoningEffort.MEDIUM,
     val providerId: String? = null,
@@ -32,8 +32,8 @@ data class ChatSession(
     val totalOutputTokens: Int = 0,
     val lastInputTokens: Int = 0,
     val isPinned: Boolean = false,
-    /** 子代理会话：父会话 id；null 表示普通根会话。 */
+    /** Sub-agent session: the parent session id; null means an ordinary root session. */
     val parentId: String? = null,
-    /** 子代理会话：派生子代理的类型（如 coder / researcher）；null 表示普通根会话。 */
+    /** Sub-agent session: the type of the spawned sub-agent (e.g. coder / researcher); null means an ordinary root session. */
     val subagentType: String? = null
 )

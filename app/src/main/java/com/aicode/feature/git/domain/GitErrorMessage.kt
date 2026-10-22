@@ -1,70 +1,70 @@
 package com.aicode.feature.git.domain
 
 /**
- * 把 git 命令的原始失败输出匹配成用户友好的中文提示。
+ * Matches the raw failure output of a git command to a user-friendly message.
  *
- * git 的 stderr 是面向命令行的英文技术文案，直接 toast 不友好。这里对常见失败场景做模式匹配，
- * 命中则返回友好提示，未命中则退回原始输出（保留排查信息）。匹配基于 git 稳定输出前缀，
- * 不依赖完整字符串相等，兼容路径、分支名等动态片段。
+ * Git's stderr is command-line-oriented technical English that is unfriendly to toast directly. This matches common failure cases by pattern:
+ * on a match it returns the friendly message; otherwise it falls back to the raw output (preserving troubleshooting info). Matching is based on stable git output prefixes,
+ * not full-string equality, so it tolerates dynamic fragments such as paths and branch names.
  */
 object GitErrorMessage {
 
     /**
-     * @param raw git 原始 stdout+stderr 文本（即 [GitCommandFailureException.output]）。
-     * @return 友好提示；无匹配时返回 [raw] 原文。
+     * @param raw Raw git stdout+stderr text (i.e. [GitCommandFailureException.output]).
+     * @return The friendly message; if nothing matches, returns [raw] unchanged.
      */
     fun friendly(raw: String): String {
         if (raw.isBlank()) return raw
-        // 删除当前所在分支
+        // Deleting the branch currently checked out
         if (raw.contains("Cannot delete branch") && raw.contains("checked out"))
-            return "无法删除当前所在分支，请先切换到其他分支"
-        // 删除未合并的分支
+            return "Cannot delete the current branch. Switch to another branch first"
+        // Deleting a branch that is not fully merged
         if (raw.contains("is not fully merged"))
-            return "该分支有未合并的提交，无法安全删除"
-        // 切换到不存在的分支/引用
+            return "This branch has unmerged commits and cannot be safely deleted"
+        // Switching to a branch/ref that does not exist
         if (raw.contains("invalid reference"))
-            return "分支或引用不存在"
-        // 切换时本地改动会被覆盖
+            return "Branch or reference does not exist"
+        // Local changes would be overwritten on switch
         if (raw.contains("local changes") && raw.contains("would be overwritten"))
-            return "本地有未提交的改动会被覆盖，请先提交或暂存后再切换"
-        // 远程仓库不可用 / 无权限
+            return "You have uncommitted local changes that would be overwritten. Commit or stash them before switching"
+        // Remote repository unavailable / no permission
         if (raw.contains("does not appear to be a git repository") ||
             raw.contains("Could not read from remote repository"))
-            return "远程仓库不可用或无访问权限"
-        // 克隆目录非空
+            return "Remote repository is unavailable or you do not have access"
+        // Clone target directory is not empty
         if (raw.contains("already exists and is not an empty directory"))
-            return "当前工作区目录非空，无法直接克隆到当前目录"
-        // 鉴权失败（用户名/密码/token 错误或未配置）
+            return "The current workspace directory is not empty and cannot be cloned into directly"
+        // Authentication failed (wrong or unconfigured username/password/token)
         if (raw.contains("Authentication failed") ||
             raw.contains("Invalid username or token") ||
             raw.contains("Permission denied") ||
             raw.contains("Password authentication is not supported"))
-            return "远程鉴权失败，请检查凭据配置（用户名/密码/Token）"
-        // 仓库不存在或无权限访问
+            return "Remote authentication failed. Check your credential configuration (username/password/Token)"
+        // Repository does not exist or no access permission
         if (raw.contains("Repository not found") || raw.contains("repository") && raw.contains("not found"))
-            return "远程仓库不存在或无访问权限"
-        // 拉取时无上游跟踪信息
+            return "Remote repository does not exist or you do not have access"
+        // No upstream tracking info when pulling
         if (raw.contains("no tracking information"))
-            return "当前分支未关联远程分支，无法拉取"
-        // 推送无配置目标
+            return "The current branch is not tracking a remote branch and cannot pull"
+        // No configured push destination
         if (raw.contains("No configured push destination"))
-            return "未配置远程仓库，无法推送"
-        // 推送被拒（非快进 / 远程有更新）
+            return "No remote repository configured. Cannot push"
+        // Push rejected (non-fast-forward / remote has updates)
         if (raw.contains("non-fast-forward") || raw.contains("rejected") && raw.contains("fetch first") ||
             raw.contains("Updates were rejected because the remote contains"))
-            return "推送被拒绝，远程有更新的提交，请先拉取"
-        // 未配置署名（提交时）
+            return "Push rejected. The remote has newer commits; pull first"
+        // Identity not configured (when committing)
         if (raw.contains("Please tell me who you are") || raw.contains("Author identity unknown"))
-            return "尚未配置提交署名，请在设置中填写用户名和邮箱"
-        // 合并冲突
+            return "Commit identity is not configured. Set your username and email in Settings"
+        // Merge conflict
         if (raw.contains("CONFLICT") || raw.contains("Automatic merge failed"))
-            return "合并产生冲突，请前往状态页查看并解决冲突"
-        // 合并/拉取时本地有未提交改动
+            return "Merge produced conflicts. Go to the Status page to review and resolve them"
+        // Uncommitted local changes during merge/pull
         if (raw.contains("Your local changes to the following files would be overwritten by merge"))
-            return "本地有未提交的改动，请先提交或储藏（Stash）后再合并"
-        // 储藏相关
+            return "You have uncommitted local changes. Commit or stash them before merging"
+        // Stash-related
         if (raw.contains("No local changes to save"))
-            return "当前没有需要储藏的改动"
+            return "There are no local changes to stash"
         return raw
     }
 }

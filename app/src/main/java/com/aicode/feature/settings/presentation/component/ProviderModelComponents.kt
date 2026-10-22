@@ -74,7 +74,7 @@ private val ModelTestButtonWidth = 56.dp
 private val ModelContentStart = ModelLogoSize + Spacing.md
 private val ModelTestAreaWidth = ModelTestButtonWidth + Spacing.sm
 
-/** 模型能力标签。Image / Tools 各自独立，token 上下限合并进同一个胶囊。 */
+/** Model capability tags. Image / Tools are each independent; the token upper/lower limits are merged into the same capsule. */
 @Composable
 private fun ModelMetadataTags(
     metadata: ModelMetadata?,
@@ -104,7 +104,7 @@ private fun ModelMetadataTags(
     }
 }
 
-/** 胶囊标签。多段文本用固定间距并排，不用空格字符撑间距。 */
+/** Capsule tag. Multiple text segments are laid out side by side with fixed spacing, without using space characters for spacing. */
 @Composable
 private fun ModelTagPill(texts: List<String>) {
     Row(
@@ -129,7 +129,7 @@ private fun ModelTagPill(texts: List<String>) {
     }
 }
 
-/** 模型行。logo 与「测试」相对名称+标签整块垂直居中，对齐提供商列表。 */
+/** Model row. The logo and "Test" are vertically centered relative to the name + tags block, aligned with the provider list. */
 @Composable
 internal fun ProviderModelRow(
     model: String,
@@ -306,7 +306,7 @@ internal fun ProviderModelRow(
     }
 }
 
-/** 模型测试调试详情底部弹窗（展示完整的请求/响应调试信息，支持一键复制）。 */
+/** Model test debug detail bottom sheet (shows the full request/response debug information, with one-tap copy support). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ModelTestDetailBottomSheet(
@@ -370,7 +370,7 @@ internal fun ModelTestDetailBottomSheet(
                 .padding(bottom = Spacing.xl),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            // 顶栏：标题 + 状态/耗时 + 复制按钮
+            // Top bar: title + status/latency + copy button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -425,7 +425,7 @@ internal fun ModelTestDetailBottomSheet(
                 }
             }
 
-            // 可滚动详细信息内容区
+            // Scrollable detailed-information content area
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -433,7 +433,7 @@ internal fun ModelTestDetailBottomSheet(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                // 1. 请求 URL 与 Header
+                // 1. Request URL and Header
                 if (result.requestUrl.isNotBlank()) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
@@ -512,7 +512,7 @@ internal fun ModelTestDetailBottomSheet(
                     }
                 }
 
-                // 2. 响应 Headers 与 Body
+                // 2. Response Headers and Body
                 if (result.responseHeaders.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(

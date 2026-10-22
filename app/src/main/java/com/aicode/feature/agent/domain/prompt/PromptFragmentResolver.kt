@@ -3,26 +3,26 @@ package com.aicode.feature.agent.domain.prompt
 import java.io.File
 
 /**
- * `prompts.custom/` 的片段解析规则（纯文件系统逻辑，便于单测）。
+ * `prompts.custom/` fragment resolution rules (pure filesystem logic, easy to unit test).
  *
- * 目录里分两类片段：
- * - 顶层 `<两位数字>-<名称>.md`：数字即身份。数字命中内置静态片段即为覆盖，否则作为新增片段并入静态基线按数字排序。
- * - 其它文件（含 `agent/` 子目录）：按精确同名覆盖，无数字身份。
+ * The directory holds two kinds of fragments:
+ * - Top-level `<two-digits>-<name>.md`: the number is the identity. If the number matches a built-in static fragment it is an override; otherwise it is a new fragment merged into the static baseline sorted by number.
+ * - Other files (including the `agent/` subdirectory): override by exact same name, with no numeric identity.
  */
 internal object PromptFragmentResolver {
 
-    /** 存在该文件即完全禁用内置提示词（仅主代理生效）。 */
+    /** If this file exists, built-in prompts are fully disabled (main agent only). */
     const val DISABLE_BUILTIN_FILE = ".no-builtin"
 
     private val NUMBERED = Regex("""^(\d{2})-(.+)\.md$""")
 
-    /** 顶层数字片段的数字值；非两位数字前缀返回 null。 */
+    /** The numeric value of a top-level numbered fragment; returns null when there is no two-digit prefix. */
     fun parseNumber(fileName: String): Int? =
         NUMBERED.matchEntire(fileName)?.groupValues?.get(1)?.toInt()
 
     /**
-     * 目录顶层 `<两位数字>-<名称>.md` 文件，按数字升序。
-     * 同一数字有多个文件时只保留字典序首个，避免排序不稳定。
+     * Top-level `<two-digits>-<name>.md` files in the directory, in ascending numeric order.
+     * When several files share a number, only the lexicographically first is kept to avoid unstable ordering.
      */
     fun numberedFragments(dir: File): List<Pair<Int, File>> {
         val files = dir.listFiles() ?: return emptyList()
@@ -36,6 +36,6 @@ internal object PromptFragmentResolver {
         return byNumber.entries.sortedBy { it.key }.map { it.key to it.value }
     }
 
-    /** `.no-builtin` 是否存在。 */
+    /** Whether `.no-builtin` exists. */
     fun isBuiltinDisabled(dir: File): Boolean = File(dir, DISABLE_BUILTIN_FILE).isFile
 }

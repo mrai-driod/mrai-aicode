@@ -47,10 +47,10 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * 多轮会话式识图工具：第一次传 images（1~5 张）由识图模型一次性分析/对比，返回 vision_id 与文本结果；
- * 之后传 vision_id + prompt 在同一识图会话内继续追问（识图模型记得图片与之前的问答）。
- * 会话请求体落盘在 ~/.aicode/vision-sessions/（见 [VisionSessionStore]）。
- * 识图模型不校验视觉能力，调用失败时把错误信息原样作为工具结果返回。
+ * Multi-turn conversational image-understanding tool: on the first call, pass images (1-5) and the vision model analyses/compares them in one go, returning a vision_id and the text result;
+ * afterwards, pass vision_id + prompt to keep asking follow-up questions within the same vision session (the vision model remembers the images and the previous Q&A).
+ * Session request bodies are stored on disk in ~/.aicode/vision-sessions/ (see [VisionSessionStore]).
+ * The vision model does not validate vision capability; on failure, the error message is returned as-is as the tool result.
  */
 class ViewImageTool @Inject constructor(
     private val fileAccess: FileAccessProvider,
@@ -155,7 +155,7 @@ class ViewImageTool @Inject constructor(
     }
 
     private suspend fun createSession(images: List<String>, prompt: String, detail: String, sessionId: String?): ToolResult {
-        // 按 detail 档位逐张编码：original 全部原样；high 小图原样、大图压缩；low 全部压缩。
+        // Encode each image by detail level: original keeps everything as-is; high keeps small images as-is and compresses large ones; low compresses everything.
         val encoded = mutableListOf<AgentImage>()
         for (path in images) {
             when (val r = encodeImage(path, detail)) {
@@ -179,7 +179,7 @@ class ViewImageTool @Inject constructor(
             throw e
         } catch (e: Exception) {
             visionSessionStore.delete(id)
-            FileLogger.e(TAG, "识图失败", e)
+            FileLogger.e(TAG, "Image understanding failed", e)
             ToolResult.Error(e.message ?: "Vision call failed", "VISION_CALL_FAILED")
         }
     }
@@ -200,7 +200,7 @@ class ViewImageTool @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FileLogger.e(TAG, "识图失败", e)
+            FileLogger.e(TAG, "Image understanding failed", e)
             ToolResult.Error(e.message ?: "Vision call failed", "VISION_CALL_FAILED")
         }
     }
@@ -272,8 +272,8 @@ class ViewImageTool @Inject constructor(
     }
 
     /**
-     * 识图模型解析：配置了「识图模型」用专用模型，否则用当前聊天模型
-     * （session 绑定 provider 优先，回退全局默认）。不校验模型的视觉能力。
+     * Vision model resolution: if a "vision model" is configured, use the dedicated model; otherwise use the current chat model
+     * (the session-bound provider takes priority, falling back to the global default). The model's vision capability is not validated.
      */
     private suspend fun isCurrentChatModelSupportsVision(sessionId: String?): Boolean {
         val config = resolveCurrentChatConfig(sessionId) ?: return false
@@ -384,7 +384,7 @@ class ViewImageTool @Inject constructor(
                 )
             )
         } catch (e: Exception) {
-            FileLogger.e(TAG, "viewImage 编码异常: $path", e)
+            FileLogger.e(TAG, "viewImage encoding error: $path", e)
             EncodeOutcome.Fail(e.message ?: "Failed to read image", "READ_IMAGE_ERROR")
         }
     }

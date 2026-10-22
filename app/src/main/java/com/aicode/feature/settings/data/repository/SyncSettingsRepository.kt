@@ -45,14 +45,14 @@ class SyncSettingsRepository @Inject constructor(
         _maxSyncBatchSize.value = size
     }
 
-    /** 备份快照：同步偏好三键。 */
+    /** Backup snapshot: the three sync preference keys. */
     fun snapshot(): SyncSettingsSnapshot = SyncSettingsSnapshot(
         ignoredPatterns = _ignoredPatterns.value,
         useGitIgnore = _useGitIgnore.value,
         maxSyncBatchSize = _maxSyncBatchSize.value
     )
 
-    /** 从备份还原同步偏好。 */
+    /** Restores the sync preferences from a backup. */
     fun restore(snapshot: SyncSettingsSnapshot) {
         setIgnoredPatterns(snapshot.ignoredPatterns)
         setUseGitIgnore(snapshot.useGitIgnore)
@@ -60,7 +60,7 @@ class SyncSettingsRepository @Inject constructor(
     }
 }
 
-/** 同步偏好的可序列化快照。 */
+/** Serializable snapshot of the sync preferences. */
 @kotlinx.serialization.Serializable
 data class SyncSettingsSnapshot(
     val ignoredPatterns: String,

@@ -25,7 +25,7 @@ class SshShellBackend(
     private val shell: Session.Shell
 ) : SessionBackend {
 
-    // changeWindowDimensions 走网络 I/O，resize 会被 TerminalView 在主线程触发，需切到后台线程
+    // changeWindowDimensions performs network I/O; resize is triggered by TerminalView on the main thread, so it must be moved to a background thread
     private val resizeExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "SshShellResize") }
     @Volatile private var closed = false
 
@@ -37,7 +37,7 @@ class SshShellBackend(
         if (closed || resizeExecutor.isShutdown) return
         resizeExecutor.execute {
             runCatching { shell.changeWindowDimensions(columns, rows, 0, 0) }
-                .onFailure { FileLogger.w(TAG, "PTY resize 失败 ${columns}x${rows}", it) }
+                .onFailure { FileLogger.w(TAG, "PTY resize failed ${columns}x${rows}", it) }
         }
     }
 
@@ -46,7 +46,7 @@ class SshShellBackend(
             shell.join()
             0
         }.getOrElse {
-            FileLogger.w(TAG, "shell.join 异常", it)
+            FileLogger.w(TAG, "shell.join exception", it)
             0
         }
     }
@@ -54,10 +54,10 @@ class SshShellBackend(
     override fun close() {
         closed = true
         resizeExecutor.shutdownNow()
-        // shell.close() 走网络 I/O，不能在主线程同步执行
+        // shell.close() performs network I/O and cannot be executed synchronously on the main thread
         Thread({
             runCatching { shell.close() }
-                .onFailure { FileLogger.w(TAG, "shell.close 异常", it) }
+                .onFailure { FileLogger.w(TAG, "shell.close exception", it) }
         }, "SshShellClose").start()
     }
 }

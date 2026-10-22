@@ -1,9 +1,9 @@
 package com.aicode.feature.agent.domain.skill
 
-/** 技能的来源作用域：全局（跨项目共享）或项目级（仅当前工作区生效）。 */
+/** The source scope of a skill: global (shared across projects) or project-level (only takes effect in the current workspace). */
 enum class SkillScope { GLOBAL, PROJECT }
 
-/** 一个生效的技能条目：技能本体 + 其来源作用域，供 UI 标注「全局/项目」。 */
+/** An active skill entry: the skill itself + its source scope, so the UI can label it "Global/Project". */
 data class SkillEntry(
     val skill: Skill,
     val scope: SkillScope

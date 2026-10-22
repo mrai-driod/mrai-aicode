@@ -8,13 +8,13 @@ import com.aicode.feature.workspace.domain.ProjectAicodeRoot
 import java.io.File
 
 /**
- * 项目级记忆数据源。由 Repository 动态创建（依赖当前会话的 projectRoot）。
+ * Project-level memory data source. Created dynamically by the Repository (depending on the current session's projectRoot).
  *
- * 本地模式：存 `<projectRoot>/.aicode/memory/`（跟随工作区目录）；
- * 远程模式：projectRoot 是远程服务器路径，java.io.File 无法在本地创建该目录（保存必失败），
- * 故改存全局配置目录下 `memory/projects/<项目名>-<标识哈希>/`（本地可写、跨连接稳定）。
- * 标识哈希基于「IP:端口:路径」计算，不同服务器上的同名路径（如都叫 /home/u/workspace/default）
- * 也会落到不同目录，不会混淆。
+ * Local mode: stored in `<projectRoot>/.aicode/memory/` (following the workspace directory);
+ * Remote mode: projectRoot is a path on the remote server and java.io.File cannot create that directory locally (saving would always fail),
+ * so it is stored instead under `memory/projects/<project name>-<identity hash>/` in the global config directory (locally writable, stable across connections).
+ * The identity hash is computed from "IP:port:path", so same-named paths on different servers (e.g. both called /home/u/workspace/default)
+ * also land in different directories and are never confused.
  */
 class ProjectMemorySource(
     private val projectRoot: String,

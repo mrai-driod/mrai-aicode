@@ -94,7 +94,7 @@ private val WARNING_COLOR = Color(0xFFE65100)
 private const val STATS_PAGE_SIZE = 5
 private const val CALLS_PAGE_SIZE = 10
 
-/** Token 统计页：周期与维度筛选 + 概览 + 趋势图 + 渠道/模型排行 + 调用明细。使用 LazyColumn 实现虚拟化渲染，消除首帧卡顿。 */
+/** Token stats page: period and dimension filters + overview + trend chart + provider/model rankings + call details. Uses LazyColumn for virtualized rendering to eliminate first-frame jank. */
 @Composable
 internal fun TokenStatsSection(
     state: TokenStatsUiState,
@@ -117,7 +117,7 @@ internal fun TokenStatsSection(
         contentPadding = PaddingValues(top = Spacing.sm, bottom = Spacing.xl),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        // ── 周期切换 ──
+        // ── Period switcher ──
         item(key = "period_selector") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -147,7 +147,7 @@ internal fun TokenStatsSection(
             }
         }
 
-        // ── 筛选栏（供应商 + 模型 + 清除） ──
+        // ── Filter bar (provider + model + clear) ──
         item(key = "filter_bar") {
             TokenStatsFilterBar(
                 selectedProviderId = state.filterProviderId,
@@ -160,7 +160,7 @@ internal fun TokenStatsSection(
             )
         }
 
-        // ── 概览卡片（无数据时保留占位，值显示 -）──
+        // ── Summary cards (kept as placeholders when there is no data, values show -)──
         item(key = "summary_cards") {
             val summary = state.summary
             val hasData = summary != null && summary.calls > 0
@@ -199,7 +199,7 @@ internal fun TokenStatsSection(
             }
         }
 
-        // ── 趋势图（无数据或仅单点时整块不渲染，避免 Vico 空 series / 单点 xStep 异常）──
+        // ── Trend chart (not rendered at all when there is no data or only a single point, to avoid Vico empty-series / single-point xStep errors)──
         if (state.trend.size > 1) {
             item(key = "trend_chart") {
                 Column {
@@ -226,7 +226,7 @@ internal fun TokenStatsSection(
             }
         }
 
-        // ── 渠道统计（无数据时显示占位）──
+        // ── Provider stats (placeholder shown when there is no data)──
         item(key = "provider_stats_header") {
             SettingsGroupHeader(text = stringResource(R.string.settings_token_stats_provider))
         }
@@ -263,7 +263,7 @@ internal fun TokenStatsSection(
             }
         }
 
-        // ── 模型统计（无数据时显示占位）──
+        // ── Model stats (placeholder shown when there is no data)──
         item(key = "model_stats_header") {
             SettingsGroupHeader(text = stringResource(R.string.settings_token_stats_model))
         }
@@ -299,7 +299,7 @@ internal fun TokenStatsSection(
             }
         }
 
-        // ── 调用明细（无数据时显示占位）──
+        // ── Call details (placeholder shown when there is no data)──
         item(key = "calls_header") {
             SettingsGroupHeader(text = stringResource(R.string.settings_token_stats_recent_calls))
         }
@@ -321,7 +321,7 @@ internal fun TokenStatsSection(
     }
 }
 
-/** 顶部筛选条：提供商下拉、模型下拉以及一键清除。 */
+/** Top filter bar: provider dropdown, model dropdown, and one-tap clear. */
 @Composable
 private fun TokenStatsFilterBar(
     selectedProviderId: String?,
@@ -344,7 +344,7 @@ private fun TokenStatsFilterBar(
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 供应商筛选下拉
+        // Provider filter dropdown
         Box(modifier = Modifier.weight(1f)) {
             FilterChip(
                 selected = selectedProviderId != null,
@@ -412,7 +412,7 @@ private fun TokenStatsFilterBar(
             }
         }
 
-        // 模型筛选下拉
+        // Model filter dropdown
         Box(modifier = Modifier.weight(1f)) {
             FilterChip(
                 selected = selectedModel != null,
@@ -480,7 +480,7 @@ private fun TokenStatsFilterBar(
             }
         }
 
-        // 清除筛选按钮
+        // Clear filters button
         if (hasFilter) {
             FilterChip(
                 selected = true,
@@ -538,7 +538,7 @@ private fun SummaryCard(label: String, value: String, sub: String? = null, modif
                     maxLines = 1
                 )
             } else {
-                // 无副文本时占位，保持四张卡片等高
+                // Placeholder when there is no sub-text, to keep the four cards the same height
                 Spacer(Modifier.height(2.dp + 16.dp))
             }
         }
@@ -552,7 +552,7 @@ private fun TokenTrendChart(trend: List<DayCallStats>, isHourly: Boolean) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textSize = 10.sp
     )
-    // y 轴：token 数用 k/M 单位展示，避免大数字拥挤
+    // y-axis: token counts shown in k/M units to avoid crowding large numbers
     val yAxisFormatter = remember {
         CartesianValueFormatter { _, value, _ -> formatTokenCount(value.toLong()) }
     }
@@ -607,7 +607,7 @@ private fun TokenTrendChart(trend: List<DayCallStats>, isHourly: Boolean) {
     )
 }
 
-/** 趋势线：实色线 + 半透明面积填充，多条线重叠时仍可辨识。 */
+/** Trend line: solid line + translucent area fill, still distinguishable when multiple lines overlap. */
 private fun trendLine(color: Color): LineCartesianLayer.Line = LineCartesianLayer.Line(
     fill = LineCartesianLayer.LineFill.single(Fill(color.toArgb())),
     stroke = LineCartesianLayer.LineStroke.Continuous(thicknessDp = 2f),
@@ -651,9 +651,9 @@ private fun LegendDot(color: Color, label: String) {
 }
 
 /**
- * 渠道统计行（重构版）：
- * 整合参考图的请求量、成功率、凭证数量与进度条视觉层级，
- * 隐藏重试展示，支持点击直接联动筛选该渠道。
+ * Provider stats row (refactored):
+ * Combines the reference design's request count, success rate, credential count, and progress-bar visual hierarchy,
+ * hides the retry display, and supports tapping to directly filter by that provider.
  */
 @Composable
 private fun ProviderStatsRow(
@@ -679,7 +679,7 @@ private fun ProviderStatsRow(
             .clickable(onClick = onClick)
             .padding(horizontal = Spacing.lg, vertical = 12.dp)
     ) {
-        // 顶部行：渠道名 + 请求量大字突出
+        // Top row: provider name + large emphasized request count
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
@@ -710,7 +710,7 @@ private fun ProviderStatsRow(
 
         Spacer(Modifier.height(4.dp))
 
-        // 第二行：凭证数量 + 成功率百分比 + Token 消耗
+        // Second row: credential count + success-rate percentage + token usage
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
@@ -741,7 +741,7 @@ private fun ProviderStatsRow(
 
         Spacer(Modifier.height(8.dp))
 
-        // 第三行：成功率细条进度条
+        // Third row: thin success-rate progress bar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -761,8 +761,8 @@ private fun ProviderStatsRow(
 }
 
 /**
- * 模型统计行：
- * 隐藏重试芯片，展示调用次数与成功率，支持点击直接联动筛选该模型。
+ * Model stats row:
+ * Hides the retry chip, shows call count and success rate, and supports tapping to directly filter by that model.
  */
 @Composable
 private fun ModelStatsRow(
@@ -812,7 +812,7 @@ private fun ModelStatsRow(
             StatChip(stringResource(R.string.settings_token_stats_success_rate, successRate))
         }
         Spacer(Modifier.height(6.dp))
-        // 消耗占比进度条（输入 + 输出两段）
+        // Usage-share progress bar (input + output segments)
         Row(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
@@ -890,7 +890,7 @@ private fun CallRecordsTable(
     val textColor = MaterialTheme.colorScheme.onSurface
     val mutedColor = MaterialTheme.colorScheme.onSurfaceVariant
     Column {
-        // 表头与数据行共用一个横向滚动容器，滑动时保持列对齐
+        // Header and data rows share one horizontal-scroll container so columns stay aligned while scrolling
         Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
             Column {
                 Row(modifier = Modifier.padding(horizontal = Spacing.md, vertical = 8.dp)) {
@@ -959,7 +959,7 @@ private fun TableCell(text: String, color: Color, width: Dp, fontWeight: FontWei
     )
 }
 
-/** 与对话页头部一致的 token 缩写格式（见 MarkdownContent.formatTokenCount）：1234 -> 1.2k。 */
+/** Token abbreviation format consistent with the chat page header (see MarkdownContent.formatTokenCount): 1234 -> 1.2k. */
 private fun formatCache(context: android.content.Context, cachedRead: Long, cachedWrite: Long): String =
     if (cachedRead > 0 || cachedWrite > 0) {
         context.getString(
@@ -974,14 +974,14 @@ private fun formatCache(context: android.content.Context, cachedRead: Long, cach
 private fun formatCallTime(epochMillis: Long): String =
     SimpleDateFormat("yyyy/M/d HH:mm", Locale.getDefault()).format(Date(epochMillis))
 
-/** 单次调用缓存命中率：缓存输入 / 总输入（inputTokens 含缓存命中部分，各 provider 适配器已统一该口径）。 */
+/** Per-call cache hit rate: cached input / total input (inputTokens includes the cache-hit portion; provider adapters have unified this definition). */
 private fun formatRecordCacheHitRate(call: LlmCallRecordEntity): String {
     if (call.inputTokens <= 0) return "-"
     val rate = min(call.cachedInputTokens * 100.0 / call.inputTokens, 100.0)
     return String.format(Locale.getDefault(), "%.1f%%", rate)
 }
 
-/** 概览缓存命中率：缓存输入 / 总输入（与单次调用同口径）；clamp 到 100% 兜住个别服务端上报的异常值。 */
+/** Overview cache hit rate: cached input / total input (same definition as per-call); clamped to 100% to guard against anomalous values reported by some servers. */
 private fun formatCacheHitRate(s: CallSummary): String {
     if (s.inputTokens <= 0) return "-"
     val rate = min(s.cachedInputTokens * 100.0 / s.inputTokens, 100.0)

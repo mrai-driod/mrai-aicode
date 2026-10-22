@@ -61,48 +61,48 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
- * 图片来源。
+ * Image source.
  *
- * 刻意做成值类型而不是「每个调用点自带一个 suspend 加载 lambda」：值类型 equals 稳定，可以直接
- * 当 [produceState] 的 key；lambda 那种写法会把待发送附件最大 5MB 的 base64 字符串一直攥在手里，
- * 附件都发出去、内存里那份已经清空了，查看器还在替它续命。
+ * Deliberately made a value type rather than "each call site bringing its own suspend loading lambda": a value type has stable equals, so it can be used directly
+ * as the key for [produceState]; the lambda style would keep holding the pending attachment's base64 string, up to 5MB, in hand --
+ * even after the attachment has been sent and the in-memory copy has been cleared, the viewer would still be keeping it alive.
  */
 sealed interface ImageSource {
-    /** 宿主本地文件绝对路径，可以直接解码。 */
+    /** Absolute path of a local file on the host, which can be decoded directly. */
     data class LocalFile(val path: String) : ImageSource
 
-    /** AI 视角的容器 / 远程路径，需要先经文件访问抽象落到宿主文件。 */
+    /** Container / remote path from the AI's perspective; it must first be brought to a host file through the file access abstraction. */
     data class ContainerPath(val path: String) : ImageSource
 
-    /** 内存里的 base64 图片数据。 */
+    /** Base64 image data held in memory. */
     data class Base64(val data: String) : ImageSource
 }
 
 /**
- * 一次查看请求。
+ * A single viewing request.
  *
- * [sources] 按顺序尝试，前一个拿不到就退到下一个 —— 远程 SSH 模式下已发送附件记的
- * `localPath` 是 `createTempFile` + `deleteOnExit` 的临时文件，进程重启或缓存被清掉后就没了，
- * 必须能退回容器路径重新拉一次。
+ * [sources] are tried in order; if the previous one cannot be obtained, it falls back to the next -- in remote SSH mode, the `localPath` recorded for a sent attachment
+ * is a temporary file from `createTempFile` + `deleteOnExit`, which is gone after the process restarts or the cache is cleared,
+ * so it must be able to fall back to the container path and fetch it again.
  */
 @Immutable
 data class ImageViewerRequest(
     val sources: List<ImageSource>,
-    /** 无障碍描述与失败提示用，通常是文件名；留空则回退到「图片预览」。 */
+    /** Used for the accessibility description and failure prompt, usually the file name; if left empty, falls back to "Image preview". */
     val title: String = ""
 )
 
-/** 打开全屏查看器的句柄：调用方只管 show，不关心加载与手势。 */
+/** Handle for opening the full-screen viewer: the caller only calls show and does not care about loading or gestures. */
 @Stable
 fun interface ImageViewer {
     fun show(request: ImageViewerRequest)
 }
 
 /**
- * 默认是空实现：没挂 [ImageViewerHost] 的组合树里点图片静默无反应，不会崩。
+ * The default is an empty implementation: tapping an image in a composition tree without [ImageViewerHost] attached silently does nothing and does not crash.
  *
- * 与 `LocalMarkdownImageTransformer` 同一套路 —— 用 CompositionLocal 而不是一路加回调参数，
- * 否则 `AgentMessageItem` / `ChatInputBar` 这些中间层都要为了转发一个 lambda 改签名。
+ * The same pattern as `LocalMarkdownImageTransformer` -- using a CompositionLocal rather than adding callback parameters all the way down,
+ * otherwise intermediate layers such as `AgentMessageItem` / `ChatInputBar` would all have to change their signatures just to forward a lambda.
  */
 val LocalImageViewer = staticCompositionLocalOf<ImageViewer> { ImageViewer { } }
 
@@ -130,15 +130,15 @@ private sealed interface ViewerLoad {
 }
 
 /**
- * 全屏图片查看器宿主。挂在组合树里任意位置即可 —— [Dialog] 是独立 window，不占父布局尺寸。
+ * Host for the full-screen image viewer. It can be attached anywhere in the composition tree -- [Dialog] is an independent window and does not occupy parent layout size.
  *
- * 用 Dialog 而不是组合内的 overlay Box，三条硬理由：
- * 1. `MainActivity` 把全局背景水印画在 `AppNavigation()` **之后**，overlay 会被那张水印叠在大图上；
- * 2. 平板双栏下聊天面板只占半屏，overlay 只能盖住聊天列，盖不满整屏；
- * 3. Dialog 自带返回键关闭，且窗口有焦点，优先级天然高于既有的「收侧栏 / 收右栏」BackHandler，
- *    不用去推敲它们的相对顺序。
+ * Using Dialog rather than an in-composition overlay Box, for three hard reasons:
+ * 1. `MainActivity` draws the global background watermark **after** `AppNavigation()`, so an overlay would have that watermark layered over the large image;
+ * 2. In the tablet dual-pane layout the chat panel occupies only half the screen, so an overlay could only cover the chat column, not the whole screen;
+ * 3. Dialog closes with the back key by itself, and its window has focus, so its priority is naturally higher than the existing "close sidebar / close right pane" BackHandlers,
+ *    with no need to work out their relative order.
  *
- * @param load 把 [ImageSource] 解成位图；实现方自行切 IO 线程，返回 null 表示这个来源拿不到。
+ * @param load Decodes an [ImageSource] into a bitmap; the implementer switches to an IO thread itself, and returning null means this source cannot be obtained.
  */
 @Composable
 fun ImageViewerHost(
@@ -155,13 +155,13 @@ fun ImageViewerHost(
     Dialog(
         onDismissRequest = state::dismiss,
         properties = DialogProperties(
-            // 不设则 dialog window 是 WRAP_CONTENT，内容铺不满屏
+            // If not set, the dialog window is WRAP_CONTENT and the content cannot fill the screen
             usePlatformDefaultWidth = false,
-            // 不设则内容被系统栏 inset 挤进安全区，黑底在状态栏处断开、露出后面的聊天界面
+            // If not set, the content is squeezed into the safe area by the system bar insets, the black background breaks at the status bar, revealing the chat screen behind
             decorFitsSystemWindows = false
         )
     ) {
-        // 浅色主题下系统栏图标是深色，压在黑底上看不见。dialog 有自己的 window，单独调它的图标色。
+        // Under a light theme the system bar icons are dark and are invisible pressed against the black background. The dialog has its own window, so its icon color is adjusted separately.
         val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
         SideEffect {
             dialogWindow?.let { window ->
@@ -175,7 +175,7 @@ fun ImageViewerHost(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // 媒体查看器背板刻意不随主题走：浅色模式下也该是近黑，做成语义色反而是错的
+                // The media viewer backdrop deliberately does not follow the theme: even in light mode it should be near-black, and making it a semantic color would instead be wrong
                 .background(Color.Black.copy(alpha = BACKDROP_ALPHA))
         ) {
             when (val loaded = loadState) {
@@ -203,7 +203,7 @@ fun ImageViewerHost(
                 onClick = state::dismiss,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    // decorFitsSystemWindows = false 之后要自己让开系统栏
+                    // After decorFitsSystemWindows = false, it must make way for the system bars itself
                     .systemBarsPadding()
                     .padding(Spacing.sm)
             ) {
@@ -238,27 +238,27 @@ private fun LoadFailedPlaceholder(modifier: Modifier = Modifier) {
     }
 }
 
-/** 背板不透明度。Compose 的 Dialog 本身还会给 window 加一层 dim，这里不必给满。 */
+/** Backdrop opacity. Compose's Dialog itself adds another dim layer to the window, so this does not need to be full. */
 private const val BACKDROP_ALPHA = 0.92f
 
 private const val MIN_SCALE = 1f
 
 /**
- * 缩放上限的下界。超长图按 Fit 铺进屏幕后本身就已经很小，只给 5 倍根本看不清细节，
- * 所以实际上限另取「能放大到 1:1 解码像素」的值，见 [ZoomableImage] 里的 maxScale。
+ * Lower bound for the zoom limit. An extra-long image fitted into the screen with Fit is already very small in itself, and only 5x makes the details impossible to see clearly,
+ * so the actual limit instead takes the value of "can be magnified to 1:1 decoded pixels"; see maxScale in [ZoomableImage].
  */
 private const val MAX_SCALE_FLOOR = 5f
 
 private const val DOUBLE_TAP_SCALE = 2.5f
 private const val ZOOM_ANIM_MS = 220
 
-/** 浮点比较容差：判断"是否还处在原始尺寸"。 */
+/** Floating-point comparison tolerance: determines "whether it is still at the original size". */
 private const val SCALE_EPS = 0.01f
 
 /**
- * 图片按 [ContentScale.Fit] 放进容器后的实际绘制尺寸。
+ * The actual drawn size after the image is placed into the container with [ContentScale.Fit].
  *
- * 夹位移边界必须按这个尺寸算而不是按容器尺寸算，否则能把图拖进两侧黑边里。
+ * The pan clamping bounds must be computed from this size rather than the container size, otherwise the image can be dragged into the black bars on both sides.
  */
 fun fitInside(image: IntSize, container: IntSize): Size {
     if (image.width <= 0 || image.height <= 0 || container.width <= 0 || container.height <= 0) {
@@ -271,11 +271,11 @@ fun fitInside(image: IntSize, container: IntSize): Size {
     return Size(image.width * ratio, image.height * ratio)
 }
 
-/** 单轴最大位移：放大后超出容器的部分对半分。没超出则为 0，图钉死在正中，杜绝漂移。 */
+/** Maximum displacement on a single axis: the part exceeding the container after zooming is split in half. If it does not exceed it, this is 0, pinning the image dead center and preventing drift. */
 fun maxPan(contentPx: Float, containerPx: Float, scale: Float): Float =
     ((contentPx * scale - containerPx) / 2f).coerceAtLeast(0f)
 
-/** 把位移夹回可视范围内。 */
+/** Clamps the displacement back into the visible range. */
 fun clampPan(offset: Offset, content: Size, container: IntSize, scale: Float): Offset {
     val limitX = maxPan(content.width, container.width.toFloat(), scale)
     val limitY = maxPan(content.height, container.height.toFloat(), scale)
@@ -283,15 +283,15 @@ fun clampPan(offset: Offset, content: Size, container: IntSize, scale: Float): O
 }
 
 /**
- * 以 [centroid]（容器内坐标）为锚点缩放后的新位移：捏合时手指底下那个像素保持不动。
+ * The new displacement after zooming anchored at [centroid] (coordinates inside the container): the pixel under the finger stays still while pinching.
  *
- * [graphicsLayer] 的 transformOrigin 默认在中心，所以一切以容器中心 [containerCenter] 为原点。
- * 记 v = centroid − containerCenter，内容点 p 的屏幕位置为 `p·scale + offset`；
- * 要让 v 处的内容点在手势后落到 v + pan，解得
- * `newOffset = v + pan − (v − oldOffset)·(newScale / oldScale)`。
+ * [graphicsLayer]'s transformOrigin defaults to the center, so everything takes the container center [containerCenter] as the origin.
+ * Let v = centroid − containerCenter; the screen position of a content point p is `p·scale + offset`;
+ * To make the content point at v land at v + pan after the gesture, solving gives
+ * `newOffset = v + pan − (v − oldOffset)·(newScale / oldScale)`.
  *
- * 两个退化情形可作校验：纯平移（newScale == oldScale）得 `oldOffset + pan`；
- * 以中心纯缩放（v = 0, pan = 0）得 `oldOffset · k`。
+ * Two degenerate cases can be used for verification: a pure translation (newScale == oldScale) gives `oldOffset + pan`;
+ * a pure zoom around the center (v = 0, pan = 0) gives `oldOffset · k`.
  */
 fun zoomAround(
     centroid: Offset,
@@ -307,12 +307,12 @@ fun zoomAround(
 }
 
 /**
- * 双指捏合缩放 + 放大后单指拖动 + 双击在原始尺寸与放大之间切换的图片。
+ * An image supporting pinch-to-zoom with two fingers + single-finger dragging after zooming + double-tapping to switch between the original size and magnified.
  *
- * 缩放与位移全走 [graphicsLayer]，不触发重新布局；边界由 [clampPan] 按 Fit 后的实际绘制尺寸
- * 夹取，所以松手不会漂移、也拖不进黑边。
+ * Zoom and displacement all go through [graphicsLayer] and do not trigger relayout; the bounds are clamped by [clampPan] using the actual drawn size after Fit,
+ * so on release there is no drift, and it cannot be dragged into the black bars.
  *
- * @param onTap 单击回调。仅在未放大时触发 —— 放大看细节时误触一下就关掉太容易了。
+ * @param onTap Single-tap callback. Triggered only when not magnified -- when viewing details magnified, an accidental tap would close it far too easily.
  */
 @Composable
 fun ZoomableImage(
@@ -330,14 +330,14 @@ fun ZoomableImage(
     val imageSize = remember(bitmap) { IntSize(bitmap.width, bitmap.height) }
     val content = remember(imageSize, container) { fitInside(imageSize, container) }
     val center = remember(container) { Offset(container.width / 2f, container.height / 2f) }
-    // 上限取「回到 1:1 解码像素」，否则长截图 Fit 之后缩得极小，5 倍也看不清字
+    // The limit takes "returning to 1:1 decoded pixels"; otherwise a long screenshot shrinks extremely small after Fit, and even 5x cannot make the text legible
     val maxScale = remember(imageSize, content) {
         if (content.width <= 0f) MAX_SCALE_FLOOR else maxOf(MAX_SCALE_FLOOR, imageSize.width / content.width)
     }
 
-    // 旋转屏幕、平板拖动分栏之后容器尺寸变了，旧位移可能越界。AndroidManifest 的 configChanges
-    // 含 orientation，Activity 不重建、scale/offset 全部保留，所以必须在这里重新夹一次。
-    // 刻意不把 scale 放进 key：那会让每次缩放都走一次重组，白费 graphicsLayer 的好处。
+    // After rotating the screen or dragging the tablet split pane, the container size changes and the old displacement may go out of bounds. AndroidManifest's configChanges
+    // include orientation, so the Activity is not recreated and scale/offset are all retained; therefore it must be clamped again here.
+    // Deliberately not putting scale into the key: that would make every zoom go through a recomposition, wasting the benefit of graphicsLayer.
     LaunchedEffect(content, container) {
         offset = clampPan(offset, content, container, scale)
     }
@@ -346,13 +346,13 @@ fun ZoomableImage(
         modifier = modifier
             .clipToBounds()
             .onSizeChanged { container = it }
-            // tap 必须写在 transform 之前：同一 modifier 链里越靠后的越深、Main pass 先到。
-            // 让 transform 先消费，捏合越过 touchSlop 后 tap 的 waitForUpOrCancellation 才会看到
-            // isConsumed 而放弃；顺序写反的话，捏一下就把查看器关了。
+            // tap must be written before transform: in the same modifier chain, the later one is deeper, and the Main pass arrives first.
+            // Let transform consume first; only after a pinch passes touchSlop will tap's waitForUpOrCancellation see
+            // isConsumed and give up; if the order were reversed, a single pinch would close the viewer.
             //
-            // key 必须带上 imageSize / container：pointerInput 的 key 不变时不会重启已在运行的
-            // 手势协程，只换 lambda 引用，于是回调里按值捕获的 content / center / maxScale 会一直
-            // 停在旧尺寸上——旋转屏幕后就用错的中心点缩放、按错的边界夹位移。
+            // The key must include imageSize / container: when pointerInput's key does not change, an already-running gesture coroutine is not restarted,
+            // only the lambda reference is replaced, so the content / center / maxScale captured by value in the callback would keep
+            // staying at the old size -- after rotating the screen it would zoom around the wrong center point and clamp displacement with the wrong bounds.
             .pointerInput(imageSize, container) {
                 detectTapGestures(
                     onTap = { if (scale <= MIN_SCALE + SCALE_EPS) onTap() },

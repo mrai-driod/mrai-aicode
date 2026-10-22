@@ -27,13 +27,13 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** 单个采样点（约每 1 秒一个）。 */
+/** A single sample point (roughly one per second). */
 data class PerfSample(
-    /** epoch 毫秒。 */
+    /** Epoch milliseconds. */
     val t: Long,
-    /** 采样时用户所在模块（由导航路由映射，见 [setModule]）。 */
+    /** The module the user was in at sampling time (mapped from the navigation route, see [setModule]). */
     val module: String,
-    /** 本进程 CPU 占整机算力百分比（全核合计 100%）。 */
+    /** This process's CPU as a percentage of total device compute (all cores together = 100%). */
     val cpuPct: Float,
     val pssMb: Float,
     val rssMb: Float,
@@ -41,24 +41,24 @@ data class PerfSample(
     val javaHeapMaxMb: Float,
     val nativePssMb: Float,
     val threads: Int,
-    /** 过去 1 秒渲染帧数。 */
+    /** Frames rendered in the past 1 second. */
     val fps: Int,
-    /** 过去 1 秒卡顿帧数（帧间隔 > 33ms）。 */
+    /** Janky frames in the past 1 second (frame interval > 33ms). */
     val jank: Int
 )
 
-/** 进程累计占用（自采样开启起）。 */
+/** Cumulative process usage (since sampling was enabled). */
 data class PerfTotals(
     val startedAt: Long = 0L,
     val samples: Int = 0,
     val frames: Long = 0L,
     val jankFrames: Long = 0L,
     val peakRssMb: Float = 0f,
-    /** 进程累计 CPU 时间（毫秒，utime+stime 折算）。 */
+    /** Cumulative process CPU time (milliseconds, converted from utime+stime). */
     val totalCpuMs: Long = 0L
 )
 
-/** 整机（设备）快照。 */
+/** Whole-device snapshot. */
 data class PerfSystem(
     val memTotalMb: Float = 0f,
     val memAvailMb: Float = 0f,
@@ -67,7 +67,7 @@ data class PerfSystem(
     val cpuCores: Int = Runtime.getRuntime().availableProcessors()
 )
 
-/** 持久化记录文件概况。 */
+/** Overview of the persisted record files. */
 data class PerfFilesInfo(
     val count: Int = 0,
     val totalBytes: Long = 0L,
@@ -76,18 +76,18 @@ data class PerfFilesInfo(
 )
 
 /**
- * 性能采样器：为「性能面板」提供实时占用、模块聚合与长期持久化数据。
+ * Performance sampler: provides live usage, per-module aggregation and long-term persisted data for the "Performance panel".
  *
- * 设计取舍（务实版）：
- * - 采样由用户手动开启（设置 → 数据与诊断 → 性能面板），每 [SAMPLE_INTERVAL_MS] 采一个点；
- * - 实时数据走内存环形缓冲（最近 [RING_MAX] 个点，够 1 小时），聚合在 UI 层现算；
- * - 长期分析靠 JSONL 落盘（`filesDir/perf/perf-yyyyMMdd.jsonl`，每日一个文件，超 8MB 自动加序号），
- *   保留最近 [KEEP_DAYS] 天，旧文件自动清理；
- * - 模块归属不打点侵入各界面，直接复用 MainActivity 的导航路由（chat/settings/terminal/…），
- *   由 [setModule] 被动接收；
- * - CPU 占用按「占整机算力百分比」计算（全核合计 100%），与系统监控工具口径一致。
+ * Design trade-offs (pragmatic version):
+ * - Sampling is enabled manually by the user (Settings -> Data & diagnostics -> Performance panel), one point every [SAMPLE_INTERVAL_MS];
+ * - Live data uses an in-memory ring buffer (the most recent [RING_MAX] points, enough for 1 hour), with aggregation computed on the fly in the UI layer;
+ * - Long-term analysis relies on JSONL files on disk (`filesDir/perf/perf-yyyyMMdd.jsonl`, one file per day, with a sequence number automatically added over 8MB),
+ *   keeping the most recent [KEEP_DAYS] days, with old files cleaned up automatically;
+ * - Module attribution does not instrument each screen; it directly reuses MainActivity's navigation routes (chat/settings/terminal/...),
+ *   received passively via [setModule];
+ * - CPU usage is calculated as a "percentage of total device compute" (all cores together = 100%), consistent with system monitoring tools.
  *
- * 采样本身只做 /proc 读取与一次 appendText，开销可忽略；FPS 通过 Choreographer 帧回调统计。
+ * Sampling itself only reads /proc and does one appendText, with negligible overhead; FPS is counted via Choreographer frame callbacks.
  */
 @Singleton
 class PerfMonitor @Inject constructor(
@@ -99,13 +99,13 @@ class PerfMonitor @Inject constructor(
         const val RING_MAX = 3_600
 
         /**
-         * 下发给 UI 的采样窗口（条数）。
+         * Sampling window sent to the UI (number of entries).
          *
-         * 环形缓冲保留 [RING_MAX] 用于导出/长期分析，但**不要**整份拷给 UI：
-         * 每秒 toList() 一份 3600 项列表，再让 Compose 侧 groupBy 全量重算，
-         * 等于每秒一次大对象分配 + O(n) 遍历——实测正是堆在 24↔136MB 间
-         * 反复锯齿（GC 抖动）并掉到 15fps 的推手之一。
-         * 实时面板只看最近几分钟即可，窗口定 180（3 分钟）。
+         * The ring buffer keeps [RING_MAX] for export/long-term analysis, but do **not** copy the whole thing to the UI:
+         * Calling toList() every second on a 3600-item list, then letting the Compose side groupBy and fully recompute,
+         * amounts to one large object allocation + an O(n) traversal every second -- measured as one of the drivers of the heap sawtoothing between 24 and 136MB
+         * (GC jitter) and dropping to 15fps.
+         * The live panel only needs the last few minutes, so the window is set to 180 (3 minutes).
          */
         const val UI_SAMPLE_WINDOW = 180
         const val KEEP_DAYS = 7
@@ -113,7 +113,7 @@ class PerfMonitor @Inject constructor(
         const val DIR = "perf"
         val DAY_FORMAT = SimpleDateFormat("yyyyMMdd", Locale.US)
         val TS_FORMAT = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
-        /** 卡顿阈值：帧间隔 > 33ms（约 2 个 60Hz vsync）。 */
+        /** Jank threshold: frame interval > 33ms (about 2 60Hz vsyncs). */
         const val JANK_THRESHOLD_NS = 33_000_000L
     }
 
@@ -128,7 +128,7 @@ class PerfMonitor @Inject constructor(
     val module: StateFlow<String> = _module.asStateFlow()
 
     private val _samples = MutableStateFlow<List<PerfSample>>(emptyList())
-    /** 最近 [RING_MAX] 个采样点，UI 每秒消费一次做实时展示与聚合。 */
+    /** The most recent [RING_MAX] sample points; the UI consumes them once per second for live display and aggregation. */
     val samples: StateFlow<List<PerfSample>> = _samples.asStateFlow()
 
     private val _totals = MutableStateFlow(PerfTotals())
@@ -144,7 +144,7 @@ class PerfMonitor @Inject constructor(
     private var samplingJob: Job? = null
     private var fileInfoTick = 0
 
-    // ── FPS 帧回调 ─────────────────────────────────────────────
+    // ── FPS frame callbacks ─────────────────────────────────────────────
     private val frameTimesNs = ArrayDeque<Long>(240)
     private val frameLock = Any()
     private var frameCallback: Choreographer.FrameCallback? = null
@@ -152,13 +152,13 @@ class PerfMonitor @Inject constructor(
     private val frameCallbackImpl = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             synchronized(frameLock) {
-                // 已停止采样（stopFrameCallbacks 置空 frameCallback）：立即终止重挂载链条。
-                // 否则停止瞬间正在执行的一次回调会把自己再 post 回去，永久每帧空转。
+                // Sampling has stopped (stopFrameCallbacks cleared frameCallback): terminate the re-posting chain immediately.
+                // Otherwise a callback executing at the moment of stopping would post itself again, spinning every frame forever.
                 if (frameCallback == null) return
                 frameTimesNs.addLast(System.nanoTime())
                 while (frameTimesNs.size > 240) frameTimesNs.removeFirst()
             }
-            // 持续挂下一帧；停止采样时 [stopFrameCallbacks] 移除。
+            // Keeps posting the next frame; removed by [stopFrameCallbacks] when sampling stops.
             choreographer.postFrameCallback(this)
         }
     }
@@ -171,7 +171,7 @@ class PerfMonitor @Inject constructor(
         }
     }
 
-    /** 导航路由变化时由 MainActivity 调用。 */
+    /** Called by MainActivity when the navigation route changes. */
     fun setModule(key: String) {
         if (_module.value != key) _module.value = key
     }
@@ -184,16 +184,16 @@ class PerfMonitor @Inject constructor(
         if (on) {
             startFrameCallbacks()
             samplingJob = scope.launch { sampleLoop() }
-            FileLogger.i(TAG, "性能采样已开启")
+            FileLogger.i(TAG, "Performance sampling enabled")
         } else {
             stopFrameCallbacks()
-            FileLogger.i(TAG, "性能采样已关闭")
+            FileLogger.i(TAG, "Performance sampling disabled")
         }
     }
 
-    // ── 导出 / 清理 ────────────────────────────────────────────
+    // ── Export / cleanup ────────────────────────────────────────────
 
-    /** 合并全部记录文件为单个 JSONL，返回缓存中的导出文件（由调用方决定保存位置）。 */
+    /** Merges all record files into a single JSONL and returns the export file in the cache (the caller decides where to save it). */
     suspend fun exportRawFile(): File = withContext(Dispatchers.IO) {
         val out = File(context.cacheDir, "aicode-perf-raw-${TS_FORMAT.format(Date())}.jsonl")
         out.bufferedWriter().use { writer ->
@@ -204,7 +204,7 @@ class PerfMonitor @Inject constructor(
         out
     }
 
-    /** 全部历史采样按模块聚合，导出 CSV（module,samples,seconds,avg_cpu_pct,avg_pss_mb,max_pss_mb）。 */
+    /** Aggregates all historical samples by module and exports CSV (module,samples,seconds,avg_cpu_pct,avg_pss_mb,max_pss_mb). */
     suspend fun exportSummaryCsv(): File = withContext(Dispatchers.IO) {
         data class Agg(var samples: Int = 0, var cpuSum: Double = 0.0, var pssSum: Double = 0.0, var pssMax: Float = 0f)
         val agg = linkedMapOf<String, Agg>()
@@ -234,7 +234,7 @@ class PerfMonitor @Inject constructor(
         out
     }
 
-    /** 清空全部持久化记录（内存环形缓冲保留）。 */
+    /** Clears all persisted records (the in-memory ring buffer is kept). */
     fun clearHistory() {
         scope.launch(Dispatchers.IO) {
             perfDir().listFiles()?.forEach { it.delete() }
@@ -242,7 +242,7 @@ class PerfMonitor @Inject constructor(
         }
     }
 
-    // ── 采样主循环 ─────────────────────────────────────────────
+    // ── Sampling main loop ─────────────────────────────────────────────
 
     private suspend fun sampleLoop() {
         var lastSelfTicks = readSelfTicks()
@@ -261,10 +261,10 @@ class PerfMonitor @Inject constructor(
             val rawDeviceDelta = (deviceTotal - lastDeviceTotal).coerceAtLeast(0)
             lastSelfTicks = selfTicks
             lastDeviceTotal = deviceTotal
-            // /proc/stat 在部分设备读不到或恒返回 0（实测：OnePlus Android 16），
-            // 此时拿它当分母会把 CPU% 放大上百倍——用户导出的数据里出现 6600%，
-            // 实际只是 selfDelta=66 ticks。分母不可信时退回「核数 × ticksPerSecond」
-            // 的整机容量，保证数值落在 0..(核数×100)% 的合理区间。
+            // /proc/stat cannot be read on some devices or always returns 0 (measured: OnePlus Android 16),
+            // and using it as the denominator then would amplify CPU% by hundreds of times -- user-exported data showed 6600%,
+            // when it was actually just selfDelta=66 ticks. When the denominator is untrustworthy, fall back to "core count x ticksPerSecond"
+            // as the total device capacity, keeping values in the reasonable range 0..(core count x 100)%.
             val capacityTicks = (
                 Runtime.getRuntime().availableProcessors().coerceAtLeast(1) *
                     ticksPerSecond().toLong()
@@ -292,8 +292,8 @@ class PerfMonitor @Inject constructor(
 
             ring.addLast(sample)
             while (ring.size > RING_MAX) ring.removeFirst()
-            // 只把最近 UI_SAMPLE_WINDOW 条交给 UI，避免每秒拷贝整条 3600 项缓冲
-            // （见 UI_SAMPLE_WINDOW 注释：这是 GC 锯齿/掉帧的推手）。
+            // Only hand the most recent UI_SAMPLE_WINDOW entries to the UI, avoiding copying the whole 3600-item buffer every second
+            // (see the UI_SAMPLE_WINDOW comment: this is a driver of GC sawtoothing / frame drops).
             _samples.value = if (ring.size <= UI_SAMPLE_WINDOW) {
                 ring.toList()
             } else {
@@ -316,7 +316,7 @@ class PerfMonitor @Inject constructor(
 
             withContext(Dispatchers.IO) {
                 runCatching { appendToFile(sample) }
-                    .onFailure { FileLogger.w(TAG, "性能记录写入失败: ${it.message}") }
+                    .onFailure { FileLogger.w(TAG, "Failed to write performance record: ${it.message}") }
                 if (++fileInfoTick % 60 == 0) {
                     _system.value = readSystemSnapshot()
                     refreshFilesInfo()
@@ -325,7 +325,7 @@ class PerfMonitor @Inject constructor(
         }
     }
 
-    // ── 底层读取 ───────────────────────────────────────────────
+    // ── Low-level reads ───────────────────────────────────────────────
 
     private data class MemInfo(
         val totalPssMb: Float,
@@ -337,10 +337,10 @@ class PerfMonitor @Inject constructor(
     )
 
     private fun readMemoryInfo(): MemInfo {
-        // 优先 /proc/self/smaps_rollup：纯文件读取、无 binder IPC，PSS 实时准确。
-        // 原先每秒调一次 ActivityManager.getProcessMemoryInfo——那是同步 IPC，
-        // 系统繁忙时会阻塞采样线程；且部分设备返回缓存值，实测 PSS 恒定 350.7MB
-        // 一动不动，完全失去观测意义。仅在 rollup 不可用时回退到 IPC。
+        // Prefer /proc/self/smaps_rollup: a pure file read with no binder IPC, and PSS is accurate in real time.
+        // Previously ActivityManager.getProcessMemoryInfo was called once per second -- that is synchronous IPC,
+        // which blocks the sampling thread when the system is busy; and some devices return cached values, with measured PSS stuck at a constant 350.7MB
+        // without moving, completely losing any observational value. Only fall back to IPC when the rollup is unavailable.
         var totalPssKb = readRollupKb("Pss:")
         var nativePssKb = 0L
         if (totalPssKb <= 0) {
@@ -364,7 +364,7 @@ class PerfMonitor @Inject constructor(
         )
     }
 
-    /** 读 /proc/self/smaps_rollup 中 `Pss:  1234 kB` 形式的字段（KB，无 IPC）。 */
+    /** Reads a field of the form `Pss:  1234 kB` from /proc/self/smaps_rollup (KB, no IPC). */
     private fun readRollupKb(key: String): Long {
         return runCatching {
             File("/proc/self/smaps_rollup").useLines { lines ->
@@ -391,21 +391,21 @@ class PerfMonitor @Inject constructor(
         }.getOrDefault(0L)
     }
 
-    /** /proc/self/stat 的 utime+stime（clock ticks）。 */
+    /** utime+stime from /proc/self/stat (clock ticks). */
     private fun readSelfTicks(): Long {
         return runCatching {
             val line = File("/proc/self/stat").readText()
             val after = line.substringAfterLast(')').trim()
             val t = after.split(Regex("\\s+"))
-            // after 以 field3(state) 开头，utime=field14 → 下标 11，stime=field15 → 下标 12。
+            // after starts at field3(state), utime=field14 -> index 11, stime=field15 -> index 12.
             (t[11].toLongOrNull() ?: 0L) + (t[12].toLongOrNull() ?: 0L)
         }.getOrDefault(0L)
     }
 
-    /** 进程累计 CPU 毫秒（自进程启动）。 */
+    /** Cumulative process CPU milliseconds (since process start). */
     private fun selfCpuMs(): Long = readSelfTicks() * 1000L / ticksPerSecond()
 
-    /** /proc/stat 第一行全部核的累计 ticks（user+nice+system+idle+iowait+irq+softirq+steal）。 */
+    /** Cumulative ticks for all cores on the first line of /proc/stat (user+nice+system+idle+iowait+irq+softirq+steal). */
     private fun readDeviceTotalTicks(): Long {
         return runCatching {
             File("/proc/stat").bufferedReader().use { reader ->
@@ -466,7 +466,7 @@ class PerfMonitor @Inject constructor(
         }
     }
 
-    // ── 持久化 ─────────────────────────────────────────────────
+    // ── Persistence ─────────────────────────────────────────────────
 
     private fun perfDir(): File = File(context.filesDir, DIR).apply { mkdirs() }
 
@@ -530,7 +530,7 @@ class PerfMonitor @Inject constructor(
     }
 }
 
-/** clock ticks/秒：优先 sysconf(_SC_CLK_TCK)，取不到按 Linux 常见值 100 兜底。 */
+/** Clock ticks/second: prefers sysconf(_SC_CLK_TCK), falls back to the common Linux value 100 when unavailable. */
 private fun ticksPerSecond(): Long = runCatching {
     android.system.Os.sysconf(android.system.OsConstants._SC_CLK_TCK)
 }.getOrDefault(100L)

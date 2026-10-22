@@ -23,8 +23,8 @@ private val Context.backgroundDataStore by preferencesDataStore(
 )
 
 /**
- * 全局自定义背景图：图片文件拷贝到应用私有目录持久化（不依赖 content URI 授权），
- * 透明度与图片路径存 DataStore。路径为 null 表示未设置背景。
+ * Global custom background image: the image file is copied into the app's private directory for persistence (not relying on content URI permission),
+ * and the opacity and image path are stored in DataStore. A null path means no background is set.
  */
 @Singleton
 class BackgroundSettingsRepository @Inject constructor(
@@ -32,33 +32,33 @@ class BackgroundSettingsRepository @Inject constructor(
 ) {
     companion object {
         const val DEFAULT_ALPHA = 0.15f
-        /** 顶层水印模式下透明度上限：超过会盖住文字影响可读性。 */
+        /** Upper opacity limit in top-level watermark mode: exceeding it would cover text and affect readability. */
         const val MAX_ALPHA = 0.2f
-        /** 最小透明度：0 表示完全透明（背景不可见）。 */
+        /** Minimum opacity: 0 means fully transparent (background invisible). */
         const val MIN_ALPHA = 0f
         private val IMAGE_PATH_KEY = stringPreferencesKey("background_image_path")
         private val ALPHA_KEY = floatPreferencesKey("background_alpha")
 
-        /** 把 UI 百分比（0~100）线性映射为实际透明度（0~MAX_ALPHA）。 */
+        /** Linearly maps a UI percentage (0~100) to the actual opacity (0~MAX_ALPHA). */
         fun sliderToAlpha(percent: Float): Float =
             MAX_ALPHA * (percent / 100f).coerceIn(0f, 1f)
 
-        /** 把实际透明度反映射为 UI 百分比（0~100）。 */
+        /** Maps the actual opacity back to a UI percentage (0~100). */
         fun alphaToSlider(alpha: Float): Float =
             (alpha / MAX_ALPHA).coerceIn(0f, 1f) * 100f
     }
 
-    /** 当前背景图文件绝对路径；null 表示未设置。 */
+    /** Absolute path of the current background image file; null means not set. */
     val imagePathFlow: Flow<String?> = context.backgroundDataStore.data.map { it[IMAGE_PATH_KEY] }
 
-    /** 背景图不透明度（0.05~0.2，顶层水印保证文字可读）。 */
+    /** Background image opacity (0.05~0.2; the top-level watermark keeps text readable). */
     val alphaFlow: Flow<Float> = context.backgroundDataStore.data.map {
         (it[ALPHA_KEY] ?: DEFAULT_ALPHA).coerceIn(MIN_ALPHA, MAX_ALPHA)
     }
 
     /**
-     * 选择新背景图：把 [uri] 拷贝到私有目录 backgrounds/ 后替换旧图。
-     * 先写新文件成功再更新 DataStore，失败时旧背景保持不变。
+     * Selects a new background image: copies [uri] into the private backgrounds/ directory and then replaces the old image.
+     * The new file is written successfully first, then DataStore is updated; on failure the old background remains unchanged.
      */
     suspend fun setBackgroundImage(uri: Uri) {
         val extension = extensionFor(uri)
@@ -78,7 +78,7 @@ class BackgroundSettingsRepository @Inject constructor(
         oldPath?.let { runCatching { File(it).delete() } }
     }
 
-    /** 移除背景：删图片文件并清路径。 */
+    /** Removes the background: deletes the image file and clears the path. */
     suspend fun clearBackground() {
         val oldPath = context.backgroundDataStore.data.first()[IMAGE_PATH_KEY]
         context.backgroundDataStore.edit { it.remove(IMAGE_PATH_KEY) }

@@ -19,9 +19,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 把镜像 rootfs 下载到 App 私有目录 filesDir/rootfs_images/（与手动导入镜像的副本同目录），
- * 返回 file:// uri，后续由 [com.aicode.feature.agent.domain.container.ContainerInstaller] 解压。
- * 协程取消时同步 cancel 底层 call，半成品文件一并清理。
+ * Downloads an image rootfs into the app-private directory filesDir/rootfs_images/ (the same directory as copies of manually imported images),
+ * returns a file:// uri, which [com.aicode.feature.agent.domain.container.ContainerInstaller] then extracts.
+ * When the coroutine is cancelled it synchronously cancels the underlying call and cleans up the partial file as well.
  */
 @Singleton
 class ContainerImageDownloader @Inject constructor(
@@ -52,7 +52,7 @@ class ContainerImageDownloader @Inject constructor(
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                        val body = response.body ?: throw IOException("响应体为空")
+                        val body = response.body ?: throw IOException("Response body is empty")
                         val total = body.contentLength()
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                         var read = 0L

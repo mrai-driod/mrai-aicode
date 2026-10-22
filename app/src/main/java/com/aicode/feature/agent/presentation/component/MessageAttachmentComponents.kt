@@ -51,18 +51,18 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** 附件缩略图边长：一行一个文件时左侧的小图，够看清是截图还是照片即可。 */
+/** Attachment thumbnail side length: the small image on the left when there is one file per row; just big enough to tell a screenshot from a photo. */
 private val AttachmentThumbSize = 44.dp
 
 /**
- * 已发送 / 已生成附件的列表：**一行一个文件**。
+ * List of sent / generated attachments: **one file per row**.
  *
- * 每行是「左侧缩略图（图片放真缩略图，其余按类型给图标）+ 文件名 + 大小 · 容器路径」，
- * 整行可点。不再用横向滚动的方形卡片带：76dp 的格子里文件名必被截断，多个文件还得左右滑，
- * 一行一个才能一眼看清发的是哪几份。
+ * Each row is "left thumbnail (a real thumbnail for images, a type icon otherwise) + file name + size · container path",
+ * and the whole row is tappable. No more horizontally scrolling strip of square cards: in a 76dp cell a file name is bound to be truncated and multiple files need sideways swiping,
+ * whereas one per row makes it clear at a glance which files were sent.
  *
- * 点击语义：图片一律走内置全屏查看器（隐式依赖组合树上层提供 [LocalImageViewer]，聊天区都满足）；
- * 非图片用调用方给的 [onClick] —— 工具卡片传的是「系统 app 打开」，助手气泡不传即不可点。
+ * Tap semantics: images always go through the built-in full-screen viewer (implicitly relying on an ancestor in the composition tree providing [LocalImageViewer], which the chat area always does);
+ * non-images use the [onClick] given by the caller - tool cards pass "open in system app", while assistant bubbles pass none and are therefore not tappable.
  */
 @Composable
 internal fun MessageAttachmentList(
@@ -96,14 +96,14 @@ private fun MessageAttachmentRow(
     }
     val fallbackName = stringResource(R.string.common_file)
     val name = attachment.fileName.ifBlank { fallbackName }
-    // 读屏与长按提示用：图片是「预览」，其它是「打开」，两者落到的地方不一样。
+    // For screen readers and long-press hints: images are "Preview", others are "Open"; the two land in different places.
     val actionLabel = if (attachment.isImage) {
         stringResource(R.string.chat_attachment_preview, name)
     } else {
         stringResource(R.string.chat_attachment_open, name)
     }
-    // 次要信息：大小 + 容器路径。路径对「AI 发过来的文件」是关键信息（能直接在终端/编辑器里找到），
-    // 整行放不下时靠省略号截断，不换行。
+    // Secondary info: size + container path. The path is key information for "a file the AI sent" (it can be found directly in the terminal/editor),
+    // and when the whole row does not fit it is truncated with an ellipsis, never wrapped.
     val meta = remember(attachment.sizeBytes, attachment.containerPath) {
         listOf(formatBytes(attachment.sizeBytes), attachment.containerPath)
             .filter { it.isNotBlank() }
@@ -114,7 +114,7 @@ private fun MessageAttachmentRow(
         color = chatMutedSurfaceColor(),
         modifier = Modifier
             .fillMaxWidth()
-            // 先裁圆角再挂 clickable：涟漪才会被裁在圆角内，不会溢出成直角方块
+            // Clip the rounded corners before attaching clickable: the ripple is then clipped inside the corners instead of spilling into a right-angled square
             .clip(RoundedCornerShape(Radius.md))
             .then(
                 if (handler != null) {
@@ -148,7 +148,7 @@ private fun MessageAttachmentRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            // 有动作才给指示箭头：不可点的行不该长得像能点（如助手气泡里的非图片附件）
+            // Only show an indicator arrow when there is an action: non-tappable rows should not look tappable (such as non-image attachments in assistant bubbles)
             if (handler != null) {
                 Icon(
                     FeatherIcons.ChevronRight,
@@ -185,8 +185,8 @@ private fun AttachmentThumb(attachment: AgentAttachment) {
 
 @Composable
 private fun AttachmentImageThumb(attachment: AgentAttachment) {
-    // 读盘 + 解码放 IO 线程：以前在 remember 里同步 decodeFile，滚到带图消息时会卡主线程。
-    // 采样与 OOM 兜底统一走 decodeSampledBitmap。
+    // Disk reads + decoding go on the IO thread: previously decodeFile ran synchronously inside remember, janking the main thread when scrolling to a message with images.
+    // Sampling and OOM fallback both go through decodeSampledBitmap.
     val bitmap by produceState<ImageBitmap?>(null, attachment.localPath) {
         value = withContext(Dispatchers.IO) {
             decodeSampledBitmap(attachment.localPath, THUMBNAIL_MAX_EDGE)
@@ -213,9 +213,9 @@ private fun AttachmentImageThumb(attachment: AgentAttachment) {
 }
 
 /**
- * 打开已发送的非图片附件（用系统 app）。默认空实现，与 `LocalImageViewer` 同一套路 ——
- * 卡片渲染在 `ToolMessageBody` 这类中间层，用 CompositionLocal 避免一路加回调参数、
- * 免去中间层为转发 lambda 改签名。
+ * Opens a sent non-image attachment (with a system app). The default is an empty implementation, following the same pattern as `LocalImageViewer` -
+ * cards are rendered in intermediate layers such as `ToolMessageBody`, so a CompositionLocal avoids threading callback parameters all the way through and
+ * spares intermediate layers from changing their signatures just to forward a lambda.
  */
 fun interface AttachmentOpener {
     fun open(attachment: AgentAttachment)
@@ -224,12 +224,12 @@ fun interface AttachmentOpener {
 internal val LocalAttachmentOpener = staticCompositionLocalOf<AttachmentOpener> { AttachmentOpener { } }
 
 /**
- * 用系统对应 app 打开附件文件（FileProvider 授权 URI）。
+ * Opens an attachment file with the corresponding system app (a FileProvider-authorised URI).
  *
- * 卡片记录的 [AgentAttachment.localPath] 不保证仍然有效：远程 SSH 模式下它是 `copyToLocal` 的临时副本
- * （进程重启或系统清缓存后消失），外部本地目录工作区、自定义挂载源的文件又落在 FileProvider 声明的目录树之外。
- * 因此失效时退回 [AgentAttachment.containerPath] 经 [fileAccess] 重取，重取到的路径仍无法授权时
- * 再复制进 cacheDir（已由 cache-path 覆盖）分享。文件确实不存在与最终无法分享分别提示，不再混用一句文案。
+ * The [AgentAttachment.localPath] recorded on a card is not guaranteed to still be valid: in remote SSH mode it is a temporary `copyToLocal` copy
+ * (which disappears after a process restart or a system cache clear), and files from external local-directory workspaces or custom mount sources fall outside the directory tree declared by the FileProvider.
+ * So when it is stale, fall back to [AgentAttachment.containerPath] and re-fetch through [fileAccess]; if the re-fetched path still cannot be authorised,
+ * copy it into cacheDir (already covered by cache-path) for sharing. A genuinely missing file and a final inability to share are reported separately, no longer conflated into one message.
  */
 internal suspend fun openSentAttachment(
     context: Context,
@@ -241,8 +241,8 @@ internal suspend fun openSentAttachment(
         Toast.makeText(context, context.getString(R.string.chat_open_file_missing), Toast.LENGTH_SHORT).show()
         return
     }
-    // APK 安装包：系统安装器要求「允许安装未知应用」授权，未授权时引导用户去设置页开启，
-    // 否则点击只会弹出「没有权限安装」的拒绝提示。
+    // APK install package: the system installer requires the "allow installing unknown apps" permission; when it is not granted, guide the user to the Settings page to enable it,
+    // otherwise a tap only pops up a "no permission to install" refusal.
     if (isApk(attachment)) {
         if (!context.packageManager.canRequestPackageInstalls()) {
             Toast.makeText(context, context.getString(R.string.chat_open_apk_permission), Toast.LENGTH_LONG).show()
@@ -279,7 +279,7 @@ internal suspend fun openSentAttachment(
     }
 }
 
-/** 卡片记录的宿主路径失效（远程临时副本被清、文件被删或移动）时，退回容器路径重取。 */
+/** When the host path recorded on a card is stale (remote temp copy cleared, file deleted or moved), fall back to the container path and re-fetch. */
 private suspend fun resolveLocalFile(attachment: AgentAttachment, fileAccess: FileAccessProvider): File? {
     attachment.localPath.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isFile }?.let { return it }
     val containerPath = attachment.containerPath
@@ -287,13 +287,13 @@ private suspend fun resolveLocalFile(attachment: AgentAttachment, fileAccess: Fi
     return runCatching { fileAccess.copyToLocal(containerPath) }.getOrNull()?.takeIf { it.isFile }
 }
 
-/** 路径落在 FileProvider 声明的目录树内时可直接授权；不能就抛异常，故按能否取到 URI 判定。 */
+/** A path inside the directory tree declared by the FileProvider can be authorised directly; otherwise it throws, so this is judged by whether a URI can be obtained. */
 private fun isShareable(context: Context, file: File): Boolean =
     runCatching { FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file) }.isSuccess
 
 /**
- * 把无法直接授权的文件（外部本地目录工作区、自定义挂载源、SD 卡等）复制进 cacheDir 再分享。
- * 目标目录按源路径散列分隔：既避开同名文件互相覆盖，也不把散列值挂进分享出去的文件名。
+ * Copies a file that cannot be authorised directly (external local-directory workspace, custom mount source, SD card, etc.) into cacheDir and then shares it.
+ * The target directory is separated by a hash of the source path: this both avoids same-named files overwriting each other and keeps the hash out of the shared file name.
  */
 private fun copyToShareCache(context: Context, source: File): File? = runCatching {
     val dir = File(File(context.cacheDir, SHARE_CACHE_DIR), source.absolutePath.hashCode().toString())

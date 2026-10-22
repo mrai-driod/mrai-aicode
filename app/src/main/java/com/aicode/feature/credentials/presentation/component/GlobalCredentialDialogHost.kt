@@ -6,11 +6,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aicode.feature.credentials.data.CredentialRequestBridge
 
 /**
- * 全局凭据弹窗宿主：订阅 [CredentialRequestBridge.request]，非 null 即渲染 [CredentialPromptDialog]。
+ * Global credential dialog host: subscribes to [CredentialRequestBridge.request] and renders [CredentialPromptDialog] whenever it is non-null.
  *
- * 挂在应用根 Composable（覆盖所有页面），使命令行 git 缺凭据（AI Bash / 交互终端）触发弹窗时，
- * 用户当前在聊天页/终端页/Git 页都能弹——凭据检测由容器内自定义 credential helper 统一兜底，
- * 与用户所在页面无关。用户确认 → [CredentialRequestBridge.respond]、取消 → [CredentialRequestBridge.cancel]。
+ * Mounted on the root Composable (covering all pages), so when command-line git lacking credentials (AI Bash / interactive terminal) triggers the dialog,
+ * it can appear whether the user is currently on the chat page / terminal page / Git page——credential detection is uniformly handled by the custom credential helper inside the container,
+ * regardless of which page the user is on. User confirms → [CredentialRequestBridge.respond], cancels → [CredentialRequestBridge.cancel].
  */
 @Composable
 fun GlobalCredentialDialogHost(bridge: CredentialRequestBridge) {

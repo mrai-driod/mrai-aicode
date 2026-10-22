@@ -23,9 +23,9 @@ import com.aicode.core.theme.Radius
 import com.aicode.core.theme.semanticColors
 
 /**
- * 全局统一的 App 输入框颜色规范：
- * - 浅色模式：主题卡片色背景 + 柔和外边框 + 聚焦主色高光；
- * - 暗色模式：深色表面底色（surface/surfaceVariant）+ 描边 + 聚焦主色微光。
+ * Globally unified App text field color specification:
+ * - Light mode: themed card color background + soft outer border + focused primary color highlight;
+ * - Dark mode: dark surface base color (surface/surfaceVariant) + outline + focused primary color glow.
  */
 @Composable
 fun appTextFieldColors(
@@ -47,8 +47,8 @@ fun appTextFieldColors(
         unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
         focusedTrailingIconColor = MaterialTheme.colorScheme.primary,
         unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        // 禁用态沿用未聚焦时的底色：M3 默认把 disabled 容器色置为透明，enabled 一变背景就在有色与透明之间跳一下，
-        // 看着就是输入框在闪。禁用语义交给较浅的边框与文字表达。
+        // Disabled state reuses the unfocused base color: M3 by default sets the disabled container color to transparent, so when enabled changes the background jumps between colored and transparent,
+        // making the text field look like it is flickering. Disabled semantics are conveyed by the lighter border and text.
         disabledContainerColor = unfocusedContainerColor,
         disabledBorderColor = if (isLight) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
@@ -56,9 +56,9 @@ fun appTextFieldColors(
 }
 
 /**
- * 弹窗（AlertDialog 等自带主题底色的容器）里的输入框配色：容器全透明，底色直接透出弹窗自身的颜色。
+ * Text field colors inside dialogs (containers such as AlertDialog that carry their own themed background): the container is fully transparent, so the dialog's own color shows straight through.
  *
- * 弹窗底色随主题变，而普通页面用的卡片白底放到这种弹窗里会像贴上去的一块白纸。
+ * The dialog background varies with the theme, and putting the card white background used on normal pages into such a dialog would look like a piece of white paper pasted on.
  */
 @Composable
 fun dialogTextFieldColors(): TextFieldColors = appTextFieldColors(
@@ -67,8 +67,8 @@ fun dialogTextFieldColors(): TextFieldColors = appTextFieldColors(
 )
 
 /**
- * 全局统一的基础输入框组件：
- * 采用 12dp 圆角卡片质感，自动适配浅色纯白/深色深蓝背景，支持前缀/后缀图标与完整键盘配置。
+ * Globally unified basic text field component:
+ * Uses a 12dp rounded-corner card feel, automatically adapts to light pure white / dark deep blue backgrounds, and supports leading/trailing icons and full keyboard configuration.
  */
 @Composable
 fun AppTextField(

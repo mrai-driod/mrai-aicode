@@ -8,25 +8,25 @@ object SkillParser {
     private const val TAG = "SkillParser"
 
     /**
-     * 单条描述上限。对标 Claude Code 的 250 字符：描述只在系统提示清单里承担「何时用我」的
-     * 索引职责，写太长只会稀释清单（118 个技能时光描述就可能占上万字符），完整执行步骤属于
-     * `loadSkill` 加载后才该出现的正文。用户在设置页写更长的描述时不报错，只是读取时截断。
+     * Per-description cap. Benchmarked against Claude Code's 250 characters: in the system prompt list a description only serves as a "when to use me"
+     * index, and writing it too long only dilutes the list (with 118 skills, descriptions alone could take over ten thousand characters); the full execution steps belong
+     * in the body that only appears after `loadSkill` loads it. When the user writes a longer description on the settings page there is no error; it is only truncated when read.
      */
     private const val MAX_DESC_CHARS = 250
     private const val SKILL_FILE = "SKILL.md"
     private const val CLAUDE_FILE = "CLAUDE.md"
 
     /**
-     * 解析一个 skill 目录；无 SKILL.md / CLAUDE.md 或无 name 时视为非法，返回 null。
-     * 目录经 [provider] 以容器路径读取，本地/远程统一。
+     * Parses one skill directory; with no SKILL.md / CLAUDE.md or no name it is treated as invalid and returns null.
+     * The directory is read via [provider] by container path, unified for local/remote.
      */
     fun parse(provider: FileAccessProvider, dirPath: String): Skill? {
         val dir = dirPath.trimEnd('/')
-        // 优先 SKILL.md，其次 CLAUDE.md（兼容只用 CLAUDE.md 的技能）；名称匹配忽略大小写
+        // Prefer SKILL.md, then CLAUDE.md (for compatibility with skills that only use CLAUDE.md); name matching is case-insensitive
         val fileName = runCatching {
             provider.listFiles(dir).map { it.name }
         }.getOrElse {
-            FileLogger.w(TAG, "列出技能目录失败: $dir", it)
+            FileLogger.w(TAG, "Failed to list skill directory: $dir", it)
             return null
         }.let { names ->
             names.firstOrNull { it.equals(SKILL_FILE, ignoreCase = true) }
@@ -34,7 +34,7 @@ object SkillParser {
         } ?: return null
 
         val text = runCatching { provider.readFile("$dir/$fileName") }.getOrElse {
-            FileLogger.w(TAG, "读取 Skill 文件失败: $dir/$fileName", it)
+            FileLogger.w(TAG, "Failed to read skill file: $dir/$fileName", it)
             return null
         }
 
@@ -42,13 +42,13 @@ object SkillParser {
     }
 
     /**
-     * 从原始 Markdown 文本解析技能（不依赖磁盘），供文件/压缩包导入使用。
-     * [fallbackName] 为 frontmatter 缺 name 时的兜底（通常传源文件名或所在目录名）。
+     * Parses a skill from raw Markdown text (not depending on disk), for use by file/archive import.
+     * [fallbackName] is the fallback when the frontmatter has no name (usually the source file name or the containing directory name).
      */
     fun parseText(text: String, fallbackName: String): Skill {
         val (frontmatter, body) = splitAndParseFrontmatter(text)
 
-        // name 优先取 frontmatter，缺省回退到兜底名
+        // The name is taken from the frontmatter first, falling back to the fallback name when absent
         val name = frontmatter["name"]?.toString()?.takeIf { it.isNotBlank() } ?: fallbackName
         val description = (frontmatter["description"]?.toString() ?: "").take(MAX_DESC_CHARS)
 
@@ -56,7 +56,7 @@ object SkillParser {
             val toolsRaw = frontmatter["required_tools"]
             if (toolsRaw is List<*>) toolsRaw.filterIsInstance<String>() else emptyList()
         } catch (e: Exception) {
-            FileLogger.w(TAG, "解析 required_tools 失败", e)
+            FileLogger.w(TAG, "Failed to parse required_tools", e)
             emptyList()
         }
 
@@ -70,8 +70,8 @@ object SkillParser {
     }
 
     /**
-     * 利用 SnakeYAML 切分并解析 YAML frontmatter。
-     * @return (frontmatter 键值对, 正文)
+     * Uses SnakeYAML to split and parse the YAML frontmatter.
+     * @return (frontmatter key-value pairs, body)
      */
     private fun splitAndParseFrontmatter(text: String): Pair<Map<String, Any>, String> {
         val normalized = text.replace("\r\n", "\n")
@@ -88,7 +88,7 @@ object SkillParser {
             val loaded = yaml.load<Map<String, Any>>(block)
             loaded ?: emptyMap()
         } catch (e: Exception) {
-            FileLogger.w(TAG, "解析 YAML 失败", e)
+            FileLogger.w(TAG, "Failed to parse YAML", e)
             emptyMap()
         }
         
@@ -96,11 +96,11 @@ object SkillParser {
     }
 
     /**
-     * 把设置页表单写回 `SKILL.md` 文本（frontmatter + 正文），与 [parse] 成对。
+     * Writes a settings-page form back to `SKILL.md` text (frontmatter + body), paired with [parse].
      *
-     * `name` 总是写出来：技能名优先取 frontmatter，改名只需改这里而不必动目录名（技能目录
-     * 里的脚本常被正文按原路径引用，跟着改名会把引用打断）。
-     * 工具名是标识符，直接进方括号列表；其余文本字段一律加引号，免得描述里的冒号或 # 把 YAML 弄坏。
+     * `name` is always written out: the skill name is taken from the frontmatter first, so renaming only needs to change it here without touching the directory name (scripts in the skill directory
+     * are often referenced by the body via their original paths, and renaming along with them would break those references).
+     * Tool names are identifiers and go directly into a bracketed list; all other text fields are always quoted, so a colon or # in a description does not break the YAML.
      */
     fun serialize(
         name: String,
@@ -116,7 +116,7 @@ object SkillParser {
         appendLine(instructions.trim())
     }
 
-    /** frontmatter 字符串值：双引号包裹，转义反斜杠与引号，换行压成空格保证单行。 */
+    /** A frontmatter string value: wrapped in double quotes, backslashes and quotes escaped, newlines collapsed to spaces to guarantee a single line. */
     private fun quote(value: String): String {
         val escaped = value.replace("\\", "\\\\")
             .replace("\"", "\\\"")

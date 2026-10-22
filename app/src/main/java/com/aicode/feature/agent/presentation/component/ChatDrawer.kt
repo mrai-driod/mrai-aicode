@@ -131,8 +131,8 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 
 /**
- * 侧边栏内容：顶部 Tab 切换「会话」/「文件」，底部「设置」入口卡片。
- * Tab0 为根会话列表，带子代理的会话行可就地展开；Tab1 为当前工作区的文件树。
+ * Drawer content: a Tab switcher at the top for "Sessions" / "Files", and a "Settings" entry card at the bottom.
+ * Tab0 is the root session list, where rows of sessions with sub-agents can expand in place; Tab1 is the current workspace's file tree.
  */
 @Composable
 fun ChatDrawerContent(
@@ -175,8 +175,8 @@ fun ChatDrawerContent(
     onOpenSearchHit: (ChatSearchHit) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // tab 与展开状态进 saveable：大屏下侧栏收起后整棵子树会离开组合（见 MainActivity 的
-    // SaveableStateProvider），用 remember 存会让每次回到聊天页都重置回「会话」页。
+    // Tab and expansion state go into saveable: on large screens, after the drawer collapses the whole subtree leaves composition (see MainActivity's
+    // SaveableStateProvider), so storing them with remember would reset to the "Sessions" tab every time you return to the chat page.
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var isSelectionMode by rememberSaveable { mutableStateOf(false) }
     val selectedSessionIds = remember { mutableStateListOf<String>() }
@@ -191,7 +191,7 @@ fun ChatDrawerContent(
         selectedSessionIds.clear()
     }
 
-    // 点击会话/重开侧边栏保持原滚动位置；仅当同一会话的最后回复时间变化（发消息/收到回复）时滚回顶部。
+    // Tapping a session / reopening the drawer keeps the previous scroll position; it scrolls back to the top only when the same session's last-reply time changes (a message sent/received).
     var lastTouched by remember { mutableStateOf<Pair<String?, Long?>?>(null) }
     val currentUpdatedAt = sessions.firstOrNull { it.id == currentSessionId }?.updatedAt
     LaunchedEffect(currentSessionId, currentUpdatedAt) {
@@ -217,7 +217,7 @@ fun ChatDrawerContent(
             .padding(bottom = imeInset + Spacing.xl),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        // 顶部 Tab 切换
+        // Top Tab switcher
         SegmentedTabs(
             selected = selectedTab,
             labels = listOf(
@@ -227,7 +227,7 @@ fun ChatDrawerContent(
             onSelect = { selectedTab = it }
         )
 
-        // 聊天记录搜索框放在 Tab 栏正下方，仅「会话」Tab 可见。
+        // The chat-history search box sits directly below the Tab bar, visible only on the "Sessions" tab.
         if (selectedTab == 0 && isSelectionMode) {
             Surface(
                 color = MaterialTheme.semanticColors.cardSurface,
@@ -496,7 +496,7 @@ fun ChatDrawerContent(
 }
 
 /**
- * Tab0：会话列表。搜索词非空时列表区切换为跨会话搜索结果。
+ * Tab0: session list. When the search query is non-empty, the list area switches to cross-session search results.
  */
 @Composable
 private fun SessionListTab(
@@ -534,7 +534,7 @@ private fun SessionListTab(
     }
 }
 
-/** Tab0 的会话列表本体（按最后回复时间分组）。带子代理的会话行尾有展开箭头，展开后在其下方缩进列出子代理。 */
+/** The Tab0 session list body (grouped by last reply time). Rows of sessions with sub-agents have an expand arrow at the end; when expanded, the sub-agents are listed indented below. */
 @Composable
 private fun SessionListContent(
     sessions: List<ChatSession>,
@@ -582,8 +582,8 @@ private fun SessionListContent(
         state = listState,
         modifier = Modifier.fillMaxSize()
     ) {
-        // 每个分组占一个 item、组内 forEach 全量渲染会让 LazyColumn 失去惰性：
-        // 「最近 30 天」这种分组有上百个会话时，一个 item 就要组合上百行。分组头与会话各自成 item。
+        // Giving each group one item and rendering the whole group with a forEach inside it would make the LazyColumn lose its laziness:
+        // a group like "Last 30 days" can hold hundreds of sessions, so a single item would have to compose hundreds of rows. Group headers and sessions each get their own item.
         groups.forEach { group ->
             item(key = "group-${group.groupKey}", contentType = "group-header") {
                 SettingsGroupHeader(
@@ -686,7 +686,7 @@ private fun SessionListContent(
     }
 }
 
-/** Tab0 底部搜索框：复用设置页的胶囊搜索框，非空时带清除按钮。 */
+/** Search box at the bottom of Tab0: reuses the Settings page's pill search box, with a clear button when non-empty. */
 @Composable
 private fun ChatSearchField(
     query: String,
@@ -713,7 +713,7 @@ private fun ChatSearchField(
     )
 }
 
-/** 搜索结果区：加载中 / 无结果 / 命中列表三态。 */
+/** Search results area: three states - loading / no results / hit list. */
 @Composable
 private fun ChatSearchResults(
     state: ChatSearchState,
@@ -754,7 +754,7 @@ private fun ChatSearchResults(
     }
 }
 
-/** 单条搜索结果行：会话标题 + 命中片段（关键词高亮），点击跳转并定位。 */
+/** A single search result row: session title + hit snippet (query highlighted); tap to jump to it and position on it. */
 @Composable
 private fun ChatSearchResultRow(
     hit: ChatSearchHit,
@@ -793,7 +793,7 @@ private fun ChatSearchResultRow(
     }
 }
 
-/** 把片段中所有命中词标为高亮样式。 */
+/** Marks every occurrence of the matched term in the snippet with a highlight style. */
 private fun highlightSnippet(snippet: String, query: String, highlight: SpanStyle): AnnotatedString =
     buildAnnotatedString {
         append(snippet)
@@ -807,7 +807,7 @@ private fun highlightSnippet(snippet: String, query: String, highlight: SpanStyl
         }
     }
 
-/** 会话行尾的子代理展开开关：显示数量与箭头，自己消费点击，不触发整行选中。 */
+/** Sub-agent expand toggle at the end of a session row: shows the count and an arrow, consumes its own clicks, and does not trigger selection of the whole row. */
 @Composable
 private fun SubAgentExpandToggle(
     expanded: Boolean,
@@ -839,9 +839,9 @@ private fun SubAgentExpandToggle(
 }
 
 /**
- * Tab1：当前工作区的文件树。从工作区根就地展开，缩进表示层级；
- * 每行共享同一横向滚动，路径过深时左右滑动查看完整名称，不再截断成省略号。
- * 新建文件/文件夹通过长按目录（含工作区根）行的菜单发起。
+ * Tab1: the current workspace's file tree. Expands in place from the workspace root, with indentation showing the hierarchy;
+ * every row shares the same horizontal scroll, so when a path is too deep you can swipe sideways to see the full name instead of it being truncated with an ellipsis.
+ * Creating a file/folder is started from the long-press menu of a directory row (including the workspace root).
  */
 @Composable
 private fun FileBrowserTab(
@@ -895,10 +895,10 @@ private fun FileBrowserTab(
                 val textMeasurer = rememberTextMeasurer()
                 val textStyle = MaterialTheme.typography.bodyMedium
                 val density = LocalDensity.current
-                // 预算最宽一行的内容宽度（固定开销 + 缩进 + 文本），供所有行取统一宽度，
-                // 以实现整棵树统一横向平移（而非每行各自滚动）。
-                // 逐个 measure 在大目录下会在组合期同步跑上千次文本测量；先按「缩进 + 字符宽度权重」
-                // 挑出最宽的那一行，只对它做一次真实测量。估算不精确，但这里只用来给横向滚动留够宽度。
+                // Pre-compute the content width of the widest row (fixed overhead + indentation + text) so all rows take a uniform width,
+                // making the whole tree pan horizontally as one (rather than each row scrolling on its own).
+                // Measuring row by row in a large directory would run thousands of text measurements synchronously during composition; instead, first use "indentation + character-width weighting"
+                // to pick out the widest row and run one real measurement on it only. The estimate is imprecise, but it is only used here to leave enough width for horizontal scrolling.
                 val maxContentPx = remember(state.nodes, textStyle) {
                     with(density) {
                         val widest = state.nodes.maxByOrNull { node ->
@@ -942,7 +942,7 @@ private fun FileBrowserTab(
             }
         }
 
-        // 右上角操作排：剪贴板指示器（有背景、有边框，与无背景的刷新图标区分）+ 刷新按钮。
+        // Action row in the top-right corner: clipboard indicator (with a background and border, distinguishing it from the background-less refresh icon) + refresh button.
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -1027,7 +1027,7 @@ private fun FileBrowserTab(
             onPasteHere = {
                 val target = node.path
                 menuNode = null
-                onPasteEntry(target) { /* 结果由调用方决定是否提示，这里保持静默 */ }
+                onPasteEntry(target) { /* Whether to show a hint is decided by the caller; stay silent here */ }
             },
             onDismiss = { menuNode = null }
         )
@@ -1075,13 +1075,13 @@ private fun FileBrowserTab(
     }
 }
 
-/** 新建对象类型，决定确认后调创建文件还是创建文件夹。 */
+/** The type of the new object; decides whether confirmation calls create-file or create-folder. */
 private enum class CreateKind { FILE, FOLDER }
 
-/** 新建目标：在哪个目录（[parent]）下新建，以及新建文件还是文件夹（[kind]）。 */
+/** New-object target: in which directory ([parent]) to create it, and whether it is a file or a folder ([kind]). */
 private data class CreateTarget(val parent: String, val kind: CreateKind)
 
-/** 新建 / 重命名共用的名称输入弹窗：名称非法或与原名相同时禁用确认。 */
+/** Name-input dialog shared by create / rename: confirmation is disabled when the name is invalid or identical to the original name. */
 @Composable
 private fun FileNameInputDialog(
     title: String,
@@ -1116,7 +1116,7 @@ private fun FileNameInputDialog(
     )
 }
 
-/** 剪切板指示器：右上角刷新按钮旁的主题色图标，显示复制/剪切状态，点击清空。 */
+/** Clipboard indicator: a theme-coloured icon next to the refresh button in the top-right corner, showing the copy/cut state; tap to clear. */
 @Composable
 private fun ClipboardIndicator(
     clipboard: BrowseClipboard,
@@ -1139,8 +1139,8 @@ private fun ClipboardIndicator(
     }
 }
 
-/** 文件树节点长按弹出的功能菜单：目录（含工作区根）可新建，非根节点可复制/剪切/重命名/删除，
- * 剪切板非空时目录可「粘贴到此处」。 */
+/** Action menu shown on long-press of a file-tree node: directories (including the workspace root) can create entries; non-root nodes can be copied/cut/renamed/deleted;
+ * when the clipboard is non-empty, a directory offers "Paste here". */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FileTreeActionSheet(
@@ -1175,7 +1175,7 @@ private fun FileTreeActionSheet(
                     .padding(horizontal = Spacing.lg)
                     .padding(bottom = Spacing.md)
             )
-            // 剪切板非空且当前节点是目录 / 根：优先提供「粘贴到此处」。
+            // Clipboard non-empty and the current node is a directory / the root: offer "Paste here" first.
             if (clipboard != null && node.entry.isDirectory) {
                 SheetActionRow(
                     icon = FeatherIcons.Clipboard,
@@ -1228,9 +1228,9 @@ private fun FileTreeActionSheet(
     }
 }
 
-/** 文件树的一行：按 [FileTreeNode.depth] 缩进，目录带展开箭头。
- * 所有行取统一的 [rowWidth]（与外层 horizontalScroll 配合），横向滑动时整树一起平移，
- * 名称不截断、不换行。着色优先级：读取失败 > .gitignore 命中（橙）> dotfile（弱化）> 常规。 */
+/** A single file-tree row: indented by [FileTreeNode.depth], directories carry an expand arrow.
+ * All rows take a uniform [rowWidth] (working with the outer horizontalScroll), so the whole tree pans together when swiping horizontally,
+ * and names are neither truncated nor wrapped. Colouring priority: read failure > .gitignore match (orange) > dotfile (dimmed) > normal. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileTreeRow(
@@ -1242,7 +1242,7 @@ private fun FileTreeRow(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 展开加载态加最小延迟：本地模式列目录极快，避免每次展开都闪一下转圈。
+    // Add a minimum delay to the expanding loading state: listing a directory in local mode is extremely fast, so avoid a spinner flashing on every expansion.
     var showExpanding by remember { mutableStateOf(false) }
     LaunchedEffect(expanding) {
         if (expanding) {
@@ -1311,7 +1311,7 @@ private fun FileTreeRow(
     }
 }
 
-/** 文件树行的类型图标：目录用文件夹，文件按扩展名挑选单色线性图标。[decorationColor] 非空时统一染色（.gitignore/dotfile 弱化）。 */
+/** Type icon for a file-tree row: folders use a folder icon, files pick a monochrome linear icon by extension. When [decorationColor] is non-null everything is tinted uniformly (.gitignore/dotfile dimming). */
 @Composable
 private fun FileTreeIcon(node: FileTreeNode, decorationColor: Color?) {
     val vector = if (node.entry.isDirectory) {
@@ -1329,18 +1329,18 @@ private fun FileTreeIcon(node: FileTreeNode, decorationColor: Color?) {
     )
 }
 
-/** .gitignore 命中条目的弱化色（橙，类 VSCode）。 */
+/** Dimming colour for .gitignore-matched entries (orange, VSCode-style). */
 private val FileTreeIgnoredColor = Color(0xFFCC8844)
 
-/** 文件树根节点显示名，对应容器路径 `~/workspace`。 */
+/** Display name of the file-tree root node, corresponding to the container path `~/workspace`. */
 private const val WORKSPACE_LABEL = "workspace"
 
-/** 文件树一行除缩进与文本外的固定宽度开销（start 8 + 箭头 16 + 4 + 图标 20 + 8 + end 12），供预算整树统一行宽。 */
+/** Fixed width overhead of a file-tree row excluding indentation and text (start 8 + arrow 16 + 4 + icon 20 + 8 + end 12), used to pre-compute the uniform row width for the whole tree. */
 private val FILE_TREE_ROW_OVERHEAD = 68.dp
 
 
 /**
- * 会话行长按弹出的功能菜单：置顶 / 重命名 / 导出 / 删除。底部 sheet 样式参照 git 分支的 RefActionSheet。
+ * Action menu shown on long-press of a session row: pin / rename / export / delete. The bottom-sheet style follows the git branch's RefActionSheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1453,14 +1453,14 @@ private fun SheetActionRow(
     }
 }
 
-/** 侧边栏会话分组：同一时间组（今天 / 昨天 / 7天内 / 30天内 / 月份）内的会话，按最后回复时间降序。 */
+/** Drawer session group: sessions within the same time group (Today / Yesterday / Within 7 days / Within 30 days / Month), sorted by last reply time descending. */
 internal data class SessionGroup(
     val groupKey: String,
     val sessions: List<ChatSession>
 )
 
 /**
- * 按最后回复时间（updatedAt）降序的会话列表分组：今天 / 昨天 / 7天内 / 30天内 / 更早按月。
+ * Grouping of a session list sorted by last reply time (updatedAt) descending: Today / Yesterday / Within 7 days / Within 30 days / earlier by month.
  */
 internal fun buildSessionGroups(sessions: List<ChatSession>, now: Long): List<SessionGroup> {
     val groups = mutableListOf<SessionGroup>()
@@ -1476,7 +1476,7 @@ internal fun buildSessionGroups(sessions: List<ChatSession>, now: Long): List<Se
     return groups
 }
 
-/** 返回会话所属分组 key；月份分组为 ISO 年月（如 2026-05），其余为固定字面量。 */
+/** Returns the group key a session belongs to; month groups are ISO year-month (e.g. 2026-05), the rest are fixed literals. */
 internal fun sessionGroupKey(updatedAt: Long, now: Long): String {
     val zone = ZoneId.systemDefault()
     val day = Instant.ofEpochMilli(updatedAt).atZone(zone).toLocalDate()

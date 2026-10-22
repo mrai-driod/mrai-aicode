@@ -7,11 +7,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 执行模式的同步缓存：App 启动时从 [ExecutionModeRepository] 读首帧模式缓存到内存，
- * 供各委托层（`DelegatingCommandEngine`/`DelegatingFileAccess`/`DelegatingTerminalSessionProvider`）
- * 每次调用时同步读取，决定转发到本地还是远程实现。
+ * Synchronous cache of the execution mode: at app startup it reads the first-frame mode from [ExecutionModeRepository] and caches it in memory,
+ * so each delegating layer (`DelegatingCommandEngine`/`DelegatingFileAccess`/`DelegatingTerminalSessionProvider`)
+ * can read it synchronously on every call to decide whether to forward to the local or the remote implementation.
  *
- * 模式切换后（设置页）调 [setMode] 更新缓存，切换即时生效，无需重启。
+ * After the mode is switched (on the settings page), [setMode] updates the cache and the switch takes effect immediately, with no restart needed.
  */
 @Singleton
 class ExecutionModeHolder @Inject constructor() {

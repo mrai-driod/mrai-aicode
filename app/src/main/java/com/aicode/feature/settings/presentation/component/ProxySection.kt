@@ -51,15 +51,15 @@ import compose.icons.feathericons.Check
 import compose.icons.feathericons.Eye
 import compose.icons.feathericons.EyeOff
 
-/** 默认测试目标：返回 204 的连通性端点，不依赖响应体格式。 */
+/** Default test target: a connectivity endpoint returning 204, independent of response body format. */
 private const val DEFAULT_TEST_URL = "https://www.google.com"
 
 /**
- * 全局 HTTP 代理设置页：开关/类型/服务器/认证/NO_PROXY 合并在一张卡片，
- * 连通性测试独立一张卡片（含自定义测试 URL）。
+ * Global HTTP proxy settings page: enable/type/server/auth/NO_PROXY combined in one card,
+ * connectivity test in a separate card (with a custom test URL).
  *
- * 所有字段即时写入持久化，不设保存按钮——代理链路（App 请求与容器内命令）每次
- * 读取最新配置，新连接立即生效，无需重启。
+ * All fields are persisted immediately with no save button -- the proxy path (App requests and in-container commands) reads
+ * the latest configuration on every use, so new connections take effect immediately with no restart.
  */
 @Composable
 internal fun ProxySection(
@@ -86,7 +86,7 @@ internal fun ProxySection(
             .padding(bottom = Spacing.xl),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        // ── 代理设置（开关/类型/服务器/认证/NO_PROXY 合并一张卡片） ──
+        // ── Proxy settings (enable/type/server/auth/NO_PROXY in one card) ──
         SettingsGroup {
             SettingsRow(
                 icon = null,
@@ -196,7 +196,7 @@ internal fun ProxySection(
             )
         }
 
-        // ── 连通性测试（独立卡片：测试 URL + 按钮） ──
+        // ── Connectivity test (separate card: test URL + button) ──
         if (config.valid) {
             SettingsGroupHeader(text = stringResource(R.string.proxy_test_title))
             SettingsGroup {
@@ -252,7 +252,7 @@ internal fun proxyTypeLabel(type: ProxyType): String = stringResource(
     if (type == ProxyType.HTTP) R.string.proxy_type_http else R.string.proxy_type_socks5
 )
 
-/** 代理类型底部弹窗选择（与提供商类型选择同风格）。 */
+/** Proxy type bottom-sheet picker (same style as the provider type picker). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProxyTypeSelectionSheet(

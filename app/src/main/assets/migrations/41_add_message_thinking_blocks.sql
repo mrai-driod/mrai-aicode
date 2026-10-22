@@ -1,3 +1,3 @@
--- Anthropic thinking / redacted_thinking 内容块、Gemini model 轮 parts 的原样快照（JSON 文本）。
--- 这些块回传时不得修改且需保持原序，signature 单字段无法承载 redacted 的 opaque data 与 part 级签名。
+-- Verbatim snapshots (JSON text) of Anthropic thinking / redacted_thinking content blocks and Gemini model-turn parts.
+-- These blocks must be sent back unmodified and in their original order; a single signature field cannot carry redacted opaque data and per-part signatures.
 ALTER TABLE agent_messages ADD COLUMN thinkingBlocksJson TEXT DEFAULT NULL

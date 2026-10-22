@@ -6,10 +6,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 「自动注入 git 凭证到远程服务器」开关的持久化，按服务器（IP+端口）隔离。
+ * Persistence for the "auto-inject git credentials to remote server" switch, isolated per server (IP + port).
  *
- * 每台远程服务器独立记忆：开关状态与「是否已询问过」互不影响，避免用户对 A 服务器开启后，
- * 连 B 服务器时被同一状态误伤，也保证首次询问每台服务器只弹一次。
+ * Each remote server is remembered independently: the switch state and "has been asked" flag do not affect each other, so enabling it for server A does not
+ * accidentally apply the same state when connecting to server B, and the first-time prompt is shown only once per server.
  */
 @Singleton
 class CredentialInjectSettingsRepository @Inject constructor(
@@ -23,7 +23,7 @@ class CredentialInjectSettingsRepository @Inject constructor(
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** 服务器标识哈希：MD5("host:port") 前 8 位，与记忆目录哈希同风格。 */
+    /** Server identifier hash: first 8 characters of MD5("host:port"), in the same style as the memory directory hash. */
     fun serverKey(host: String, port: Int): String {
         val digest = java.security.MessageDigest.getInstance("MD5")
             .digest("$host:$port".toByteArray(Charsets.UTF_8))

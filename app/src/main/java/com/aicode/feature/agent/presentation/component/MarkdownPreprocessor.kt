@@ -4,20 +4,20 @@ import org.jsoup.parser.Parser
 import java.util.Base64
 
 /**
- * 在把文本交给 Markdown 渲染器前做的轻量预处理：
+ * Lightweight preprocessing applied before handing text to the Markdown renderer:
  *
- * 1. 抽取 LaTeX 数学（`$$...$$` 块级、`$...$` 行内），编码为特殊 scheme 的 Markdown 图片链接，
- *    交由 [MathImageTransformer] 用 jlatexmath 渲染。
- * 2. 解码 HTML 实体，并让内嵌 HTML 标签以字面文本展示——聊天流不渲染 HTML，
- *    也不做 HTML→Markdown 的语法映射，标签原样可见即可（见 [processNormal] 的 ZWSP 处理）。
+ * 1. Extracts LaTeX math (`$$...$$` block-level, `$...$` inline) and encodes it as Markdown image links with a special scheme,
+ *    to be rendered by [MathImageTransformer] with jlatexmath.
+ * 2. Decodes HTML entities and shows embedded HTML tags as literal text - the chat stream does not render HTML,
+ *    and does no HTML-to-Markdown syntax mapping either; tags simply stay visible as-is (see the ZWSP handling in [processNormal]).
  *
- * 所有处理都跳过围栏代码块与行内代码，避免破坏代码样例里的 `$` / `<` 等字符。
+ * All processing skips fenced code blocks and inline code, to avoid breaking characters such as `$` / `<` in code samples.
  */
 internal object MarkdownPreprocessor {
 
-    // 进程级结果缓存：process 会在 item 每次滚入视口时被调（上层只有 remember(text)，滚出
-    // 被 dispose 后 remember 归零）。含数学定界符的文本要跑正则，快速 fling 时反复重跑拖慢主线程。
-    // 这里按原文做进程级 LRU，同一段只处理一次。
+    // Process-level result cache: process is called every time an item scrolls into the viewport (the caller only has remember(text), and scrolling out
+    // disposes it, resetting remember). Text containing math delimiters has to run regexes, and re-running them repeatedly during a fast fling slows the main thread.
+    // This is a process-level LRU keyed by the raw text, so each passage is processed only once.
     private const val CACHE_MAX = 256
     private val cache = object : LinkedHashMap<String, String>(CACHE_MAX, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > CACHE_MAX
@@ -25,7 +25,7 @@ internal object MarkdownPreprocessor {
 
     fun process(raw: String): String {
         if (raw.isEmpty()) return raw
-        // 无需处理的快速路径：既没有 HTML 标签、没有 $ 或 \( / \[ 数学定界符，也没有 & 实体
+        // Fast path needing no processing: no HTML tags, no $ or \( / \[ math delimiters, and no & entities
         if (!raw.contains('<') && !raw.contains('$') && !raw.contains('\\') && !raw.contains('&')) return raw
 
         synchronized(cache) { cache[raw] }?.let { return it }
@@ -34,8 +34,8 @@ internal object MarkdownPreprocessor {
         for (seg in splitPreservingCode(raw)) {
             when (seg.kind) {
                 SegmentKind.NORMAL -> sb.append(processNormal(seg.text))
-                // 行内代码也会被渲染器按 AST 遍历（CODE_SPAN 的子节点），HTML_TAG 同样会被丢弃，
-                // 故与普通文本一致做同一个 `<` 中和；围栏代码块走原文渲染，保持原样。
+                // Inline code is also walked by the renderer as AST (children of CODE_SPAN), and HTML_TAG would likewise be discarded,
+                // so the same `<` neutralisation is applied as for normal text; fenced code blocks are rendered verbatim and left unchanged.
                 SegmentKind.INLINE_CODE -> sb.append(neutralizeHtmlOpenBracket(seg.text))
                 SegmentKind.FENCE -> sb.append(seg.text)
             }
@@ -49,7 +49,7 @@ internal object MarkdownPreprocessor {
 
     private data class Segment(val kind: SegmentKind, val text: String)
 
-    /** 扫描文本，把围栏代码块与行内代码切成 isCode=true 的段原样保留，其余为普通文本段。 */
+    /** Scans the text, cutting fenced code blocks and inline code out as isCode=true segments kept verbatim; the rest are normal text segments. */
     private fun splitPreservingCode(text: String): List<Segment> {
         val result = ArrayList<Segment>()
         val normal = StringBuilder()
@@ -67,7 +67,7 @@ internal object MarkdownPreprocessor {
         while (i < n) {
             val c = text[i]
 
-            // 围栏代码块：行首连续 >=3 个 ` 或 ~
+            // Fenced code block: >=3 consecutive ` or ~ at the start of a line
             if (atLineStart && (c == '`' || c == '~')) {
                 var j = i
                 while (j < n && text[j] == c) j++
@@ -101,7 +101,7 @@ internal object MarkdownPreprocessor {
                 }
             }
 
-            // 行内代码：同长度 ` 序列包裹，且不跨行
+            // Inline code: wrapped in an equal-length run of `, and does not span lines
             if (c == '`') {
                 var j = i
                 while (j < n && text[j] == '`') j++
@@ -140,22 +140,22 @@ internal object MarkdownPreprocessor {
     }
 
     /**
-     * 聊天流不渲染 HTML：在 `<` 后插入零宽空格（U+200B），标签就不会被解析成 HTML_TAG 节点。
-     * 渲染器对 HTML_TAG 没有处理分支（直接丢弃），插字符后 `<` 退化为普通 LT 标记、会照原样显示，
-     * 于是 `<b>` 就能以字面文本 `<b>` 呈现。用 ZWSP 而非 U+2060，后者在部分机型字体里会渲染成豆腐块。
+     * The chat stream does not render HTML: inserting a zero-width space (U+200B) after `<` stops tags being parsed as HTML_TAG nodes.
+     * The renderer has no handling branch for HTML_TAG (it drops them outright); after the insertion, `<` degrades to a plain LT token and is displayed as-is,
+     * so `<b>` shows as the literal text `<b>`. ZWSP is used rather than U+2060, which renders as tofu boxes in some device fonts.
      */
     private fun neutralizeHtmlOpenBracket(s: String): String = s.replace("<", "<\u200B")
 
     // ---------------------------------------------------------------------------------------------
-    // 数学公式
+    // Math formulas
     // ---------------------------------------------------------------------------------------------
 
     private val BLOCK_MATH_DOLLAR = Regex("""\$\$(.+?)\$\$""", RegexOption.DOT_MATCHES_ALL)
     private val BLOCK_MATH_BRACKET = Regex("""\\\[(.+?)\\\]""", RegexOption.DOT_MATCHES_ALL)
 
-    // 行内：定界符内侧首尾非空白、内容不含换行与 $，规避 "$5 ... $10" 这类货币误命中（非空白锚点）
+    // Inline: the inner edges of the delimiters must be non-whitespace and the content must contain no newline or $, avoiding "$5 ... $10" currency false positives of this kind (non-whitespace anchors)
     private val INLINE_MATH_DOLLAR = Regex("""\$(?=\S)([^\n$]*?\S)\$""")
-    // LaTeX 标准行内定界符 \( ... \)
+    // Standard LaTeX inline delimiters \( ... \)
     private val INLINE_MATH_PAREN = Regex("""\\\((.+?)\\\)""", RegexOption.DOT_MATCHES_ALL)
 
     private fun extractMath(input: String): String {
@@ -184,7 +184,7 @@ internal object MarkdownPreprocessor {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // 数学链接编解码（供 MathImageTransformer 使用）
+    // Math link encoding/decoding (for use by MathImageTransformer)
     // ---------------------------------------------------------------------------------------------
 
     const val MATH_BLOCK_SCHEME = "aicode-math-block://"
@@ -195,7 +195,7 @@ internal object MarkdownPreprocessor {
         return "![](${if (block) MATH_BLOCK_SCHEME else MATH_INLINE_SCHEME}$enc)"
     }
 
-    /** 解析数学链接；非数学链接返回 null。返回 (latex, isBlock)。 */
+    /** Parses a math link; returns null for non-math links. Returns (latex, isBlock). */
     fun decodeMathLink(link: String): Pair<String, Boolean>? {
         val block = link.startsWith(MATH_BLOCK_SCHEME)
         val inline = link.startsWith(MATH_INLINE_SCHEME)

@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** 编辑器页状态。 */
+/** Editor page state. */
 sealed interface EditorUiState {
     data object Loading : EditorUiState
     data class Success(val content: String, val scopeName: String?) : EditorUiState
@@ -31,7 +31,7 @@ sealed interface EditorUiState {
     data class Error(val detail: String?) : EditorUiState
 }
 
-/** 保存结果，一次性事件，经 [CodeEditorViewModel.saveEvents] 下发。 */
+/** Save result, a one-shot event delivered via [CodeEditorViewModel.saveEvents]. */
 sealed interface SaveResult {
     data object Success : SaveResult
     data class Error(val detail: String?) : SaveResult
@@ -50,7 +50,7 @@ class CodeEditorViewModel @Inject constructor(
     private val _saveEvents = Channel<SaveResult>(Channel.BUFFERED)
     val saveEvents = _saveEvents.receiveAsFlow()
 
-    /** 是否正在写盘（远程模式下经 SFTP，耗时较长，供 UI 转圈）。 */
+    /** Whether a write to disk is in progress (in remote mode via SFTP, which takes longer; used for the UI loading spinner). */
     private val _saving = MutableStateFlow(false)
     val saving: StateFlow<Boolean> = _saving.asStateFlow()
 
@@ -59,7 +59,7 @@ class CodeEditorViewModel @Inject constructor(
 
     private var loadedPath: String? = null
 
-    /** 重复调用同一路径不会重复读盘，供 Compose 重组时安全调用。 */
+    /** Calling repeatedly with the same path does not re-read from disk, so it is safe to call during Compose recomposition. */
     fun load(path: String) {
         if (loadedPath == path) return
         loadedPath = path
@@ -77,13 +77,13 @@ class CodeEditorViewModel @Inject constructor(
                 if (looksBinary(bytes)) {
                     return@runCatching EditorUiState.Binary
                 }
-                // 语法包解析放在这里，确保 AndroidView factory 在主线程创建编辑器时 registry 已就绪。
+                // Grammar bundle parsing is placed here, to ensure the registry is ready when the AndroidView factory creates the editor on the main thread.
                 TextMateSetup.ensureInitialized(context)
                 val scope = TextMateSetup.scopeNameFor(path)
                 if (scope != null) {
-                    // 预热 grammar：某种语法首次构造要编译大量正则，不在这里做就会压到主线程并拖后首次上色。
-                    // 不将对象传给 UI：Language 绑编辑器生命周期，editor.release() 会连带销毁它，
-                    // 跨重建复用已销毁实例会出问题——此处仅为把编译结果缓进 registry。
+                    // Warm up the grammar: constructing a grammar for the first time compiles many regexes; not doing it here would push it onto the main thread and delay the first coloring.
+                    // Do not pass the object to the UI: Language is bound to the editor lifecycle, and editor.release() destroys it along with the editor;
+                    // reusing a destroyed instance across rebuilds would cause problems -- here it only caches the compilation result into the registry.
                     runCatching { TextMateLanguage.create(scope, false).destroy() }
                 }
                 EditorUiState.Success(
@@ -91,13 +91,13 @@ class CodeEditorViewModel @Inject constructor(
                     scopeName = scope
                 )
             }.getOrElse { e ->
-                FileLogger.w(TAG, "打开文件失败: $path", e)
+                FileLogger.w(TAG, "Failed to open file: $path", e)
                 EditorUiState.Error(e.message)
             }
         }
     }
 
-    /** 把编辑器当前内容写回文件。写入在 IO 线程进行，结果通过 [saveEvents] 通知，期间 [saving] 置位。 */
+    /** Writes the editor's current content back to the file. The write happens on the IO thread, the result is notified via [saveEvents], and [saving] is set during it. */
     fun save(content: String) {
         val path = loadedPath ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -107,7 +107,7 @@ class CodeEditorViewModel @Inject constructor(
                     .fold(
                         onSuccess = { SaveResult.Success },
                         onFailure = { e ->
-                            FileLogger.w(TAG, "保存文件失败: $path", e)
+                            FileLogger.w(TAG, "Failed to save file: $path", e)
                             SaveResult.Error(e.message)
                         }
                     )
@@ -121,13 +121,13 @@ class CodeEditorViewModel @Inject constructor(
     private companion object {
         const val TAG = "CodeEditorViewModel"
 
-        /** 全量读入内存，超过该体积拒绝打开以避免 OOM 与长时间卡顿。 */
+        /** Fully read into memory; files larger than this are refused to avoid OOM and long stalls. */
         const val MAX_EDITABLE_BYTES = 2L * 1024 * 1024
 
-        /** 二进制嗅探的采样字节数：与 git 一致，仅看开头一段。 */
+        /** Number of sample bytes for binary sniffing: consistent with git, only looks at the leading portion. */
         const val BINARY_SNIFF_BYTES = 8000
 
-        /** 二进制判定：开头采样段内出现 NUL 字节即视为二进制（文本文件不含 NUL，误判率极低）。 */
+        /** Binary determination: if a NUL byte appears within the leading sample segment it is treated as binary (text files do not contain NUL, so the false-positive rate is extremely low). */
         fun looksBinary(bytes: ByteArray): Boolean {
             val limit = minOf(bytes.size, BINARY_SNIFF_BYTES)
             for (i in 0 until limit) {

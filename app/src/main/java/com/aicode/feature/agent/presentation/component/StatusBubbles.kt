@@ -74,31 +74,31 @@ import compose.icons.feathericons.Clock
 import compose.icons.feathericons.Key
 import kotlinx.coroutines.delay
 
-/** 涟漪高光一个来回的周期（ms）。 */
+/** Period of one back-and-forth ripple highlight cycle (ms). */
 private const val RIPPLE_PERIOD_MS = 1600
 
-/** 高光带宽度占内容宽度的比例：太宽像整段变色，太窄看不出来。 */
+/** Width of the highlight band as a fraction of the content width: too wide looks like the whole passage changes colour, too narrow is invisible. */
 private const val RIPPLE_BAND_RATIO = 0.5f
 
-/** 高光带边缘的不透明度（渐变两端）。 */
+/** Opacity at the edges of the highlight band (the two ends of the gradient). */
 private const val RIPPLE_EDGE_ALPHA = 0.12f
 
 /**
- * 高光带峰值不透明度。
+ * Peak opacity of the highlight band.
  *
- * 高光是白色（主流做法）：深色主题下把字「打亮」，浅色主题下把字朝背景方向提亮成一道光泽。
- * 峰值不能太高——浅色主题下白色 0.85 会直接把字擦掉，0.5 左右是「亮一下但仍认得出字」。
+ * The highlight is white (the mainstream approach): on a dark theme it 'lights up' the text, on a light theme it brightens the text toward the background into a sheen.
+ * The peak must not be too high -- on a light theme white at 0.85 would erase the text outright; around 0.5 is 'brightens briefly but the text is still readable'.
  */
 private const val RIPPLE_PEAK_ALPHA = 0.5f
 
 /**
- * 涟漪高光：一条中间亮、两端透明的高光带周期性从左划到右。
+ * Ripple highlight: a highlight band, bright in the middle and transparent at both ends, periodically sweeps from left to right.
  *
- * 用 [BlendMode.SrcAtop] 叠在已绘制内容上——它只作用在不透明像素上，所以不会在空白处
- * 画出一条色带方块。高光默认白色（Claude Code / 主流 shimmer 的做法）；浅色主题下白色会在
- * 文字像素上把字朝背景提亮，形成一道掠过的光泽，而不是盖上一层灰。
+ * Overlaid on already-drawn content with [BlendMode.SrcAtop] -- it only affects opaque pixels, so it will not draw
+ * a coloured band block in blank areas. The highlight defaults to white (the Claude Code / mainstream shimmer approach); on a light theme white will,
+ * on text pixels, brighten the text toward the background, forming a passing sheen rather than covering it with a layer of grey.
  *
- * 性能：进度在 [drawWithContent] 的绘制阶段读取（`by` 委托在 lambda 内取值），只重绘、不重组。
+ * Performance: progress is read during the draw phase of [drawWithContent] (the `by` delegate is evaluated inside the lambda), so it only redraws, never recomposes.
  */
 @Composable
 internal fun Modifier.rippleHighlight(
@@ -119,11 +119,11 @@ internal fun Modifier.rippleHighlight(
     return drawWithContent {
         drawContent()
         val band = size.width * bandRatio
-        // 起点在左侧完全移出、终点在右侧完全移出，两端各留一个带的余量做「停顿感」
+        // The start moves fully out on the left and the end fully out on the right, leaving one band's worth of margin at each end for a 'pause' feel
         val center = -band + progress * (size.width + 2 * band)
         drawRect(
             brush = Brush.linearGradient(
-                // 五档渐变：两端全透明、中间一个软峰，扫过时是「亮一下」而不是一条硬边色带
+                // Five-step gradient: fully transparent at both ends, one soft peak in the middle, so sweeping over is a 'brief brightening' rather than a hard-edged colour band
                 colors = listOf(
                     Color.Transparent,
                     highlight.copy(alpha = RIPPLE_EDGE_ALPHA),
@@ -140,13 +140,13 @@ internal fun Modifier.rippleHighlight(
 }
 
 /**
- * 一条会走涟漪高光的文字（[Modifier.rippleHighlight] 的文字版）。
+ * A piece of text with a moving ripple highlight (the text version of [Modifier.rippleHighlight]).
  *
- * 涟漪画在**文字自身宽度**上：调用方不要给它 `weight`，否则光带会在整段可分配宽度里爬、
- * 扫过这几个字只是一瞬间（要占位就让外层容器去占）。
+ * The ripple is drawn over **the text's own width**: callers must not give it `weight`, otherwise the band will crawl across the entire allocatable width and
+ * sweeping over these few characters takes only an instant (if space needs reserving, let the outer container reserve it).
  *
- * [highlight] 传 null 表示只画静态文字：同一处文案要在「空闲」与「进行中」之间切换时，
- * 用同一个组件、只换这一个参数即可（避免两个分支各写一套 Text 参数）。
+ * Passing null for [highlight] means drawing static text only: when the same copy needs to switch between 'idle' and 'in progress' at the same place,
+ * use the same component and change only this one parameter (avoiding writing a separate set of Text parameters for each of the two branches).
  */
 @Composable
 internal fun RippleText(
@@ -168,12 +168,12 @@ internal fun RippleText(
 }
 
 /**
- * 统一的「正在忙什么」状态行：涟漪高光文案（+ 可选的三点跳动）。
+ * Unified 'what is it busy with' status row: ripple-highlight copy (+ optional bouncing three dots).
  *
- * 高光只盖在文案上，三个跳动的点是独立的动画，不参与高光（两层动画叠在一起会糊）。
- * 外层 [modifier]（撑满宽度、定高）交给容器，内层内容按自身宽度靠左排。
+ * The highlight only covers the copy; the three bouncing dots are an independent animation and do not take part in the highlight (two animation layers stacked together would blur).
+ * The outer [modifier] (filling the width, fixing the height) is left to the container; the inner content is laid out left-aligned at its own width.
  *
- * 读屏语义统一由本行给出（文案即语义），所以内部的 [TypingDots] 关掉自己的播报。
+ * Screen-reader semantics are uniformly provided by this row (the copy is the semantics), so the internal [TypingDots] turns off its own announcement.
  */
 @Composable
 internal fun AgentBusyIndicator(
@@ -196,10 +196,10 @@ internal fun AgentBusyIndicator(
 }
 
 /**
- * 等待模型响应时的状态行：涟漪高光的文案 + 三个跳动的点，不套描边卡片。
+ * Status row while waiting for the model to respond: ripple-highlight copy + three bouncing dots, without an outlined card.
  *
- * [label] 由调用方决定说「正在思考」还是更具体的场景（模型已在吐某次工具调用的参数时，
- * 说「正在编辑文件」），见 [toolRunningLabelRes]。
+ * [label] is decided by the caller, saying 'thinking' or a more specific scenario (when the model is already emitting the arguments of a tool call,
+ * say 'editing file'), see [toolRunningLabelRes].
  */
 @Composable
 internal fun ThinkingBubble(label: String) {
@@ -212,7 +212,7 @@ internal fun ThinkingBubble(label: String) {
     )
 }
 
-/** 上下文压缩期间的临时状态行，不落库。 */
+/** Temporary status row during context compaction, not persisted. */
 @Composable
 internal fun CompactionProgressBubble() {
     AgentBusyIndicator(
@@ -224,7 +224,7 @@ internal fun CompactionProgressBubble() {
     )
 }
 
-/** 网络重试期间的临时状态行，不落库。首行展示触发重试的具体错误（如 429/500/网络断开），次行展示重试进度。 */
+/** Temporary status row during a network retry, not persisted. The first line shows the specific error that triggered the retry (e.g. 429/500/network disconnect), the second line shows the retry progress. */
 @Composable
 internal fun RetryingBubble(attempt: Int, maxRetries: Int, error: RetryErrorInfo?) {
     Column(
@@ -266,10 +266,10 @@ internal fun RetryingBubble(attempt: Int, maxRetries: Int, error: RetryErrorInfo
 }
 
 /**
- * 多 Key 自动切换期间的临时状态行，不落库。展示当前 Key 不可用、已改用第 N/M 个 Key 重发。
+ * Temporary status row during automatic multi-Key switching, not persisted. Shows that the current Key is unavailable and the request has been resent using Key N/M.
  *
- * 与 [RetryingBubble]、[CompactionProgressBubble] 同为尾巴里的瞬时状态行，沿用扁平文档流：
- * 不套描边卡片，只有图标 + 文案 + 三点跳动。
+ * Like [RetryingBubble] and [CompactionProgressBubble], this is a transient status row in the tail, following the flat document flow:
+ * no outlined card, only an icon + copy + three bouncing dots.
  */
 @Composable
 internal fun KeySwitchedBubble(newIndex: Int, total: Int) {
@@ -295,7 +295,7 @@ internal fun KeySwitchedBubble(newIndex: Int, total: Int) {
     }
 }
 
-/** 错误摘要文本：类别文案 + 状态码（如「速率限制 (429)」）；无状态码时仅类别文案。 */
+/** Error summary text: category copy + status code (e.g. 'Rate limit (429)'); with no status code, only the category copy. */
 @Composable
 private fun retryErrorLabel(error: RetryErrorInfo): String {
     val base = stringResource(
@@ -316,14 +316,14 @@ private fun retryErrorLabel(error: RetryErrorInfo): String {
     return if (code != null) stringResource(R.string.retry_error_with_code, base, code) else base
 }
 
-/** 流式渲染节流：文本变化后延迟该时长再更新渲染文本，降低 md 解析频率。 */
+/** Streaming render throttle: after the text changes, wait this long before updating the rendered text, to reduce md parsing frequency. */
 private const val STREAMING_RENDER_DEBOUNCE_MS = 120L
 
 /**
- * 对持续增长的流式文本做节流渲染：首帧立即渲染当前文本，之后每次文本变化最多
- * [STREAMING_RENDER_DEBOUNCE_MS] 更新一次。上游每个 delta 都携带完整累积文本，
- * 若不节流，每个 token 都会触发一次完整 md 解析（长文本下解析慢、渲染滞后）。
- * 返回的文本只用于渲染，折叠判定等实时逻辑仍直接用原始 [text]。
+ * Throttled rendering of continuously growing streaming text: the first frame renders the current text immediately, afterwards each text change updates at most
+ * once per [STREAMING_RENDER_DEBOUNCE_MS]. Every upstream delta carries the full accumulated text;
+ * without throttling, every token would trigger a full md parse (on long text parsing is slow and rendering lags).
+ * The returned text is only for rendering; real-time logic such as collapse decisions still uses the original [text] directly.
  */
 @Composable
 private fun rememberThrottledStreamingText(text: String): String {
@@ -336,57 +336,57 @@ private fun rememberThrottledStreamingText(text: String): String {
     return renderText
 }
 
-/** 打字机最低显示速率（字符/秒）：上游停顿时仍匀速追赶，保证能看到结尾。 */
+/** Typewriter minimum display rate (characters/second): when upstream stalls it still catches up at a steady rate, ensuring the ending can be seen. */
 private const val TYPEWRITER_MIN_RATE = 30f
 
-/** 常规显示速率上限（字符/秒）：滞后在 [TYPEWRITER_LAG_TARGET] 以内时的天花板。 */
+/** Normal display rate cap (characters/second): the ceiling while lag is within [TYPEWRITER_LAG_TARGET]. */
 private const val TYPEWRITER_MAX_RATE = 220f
 
-/** 滞后超标后的应急速率上限（字符/秒）：允许突破常规上限，把积压迅速吃掉。 */
+/** Emergency display rate cap after lag exceeds the target (characters/second): allows breaking through the normal cap to quickly consume the backlog. */
 private const val TYPEWRITER_BURST_RATE = 1600f
 
-/** 显示速率 = 上游速率 × 该系数：略小于 1，保留「始终慢半拍」的滞后感。 */
+/** Display rate = upstream rate x this factor: slightly less than 1, preserving the lag feel of 'always half a beat behind'. */
 private const val TYPEWRITER_FOLLOW_RATIO = 0.95f
 
 /**
- * 允许的滞后（字符）：显示最多落在上游这么多字之后。
+ * Allowed lag (characters): the display falls at most this many characters behind upstream.
  *
- * 超过它就不再受 [TYPEWRITER_MAX_RATE] 约束。这条上限是「结束瞬间别抽搐」的关键——
- * 上游结束时要补的永远是最后这一小段，而不是攒了几百字的整段。
+ * Once exceeded it is no longer constrained by [TYPEWRITER_MAX_RATE]. This cap is the key to 'no twitch at the finishing instant' --
+ * what needs to be made up when upstream ends is always only this last small segment, not a whole passage of hundreds of characters built up.
  */
 private const val TYPEWRITER_LAG_TARGET = 12f
 
-/** 追赶时间常数（秒）：滞后按该节奏收敛，越小追得越紧。 */
+/** Catch-up time constant (seconds): lag converges at this pace; the smaller it is, the tighter the catch-up. */
 private const val TYPEWRITER_SETTLE_SECONDS = 0.06f
 
 /**
- * 上游结束后把剩余文字打完的目标时长（秒）。
+ * Target duration (seconds) for typing out the remaining text after upstream ends.
  *
- * 结束后不再一帧补全（那正是「突然跳到结尾」的来源），而是按「剩余 ÷ 该时长」匀速打完：
- * 既不会瞬移，也不会拖到用户以为卡住。常见剩余量（十几字）约 0.2 秒打完。
+ * After ending it no longer completes in one frame (that is exactly the source of 'suddenly jumping to the end'), but types out evenly at 'remaining / this duration':
+ * it neither teleports nor drags on until the user thinks it is stuck. A typical remainder (a dozen or so characters) finishes in about 0.2 seconds.
  */
 private const val TYPEWRITER_DRAIN_SECONDS = 0.2f
 
-/** 收尾阶段的显示速率上限（字符/秒）：剩余很多时也不至于一闪而过。 */
+/** Display rate cap for the finishing phase (characters/second): even with a lot remaining it will not flash past. */
 private const val TYPEWRITER_DRAIN_MAX_RATE = 400f
 
-/** 收尾硬上限（ms）：极端情况（文本被整体替换、渲染跟不上）也必须在这之内追平。 */
+/** Hard cap for finishing (ms): even in extreme cases (the text is replaced wholesale, rendering cannot keep up) it must catch up within this. */
 private const val TYPEWRITER_DRAIN_HARD_MS = 600L
 
-/** 上游吐字速率估算的滑动窗口时长（ms）。 */
+/** Sliding window duration (ms) for estimating the upstream typing rate. */
 private const val TYPEWRITER_RATE_WINDOW_MS = 500L
 
 /**
- * 打字机渲染节流间隔（ms）。
+ * Typewriter render throttle interval (ms).
  *
- * 每次快照 = 一次 Markdown 全篇重新解析 + 正文 Text 全篇重新布局测量（长回复下是毫秒级重活）。
- * 24ms（~42 次/秒）在 120Hz 屏上意味着每 3 帧就要扛一次重活，流式期间帧预算被系统性挤爆。
- * 打字机是「字符逐个出现」的离散动画而非连续运动，人眼在 ~20fps 即感到平滑，
- * 故放宽到 48ms（~21 次/秒）：重活频率减半，观感无损。
+ * Each snapshot = one full Markdown re-parse of the whole text + a full re-layout measurement of the body Text (heavy work at millisecond scale on long replies).
+ * 24ms (~42 times/second) on a 120Hz screen means shouldering that heavy work every 3 frames, and during streaming the frame budget is systematically squeezed out.
+ * The typewriter is a discrete animation of 'characters appearing one by one' rather than continuous motion; the human eye perceives smoothness at ~20fps,
+ * so it is relaxed to 48ms (~21 times/second): the heavy-work frequency is halved, with no loss in perceived quality.
  */
 private const val TYPEWRITER_RENDER_INTERVAL_MS = 48L
 
-/** 按码点数量截断字符串，避免把 emoji 等代理对截成孤立的半个字符。 */
+/** Truncate a string by code point count, avoiding splitting emoji and other surrogate pairs into isolated half characters. */
 private fun truncateToCodePoints(text: String, codePoints: Int): String {
     if (codePoints <= 0) return ""
     if (codePoints >= text.codePointCount(0, text.length)) return text
@@ -399,19 +399,19 @@ private fun truncateToCodePoints(text: String, codePoints: Int): String {
     return text.substring(0, index)
 }
 
-/** 延续判据的前缀采样上限（字符）：只存指纹不存全文，避免大段流式文本进 saveable。 */
+/** Prefix sampling cap for the continuation criterion (characters): only the fingerprint is stored, not the full text, to avoid large streaming text entering saveable. */
 private const val CONTINUITY_HEAD_CHARS = 64
 
-/** 已见文本的前缀指纹，与其长度一起构成「同一轮延续」的判据。 */
+/** Prefix fingerprint of the seen text, which together with its length forms the criterion for 'continuation of the same turn'. */
 internal fun streamHeadFingerprint(text: String): Int =
     text.take(CONTINUITY_HEAD_CHARS).hashCode()
 
 /**
- * [text] 是否是「长度 [seenChars]、前缀指纹 [seenHead]」那段已见文本的延续。
+ * Whether [text] is a continuation of that seen text with 'length [seenChars], prefix fingerprint [seenHead]'.
  *
- * 流式文本逐 delta 前缀增长，同一轮内当前文本必然以已见文本为前缀。切页或 item 回收后
- * 重挂载时用它校验恢复出的打字进度 / 计时起点是否仍属于同一轮：期间若已换轮，新文本更短
- * 或开头不同，判为不延续，进度与计时从头开始。
+ * Streaming text grows by prefix delta by delta; within the same turn the current text necessarily has the seen text as a prefix. After switching pages or an item being recycled and
+ * remounted, this validates whether the restored typing progress / timing start still belongs to the same turn: if the turn has changed in the meantime, the new text is shorter
+ * or starts differently, it is judged not a continuation, and progress and timing start from scratch.
  */
 internal fun isStreamContinuation(text: String, seenChars: Int, seenHead: Int): Boolean {
     if (seenChars <= 0 || text.length < seenChars) return false
@@ -419,18 +419,18 @@ internal fun isStreamContinuation(text: String, seenChars: Int, seenHead: Int): 
 }
 
 /**
- * 打字机单帧显示速率（码点/秒）。[lag] = 上游已到字数 − 已显示字数，[arrivalRate] 为滑窗估算的
- * 上游吐字速率，[drainRate] 非空表示上游已结束的收尾阶段（按该恒定速率匀速打完剩余）。
+ * Typewriter display rate for a single frame (code points/second). [lag] = characters arrived upstream - characters already displayed, [arrivalRate] is the sliding-window estimate of the
+ * upstream typing rate, non-null [drainRate] indicates the finishing phase after upstream has ended (type out the remainder at that constant rate).
  *
- * 播出阶段取两者较大值：
- * - 跟随项 = 上游速率 × [TYPEWRITER_FOLLOW_RATIO]（略慢于上游，保留「慢半拍」的观感）；
- * - 追赶项 = 滞后 ÷ [TYPEWRITER_SETTLE_SECONDS]（滞后越大追得越快）。
+ * During playback, take the larger of the two:
+ * - Follow term = upstream rate x [TYPEWRITER_FOLLOW_RATIO] (slightly slower than upstream, preserving the 'half a beat behind' feel);
+ * - Catch-up term = lag / [TYPEWRITER_SETTLE_SECONDS] (the larger the lag, the faster the catch-up).
  *
- * 常规上限 [TYPEWRITER_MAX_RATE] 只在滞后未超标时生效：滞后一旦超过 [TYPEWRITER_LAG_TARGET]
- * 就放宽到 [TYPEWRITER_BURST_RATE]。这条规则是「结束时别抽搐」的关键——旧实现把速率死封在
- * 200 字符/秒，模型吐得快或爆发式吐字时滞后只增不减（稳态约 1.8×上游速率，动辄上百字），
- * 上游一结束整段一次跳出，看起来就是突然抽搐一下。现在滞后被压在十几字以内，
- * 收尾阶段再按 [TYPEWRITER_DRAIN_SECONDS] 匀速把这一小段打完，不会瞬移。
+ * The normal cap [TYPEWRITER_MAX_RATE] only takes effect while lag has not exceeded the target: once lag exceeds [TYPEWRITER_LAG_TARGET]
+ * it is relaxed to [TYPEWRITER_BURST_RATE]. This rule is the key to 'no twitch at the end' -- the old implementation hard-capped the rate at
+ * 200 characters/second; when the model typed quickly or in bursts the lag only grew (steady state about 1.8x the upstream rate, often hundreds of characters),
+ * and as soon as upstream ended the whole passage jumped out at once, looking like a sudden twitch. Now the lag is kept within a dozen or so characters,
+ * and in the finishing phase that small segment is typed out evenly at [TYPEWRITER_DRAIN_SECONDS], so it does not teleport.
  */
 internal fun typewriterRate(lag: Float, arrivalRate: Float, drainRate: Float? = null): Float {
     if (lag <= 0f) return 0f
@@ -444,51 +444,51 @@ internal fun typewriterRate(lag: Float, arrivalRate: Float, drainRate: Float? = 
 }
 
 /**
- * 收尾速率（码点/秒）：把 [lag] 个剩余码点在 [TYPEWRITER_DRAIN_SECONDS] 内匀速打完。
+ * Finishing rate (code points/second): type out the [lag] remaining code points evenly within [TYPEWRITER_DRAIN_SECONDS].
  *
- * 取「按剩余量摊到目标时长」而不是「固定倍数追赶」，保证收尾时间是常数级（约 0.2 秒）：
- * 剩余十几字看得清是打字，剩余几百字也不会一格一格磨到用户以为卡住。
+ * Taking 'spread the remaining amount over the target duration' rather than 'catch up at a fixed multiple' ensures the finishing time is constant-scale (about 0.2 seconds):
+ * with a dozen or so characters remaining you can clearly see it typing, and with a few hundred remaining it will not grind character by character until the user thinks it is stuck.
  */
 internal fun typewriterDrainRate(lag: Float): Float =
     (lag / TYPEWRITER_DRAIN_SECONDS).coerceIn(TYPEWRITER_MIN_RATE, TYPEWRITER_DRAIN_MAX_RATE)
 
-/** 打字机当前渲染结果：[text] 为应渲染文本（上游全文的前缀），[settled] 表示是否已追平全文。 */
+/** Current typewriter rendering result: [text] is the text to render (a prefix of the full upstream text), [settled] indicates whether it has caught up with the full text. */
 internal data class TypewriterText(val text: String, val settled: Boolean)
 
 /**
- * 速率自适应打字机：显示文本滞后于上游累积文本，打字速度跟随模型吐字速度。
+ * Rate-adaptive typewriter: the displayed text lags behind the upstream accumulated text, and the typing speed follows the model's typing speed.
  *
- * 上游每个 delta 都携带完整累积文本，到达节奏即模型吐字节奏。此处维护两个进度：
- * 到达进度（[text] 的码点数）与显示进度（已展示的码点数）。显示进度由动画帧驱动，速率见
- * [typewriterRate]：滞后被压在 [TYPEWRITER_LAG_TARGET] 附近，不会越积越多。
+ * Every upstream delta carries the full accumulated text, and its arrival rhythm is the model's typing rhythm. Two progresses are maintained here:
+ * arrival progress (the code point count of [text]) and display progress (the code points already shown). Display progress is driven by animation frames; for the rate see
+ * [typewriterRate]: lag is kept near [TYPEWRITER_LAG_TARGET] and does not accumulate further and further.
  *
- * 渲染文本每 [TYPEWRITER_RENDER_INTERVAL_MS] 快照一次（throttle 而非 debounce，
- * 保证打字期间渲染持续可见增长），把 md 解析频率压在 ~10fps；text 突变（换会话 /
- * 新一轮 / 重试）时补全为当前全文，之后继续跟着 delta 打字。
+ * The rendered text is snapshotted once every [TYPEWRITER_RENDER_INTERVAL_MS] (throttle rather than debounce,
+ * ensuring the rendering keeps visibly growing while typing), keeping the md parsing frequency at ~10fps; when the text changes abruptly (switching session /
+ * new turn / retry) it is completed to the current full text, then continues typing along with subsequent deltas.
  *
- * 上游结束（[active] 变 false）**不再一帧补全**：剩余那一小段按 [typewriterDrainRate] 匀速
- * 打完（约 0.2 秒，硬上限 [TYPEWRITER_DRAIN_HARD_MS] 兜底），期间 [TypewriterText.settled]
- * 保持 false，调用方据此把这段文字的渲染交棒给刚落库的助手消息（见 AIChatPanel），
- * 打完后再让落库消息完全接管——用户看不到「整段突然跳出」，也看不到同一段文字重复两份。
+ * When upstream ends ([active] becomes false) it **no longer completes in one frame**: the remaining small segment is typed out evenly at [typewriterDrainRate]
+ * (about 0.2 seconds, with the hard cap [TYPEWRITER_DRAIN_HARD_MS] as a backstop), during which [TypewriterText.settled]
+ * stays false, and the caller uses this to hand over rendering of this text to the just-persisted assistant message (see AIChatPanel),
+ * and after typing finishes the persisted message takes over completely -- the user sees neither 'the whole passage suddenly jumping out' nor the same text duplicated in two copies.
  *
- * 调用方应在 LazyColumn 之外持有本状态，避免尾巴 item 滚出视口被 dispose 后
- * 重新组合导致打字进度丢失。切页（chat 整棵子树离开 NavHost 组合）无法靠持有位置规避，
- * 由内部 saveable 进度承接。
+ * Callers should hold this state outside the LazyColumn, to avoid the tail item scrolling out of the viewport, being disposed, and
+ * recomposing and losing typing progress. Switching pages (the whole chat subtree leaving the NavHost composition) cannot be avoided by where it is held,
+ * and is carried by the internal saveable progress.
  */
 @Composable
 internal fun rememberTypewriterStreamingText(
     text: String,
     active: Boolean,
     /**
-     * 文本所属会话。切到另一个正在输出的会话时，它已产出的部分是既成事实，必须直接补全显示——
-     * 本函数的状态挂在调用点上，会话切换并不会让它重建，不显式区分就会被下面的「换轮」
-     * 判定当成新一轮，把那段内容当着用户的面再逐字打一遍。
+     * The session the text belongs to. When switching to another session that is currently outputting, the part it has already produced is an established fact and must be displayed completed directly --
+     * this function's state is attached at the call site, and switching sessions does not rebuild it; without explicit distinction it would be judged by the 'new turn'
+     * decision below as a new turn, and that content would be typed out again character by character in front of the user.
      */
     sessionKey: String? = null
 ): TypewriterText {
-    // 已渲染文本的长度与前缀指纹进 saveable：切页返回后据此延续打字进度，避免已输出的
-    // 正文从头重打。校验不通过（期间换过轮或换过会话）时补全为当前全文而不是从头打字：
-    // 挂载这一刻才第一次看到的文本对用户就是历史，重打一遍只会让人以为模型在重复输出。
+    // The length and prefix fingerprint of the already-rendered text go into saveable: after returning from another page, typing progress continues from there, avoiding already-output
+    // body text being retyped from the start. If validation fails (the turn or session changed in the meantime), complete to the current full text instead of typing from the start:
+    // text first seen at the moment of mounting is history to the user; retyping it would only make them think the model is repeating its output.
     var shownChars by rememberSaveable { mutableStateOf(0) }
     var shownHead by rememberSaveable { mutableStateOf(0) }
     val restored = remember {
@@ -498,12 +498,12 @@ internal fun rememberTypewriterStreamingText(
         mutableStateOf(restored.codePointCount(0, restored.length).toFloat())
     }
     var renderText by remember { mutableStateOf(restored) }
-    // 上游到达事件窗口：(帧时间戳, 累计码点数)，用于估算吐字速率
+    // Upstream arrival event window: (frame timestamp, cumulative code point count), used to estimate the typing rate
     val arrivals = remember { ArrayDeque<Pair<Long, Int>>() }
     var lastArrivalNanos by remember { mutableStateOf(0L) }
     var lastText by remember { mutableStateOf(restored) }
     var lastSessionKey by remember { mutableStateOf(sessionKey) }
-    // 渲染文本与其 saveable 指纹必须同步更新，否则恢复时会拿指纹去校验另一段文本
+    // The rendered text and its saveable fingerprint must be updated in sync, otherwise on restore the fingerprint would be used to validate a different piece of text
     val commitRender: (String) -> Unit = { snapshot ->
         renderText = snapshot
         shownChars = snapshot.length
@@ -511,11 +511,11 @@ internal fun rememberTypewriterStreamingText(
     }
 
     LaunchedEffect(text, active, sessionKey) {
-        // 文本不是当前进度的延续（换会话 / 新一轮 / 重试）：补全到当前全文，再跟着后续 delta 打字。
-        // 不能归零重打——切到另一个正在输出的会话时，它已产出的几百字会当着用户的面再来一遍。
-        // 换会话必须单独判：currentSessionId 与 streamingText 未必同一帧到达，只靠前缀判定
-        // 会漏掉先到的那一帧（那一帧文本还是旧会话的，看不出突变）。
-        // 新一轮开头也走这条路径，但那时 text 只有第一个 delta 的几个字，补全与重打视觉上无差别。
+        // The text is not a continuation of the current progress (session switch / new turn / retry): complete to the current full text, then follow subsequent deltas typing.
+        // Must not reset to zero and retype -- when switching to another session that is outputting, its already-produced hundreds of characters would happen again in front of the user.
+        // A session switch must be judged separately: currentSessionId and streamingText may not arrive in the same frame, and relying only on prefix judgement
+        // would miss the earlier frame (that frame's text is still the old session's, showing no abrupt change).
+        // The start of a new turn also goes through this path, but at that point text is only the few characters of the first delta, and completing vs retyping is visually indistinguishable.
         val sessionChanged = sessionKey != lastSessionKey
         lastSessionKey = sessionKey
         if (sessionChanged || (lastText.isNotEmpty() && !text.startsWith(lastText))) {
@@ -526,12 +526,12 @@ internal fun rememberTypewriterStreamingText(
         }
         lastText = text
 
-        // 上游结束进入收尾阶段：不再一帧补全（那正是「结束瞬间抽搐一下」的来源），
-        // 剩余那点字按恒定速率匀速打完。此时 text 不会再变，收尾期间本协程不会被打断。
+        // Upstream has ended, entering the finishing phase: no longer completing in one frame (that is exactly the source of 'a twitch at the finishing instant'),
+        // the remaining few characters are typed out evenly at a constant rate. At this point text will not change again, and this coroutine will not be interrupted during finishing.
         val draining = !active
         val now = System.nanoTime()
         val codePoints = text.codePointCount(0, text.length)
-        // 收尾速率按「进入收尾时的剩余量」定，保证收尾时长恒定、且能精确打完（不残留小数）
+        // The finishing rate is set from 'the remaining amount when entering finishing', ensuring the finishing duration is constant and it can finish exactly (leaving no fractional remainder)
         val drainRate = if (draining) {
             typewriterDrainRate((codePoints - shownCodePoints).coerceAtLeast(0f))
         } else {
@@ -539,7 +539,7 @@ internal fun rememberTypewriterStreamingText(
         }
         val drainDeadlineNanos = now + TYPEWRITER_DRAIN_HARD_MS * 1_000_000L
         if (!draining) {
-            // 记录本次到达事件，裁剪速率窗口（保留最近 WINDOW 内至少 2 条）
+            // Record this arrival event, trim the rate window (keep at least 2 entries within the most recent WINDOW)
             if (lastArrivalNanos != 0L) {
                 arrivals.addLast(now to codePoints)
                 val windowNanos = TYPEWRITER_RATE_WINDOW_MS * 1_000_000L
@@ -550,14 +550,14 @@ internal fun rememberTypewriterStreamingText(
             lastArrivalNanos = now
         }
 
-        // 帧驱动推进显示进度，追平本次文本即退出（text 再变化时本协程被取消重启）
+        // Frame-driven advance of display progress; exit once caught up with this text (when text changes again this coroutine is cancelled and restarted)
         var lastRenderNanos = 0L
         var lastFrameNanos = 0L
         while (shownCodePoints < codePoints) {
             withFrameNanos { frameNanos ->
                 if (lastFrameNanos != 0L) {
                     val dtSec = (frameNanos - lastFrameNanos) / 1_000_000_000f
-                    // 播出阶段才需要估算上游速率：收尾阶段上游已经不动了
+                    // The upstream rate only needs estimating during playback: in the finishing phase upstream is no longer moving
                     var arrivalRate = 0f
                     if (!draining) {
                         val oldest = arrivals.firstOrNull()
@@ -578,13 +578,13 @@ internal fun rememberTypewriterStreamingText(
                 }
                 lastFrameNanos = frameNanos
 
-                // 收尾硬上限：极端情况（文本被整体替换、渲染跟不上）也必须在这之内追平，
-                // 否则尾巴会一直挂在未追平状态，落库消息永远等不到交棒。
+                // Finishing hard cap: even in extreme cases (the text is replaced wholesale, rendering cannot keep up) it must catch up within this,
+                // otherwise the tail will stay in the not-caught-up state forever and the persisted message will never get the handover.
                 if (draining && frameNanos >= drainDeadlineNanos) {
                     shownCodePoints = codePoints.toFloat()
                 }
 
-                // 渲染节流：到间隔就快照当前显示进度；追平瞬间强制渲染完整文本
+                // Render throttle: snapshot the current display progress when the interval is reached; force-render the full text at the instant of catching up
                 val intervalNanos = TYPEWRITER_RENDER_INTERVAL_MS * 1_000_000L
                 if (frameNanos - lastRenderNanos >= intervalNanos || shownCodePoints >= codePoints) {
                     val snapshot = truncateToCodePoints(text, shownCodePoints.toInt())
@@ -595,30 +595,30 @@ internal fun rememberTypewriterStreamingText(
                 }
             }
         }
-        // 追平后确保渲染完整文本（while 退出时 shownCodePoints 已到 available）
+        // After catching up, ensure the full text is rendered (on exiting the while loop shownCodePoints has reached available)
         if (renderText != text) commitRender(text)
     }
-    // settled 直接由「渲染文本是否已等于上游全文」给出：收尾期间调用方据此决定渲染归属
+    // settled is given directly by 'whether the rendered text equals the full upstream text': during finishing the caller uses this to decide rendering ownership
     return TypewriterText(text = renderText, settled = renderText == text)
 }
 
 /**
- * 模型流式吐字时的实时气泡：左对齐、与助手气泡同款。
- * 尾部带三个跳动的点表示仍在生成。本轮结束后由落库的助手气泡接管。
+ * Live bubble while the model is streaming output: left-aligned, same style as the assistant bubble.
+ * Three bouncing dots at the tail indicate it is still generating. After this turn ends, the persisted assistant bubble takes over.
  *
- * 流式阶段以打字机效果渲染（打字进度由调用方经
- * [rememberTypewriterStreamingText] 驱动，见 [AIChatPanel]），打字速度随模型吐字
- * 速度自适应，上游结束时自动补全为完整文本，与落库消息无缝接力。
+ * During streaming it is rendered with a typewriter effect (typing progress is driven by the caller via
+ * [rememberTypewriterStreamingText], see [AIChatPanel]), the typing speed adapts to the model's output
+ * speed, and when upstream ends it automatically completes to the full text, seamlessly relaying to the persisted message.
  */
 @Composable
 internal fun StreamingBubble(
     text: String,
     cache: MarkdownRenderCache? = null,
-    /** 流式进行中（打字机未追平）：MarkdownContent 解析按增量节流、中间快照不写缓存。 */
+    /** Streaming in progress (typewriter has not caught up): MarkdownContent parsing is throttled incrementally, and intermediate snapshots are not written to the cache. */
     streaming: Boolean = false
 ) {
     val renderText = text
-    // 与落库助手正文同构：不套容器，直接铺在页面底色上，底部挂「生成中」的点
+    // Structurally the same as the persisted assistant body: no container, laid directly on the page background, with the 'generating' dots hung at the bottom
     Column(modifier = Modifier.fillMaxWidth()) {
         MarkdownContent(
             text = renderText,
@@ -633,17 +633,17 @@ internal fun StreamingBubble(
 }
 
 /**
- * 折叠行里显示的那一行思考内容：思考进行中取**最后一行**（跟着模型正在写的内容快速滚动），
- * 思考结束后取**第一行**（内容已定，固定成一句预览）。
+ * The one line of reasoning content shown in the collapsed row: while reasoning is in progress take **the last line** (scrolling quickly along with what the model is currently writing),
+ * after reasoning ends take **the first line** (the content is settled, fixed as a one-sentence preview).
  *
- * 调用方按单行 + 省略号渲染，所以这里把行首的 Markdown 记号（标题、列表、引用）与行尾的闭合
- * 记号（加粗、行内代码）一并清掉，免得折叠行里露出 `##` / `**` 这种源码记号；整行仍过长时
- * 交给省略号截断。没有任何可见内容时返回空串，调用方回落到「思考过程」文案。
+ * The caller renders it as a single line + ellipsis, so this strips the Markdown markers at the start of the line (headings, lists, quotes) and the closing
+ * markers at the end of the line (bold, inline code), to avoid exposing source markers like `##` / `**` in the collapsed row; if the whole line is still too long
+ * it is left to ellipsis truncation. When there is no visible content it returns an empty string, and the caller falls back to the 'reasoning process' copy.
  */
 internal fun reasoningPreviewLine(raw: String, live: Boolean): String {
     val line = if (live) {
-        // 从末尾回退跳过空白与换行，切出最后一行。不整串 trimEnd()：流式思考下这个函数每帧都跑，
-        // 长思考文本的整串复制纯属浪费。
+        // Step back from the end skipping whitespace and newlines, to cut out the last line. Do not trimEnd() the whole string: during streaming reasoning this function runs every frame,
+        // and copying the whole string of a long reasoning text is pure waste.
         var end = raw.length
         while (end > 0 && raw[end - 1].isWhitespace()) end--
         var start = end
@@ -652,45 +652,45 @@ internal fun reasoningPreviewLine(raw: String, live: Boolean): String {
     } else {
         raw.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
     }
-    // 空格与 Markdown 记号在两端交替出现（`- **要点**`、`## 标题`），放同一个集合里一次剥干净
+    // Spaces and Markdown markers alternate at both ends (`- **key point**`, `## Heading`), so put them in the same set and strip them clean in one pass
     return line.trim(*REASONING_PREVIEW_MARKERS)
 }
 
-/** 折叠行预览两端要剥掉的字符：空白 + Markdown 记号（标题 `#`、列表 `-` `+` `*`、引用 `>`、加粗与行内代码的 `*` `` ` ``）。 */
+/** Characters to strip from both ends of the collapsed-row preview: whitespace + Markdown markers (heading `#`, list `-` `+` `*`, quote `>`, and the `*` `` ` `` of bold and inline code). */
 private val REASONING_PREVIEW_MARKERS = charArrayOf(' ', '\t', '#', '*', '-', '>', '`', '+')
 
-/** 思考展开窗口的最大高度：超出后在窗口内滚动，不再无限撑高、拖走整页滚动。 */
+/** Maximum height of the reasoning expanded window: beyond it, scrolling happens inside the window, no longer growing indefinitely and dragging away the whole page scroll. */
 private val ReasoningWindowMaxHeight = 300.dp
 
-/** 思考窗口底部渐隐遮罩的高度（仅当内容还可继续下滚时显示）。 */
+/** Height of the fade-out mask at the bottom of the reasoning window (shown only when the content can still scroll further down). */
 private val ReasoningWindowFadeHeight = 28.dp
 
 /**
- * 思考过程折叠行：左对齐、浅色弱化，与正式回复区分。**默认收起**，点这一行随时展开/收起。
+ * Reasoning process collapsed row: left-aligned, light-coloured and de-emphasised, distinct from the formal reply. **Collapsed by default**, tap this row at any time to expand/collapse.
  *
- * 收起态只占一行：行首思考图标 + 一行内容预览（见 [reasoningPreviewLine]，超宽省略号截断）；
- * 展开态换成完整正文（Markdown 渲染）。两态之间没有「显示尾巴几行」的中间态。
+ * The collapsed state takes only one line: a reasoning icon at the start of the line + a one-line content preview (see [reasoningPreviewLine], truncated with an ellipsis if too wide);
+ * The expanded state switches to the full body (Markdown rendering). There is no intermediate state of 'showing a few tail lines' between the two states.
  *
- * [live] 表示思考仍在进行中：折叠行的预览取最后一行、跟着内容滚动，不展开也能看到模型在想什么；
- * 思考结束后预览固定为第一行。
+ * [live] indicates reasoning is still in progress: the collapsed row's preview takes the last line, scrolling along with the content, so you can see what the model is thinking without expanding;
+ * after reasoning ends the preview is fixed to the first line.
  */
 @Composable
 internal fun ReasoningBubble(
     text: String,
     cache: MarkdownRenderCache? = null,
     showTimer: Boolean = false,
-    /** 已完成思考的总耗时（毫秒）。非空且大于 0 时，折叠行文案展示精确耗时。 */
+    /** Total time taken by completed reasoning (milliseconds). When non-null and greater than 0, the collapsed-row copy shows the exact duration. */
     durationMs: Long? = null,
     timerStartMs: Long? = null,
-    /** 文本已由外部打字机驱动（流式尾巴场景），跳过内部防抖直接渲染。 */
+    /** The text is already driven by an external typewriter (streaming tail scenario), so skip the internal debounce and render directly. */
     preRendered: Boolean = false,
-    /** 思考所属会话：切会话时重新计时，否则会拿上一个会话的起点算出离谱的时长。 */
+    /** The session the reasoning belongs to: re-time when switching sessions, otherwise it would compute an absurd duration from the previous session's start point. */
     sessionKey: String? = null,
-    /** 思考仍在进行中：折叠行的预览取最后一行（跟着滚动），见上方 KDoc。 */
+    /** Reasoning is still in progress: the collapsed row's preview takes the last line (scrolling along), see the KDoc above. */
     live: Boolean = false,
-    /** 展开态的外部覆盖（宿主持久化，见 [AIAgentViewModel.reasoningExpansionOverrides]）；null = 用内部状态。 */
+    /** External override of the expanded state (host-persisted, see [AIAgentViewModel.reasoningExpansionOverrides]); null = use internal state. */
     expandedOverride: Boolean? = null,
-    /** 手动展开/收起时回传新状态，由上层持久化。 */
+    /** Report the new state back when manually expanding/collapsing, for the upper layer to persist. */
     onExpandedChange: ((Boolean) -> Unit)? = null
 ) {
     var localExpanded by remember { mutableStateOf(false) }
@@ -698,9 +698,9 @@ internal fun ReasoningBubble(
     val toggleExpanded: (Boolean) -> Unit = { next ->
         if (onExpandedChange != null) onExpandedChange(next) else localExpanded = next
     }
-    // 存绝对起始时间戳而非累加
-    // 毫秒数，切页返回或气泡滚出视口重挂载后显示的仍是真实时长；起始戳连同已见文本的长度与
-    // 指纹一起进 saveable，恢复时文本若不是同一轮的延续（期间已换轮）则重新计时。
+    // Store an absolute start timestamp rather than an accumulated
+    // millisecond count, so after returning from another page or the bubble scrolling out of the viewport and remounting, the displayed duration is still the real duration; the start stamp, together with the length and
+    // fingerprint of the seen text, goes into saveable, and on restore, if the text is not a continuation of the same turn (the turn changed in the meantime), timing restarts.
     var timerStartMillis by rememberSaveable { mutableStateOf(0L) }
     var timerSeenChars by rememberSaveable { mutableStateOf(0) }
     var timerSeenHead by rememberSaveable { mutableStateOf(0) }
@@ -720,7 +720,7 @@ internal fun ReasoningBubble(
             delay(100)
         }
     }
-    // 展开渲染用节流文本（流式思考时降低 md 解析频率）；preRendered 时外部已按打字机节奏给出渲染文本。
+    // Expanded rendering uses throttled text (reduces md parsing frequency during streaming reasoning); when preRendered, the external side has already supplied the render text at the typewriter pace.
     val renderText = if (preRendered) text else rememberThrottledStreamingText(text)
     val effectiveDurationMs = durationMs?.takeIf { it > 0 } ?: elapsedMillis.takeIf { it > 0 }
     val formattedDuration = remember(effectiveDurationMs, live) {
@@ -729,7 +729,7 @@ internal fun ReasoningBubble(
             String.format(java.util.Locale.US, "%.1f", sec)
         }
     }
-    // 折叠行文案：进行中显示实时耗时，完成后显示总耗时（拿不到耗时数据时只显示「思考完成」）。
+    // Collapsed-row copy: while in progress show the live duration, after completion show the total duration (when no duration data is available, only show 'Thinking complete').
     val label = when {
         live -> {
             val secText = formattedDuration ?: "0.1"
@@ -780,7 +780,7 @@ internal fun ReasoningBubble(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         cache = cache,
                         compact = true,
-                        // 流式思考（外部打字机推进 text）时解析节流 + 中间快照不写缓存
+                        // During streaming reasoning (external typewriter advances text), throttle parsing + do not write intermediate snapshots to the cache
                         streaming = live && preRendered,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -793,7 +793,7 @@ internal fun ReasoningBubble(
                                 )
                             }
                     )
-                    // 底部渐隐：只有还能继续往下滚时才盖一层，提示“下面还有内容”
+                    // Bottom fade: only overlay a layer when it can still scroll further down, hinting 'there is more below'
                     if (scrollState.canScrollForward) {
                         Box(
                             modifier = Modifier
@@ -810,25 +810,25 @@ internal fun ReasoningBubble(
 }
 
 /**
- * 三个循环跳动的点：通用「正在输入/生成」指示器，取代转圈 spinner。
- * 三点以固定相位差依次上下弹跳，形成波浪式律动。
+ * Three looping bouncing dots: a general 'typing/generating' indicator, replacing the spinning spinner.
+ * The three dots bounce up and down in turn with a fixed phase difference, forming a wave-like rhythm.
  *
- * 性能优化：用 graphicsLayer { translationY } 替代 offset(y)，动画值变化在 draw 阶段
- * 处理而不触发 compose/recompose，消除无限动画导致父布局每帧重组的开销。
- * 容器高度固定，防止布局波动传递到 LazyColumn。
+ * Performance optimisation: use graphicsLayer { translationY } instead of offset(y); animation value changes are handled in the draw phase
+ * without triggering compose/recompose, eliminating the overhead of an infinite animation causing the parent layout to recompose every frame.
+ * The container height is fixed, preventing layout fluctuations from propagating to the LazyColumn.
  */
 @Composable
 internal fun TypingDots(
     color: Color,
     dotSize: androidx.compose.ui.unit.Dp = 6.dp,
-    /** 是否单独给读屏播报「正在生成」：嵌在 [AgentBusyIndicator] 里时由外层状态行统一播报。 */
+    /** Whether to announce 'generating' to screen readers on its own: when nested inside [AgentBusyIndicator], the outer status row announces it uniformly. */
     announce: Boolean = true
 ) {
     val transition = rememberInfiniteTransition(label = "typing-dots")
     val label = stringResource(R.string.chat_status_generating)
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        // 给读屏一个语义：三个跳动的点对 TalkBack 本来完全不可见。
+        // Give screen readers a semantics: the three bouncing dots are otherwise completely invisible to TalkBack.
         modifier = Modifier
             .height(dotSize + 10.dp)
             .then(

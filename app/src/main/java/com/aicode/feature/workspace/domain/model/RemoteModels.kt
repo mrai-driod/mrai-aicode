@@ -5,7 +5,7 @@ enum class RemoteProtocol {
     FTP
 }
 
-/** 远程挂载的实时连接健康度（由 SyncEngine 的探活/重连回写）。 */
+/** Live connection health of a remote mount (written back by SyncEngine probing/reconnection). */
 enum class SyncConnectionState {
     CONNECTED,
     RECONNECTING,
@@ -20,9 +20,9 @@ data class RemoteConnection(
     val port: Int,
     val username: String,
     val password: String = "",
-    /** 'password' 或 'key'，与 [RemoteConnectionEntity.authType] 对应。 */
+    /** 'password' or 'key', corresponding to [RemoteConnectionEntity.authType]. */
     val authType: String = "password",
-    /** 密码（authType=password）或私钥文件路径（authType=key）。 */
+    /** Password (authType=password) or private-key file path (authType=key). */
     val authData: String = ""
 )
 
@@ -33,7 +33,7 @@ data class RemoteMount(
     val localMountPath: String,
     val isActive: Boolean = false,
     val autoConnect: Boolean = true,
-    /** 实时连接健康度；null 表示该挂载未激活。 */
+    /** Live connection health; null means this mount is not active. */
     val connectionState: SyncConnectionState? = null,
     // Provide a convenient reference to the underlying connection when used in UI
     val connection: RemoteConnection? = null

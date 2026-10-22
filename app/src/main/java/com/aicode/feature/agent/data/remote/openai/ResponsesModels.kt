@@ -1,8 +1,8 @@
 package com.aicode.feature.agent.data.remote.openai
 
 /**
- * Responses API 的 function 工具定义：字段直接铺在 item 上，没有 Chat Completions 的
- * `function` 嵌套层。发嵌套结构会被服务端以「tools[0]: missing field `name`」拒绝。
+ * Function tool definition for the Responses API: the fields are laid out directly on the item, with no `function`
+ * nesting layer as in Chat Completions. Sending a nested structure is rejected by the server with "tools[0]: missing field `name`".
  */
 data class ResponsesToolDefinition(
     val type: String = "function",
@@ -10,23 +10,23 @@ data class ResponsesToolDefinition(
     val description: String,
     val parameters: Map<String, Any>,
     /**
-     * 官方 schema 里 `strict` 不带 optional 标记，固定发 false：严格模式要求入参 schema
-     * 满足结构化输出子集（全字段 required + additionalProperties:false），工具不保证满足。
+     * In the official schema `strict` has no optional marker and is always sent as false: strict mode requires the argument schema
+     * to satisfy the structured-output subset (all fields required + additionalProperties:false), which tools are not guaranteed to satisfy.
      */
     val strict: Boolean = false
 )
 
 /**
- * Responses 流式 SSE 的语义事件类型。
- * 与 Chat Completions 的 delta 帧不同，流以 [COMPLETED] / [INCOMPLETE] / [FAILED] 之一结束，
- * **不发 `data: [DONE]`**，故结束判定只能看终止事件。
+ * Semantic event types for Responses streaming SSE.
+ * Unlike Chat Completions delta frames, the stream ends with one of [COMPLETED] / [INCOMPLETE] / [FAILED],
+ * and **does not send `data: [DONE]`**, so the end can only be determined from the terminating event.
  */
 object ResponsesEvent {
     const val OUTPUT_TEXT_DELTA = "response.output_text.delta"
-    /** 模型拒答：拒答说明走单独事件与单独 part，不会出现在 output_text 里。 */
+    /** Model refusal: the refusal explanation goes in a separate event and a separate part, and does not appear in output_text. */
     const val REFUSAL_DELTA = "response.refusal.delta"
     const val REASONING_TEXT_DELTA = "response.reasoning_text.delta"
-    /** 官方推理模型（o 系列 / gpt-5 系列）的思考摘要走这个事件，而非 reasoning_text。 */
+    /** The thinking summary for official reasoning models (the o series / gpt-5 series) goes through this event, rather than reasoning_text. */
     const val REASONING_SUMMARY_TEXT_DELTA = "response.reasoning_summary_text.delta"
     const val OUTPUT_ITEM_ADDED = "response.output_item.added"
     const val OUTPUT_ITEM_DONE = "response.output_item.done"
@@ -35,30 +35,30 @@ object ResponsesEvent {
     const val COMPLETED = "response.completed"
     const val INCOMPLETE = "response.incomplete"
     const val FAILED = "response.failed"
-    /** 传输层错误事件：与三个终止事件并列，自身就带 code / message。 */
+    /** Transport-layer error event: sits alongside the three terminating events and itself carries code / message. */
     const val ERROR = "error"
-    /** 同上，官方 SDK 对两种命名都做了处理。 */
+    /** Same as above; the official SDK handles both namings. */
     const val RESPONSE_ERROR = "response.error"
 }
 
-/** Responses 输入/输出 item 的 `type` 取值。 */
+/** Values for the `type` of Responses input/output items. */
 object ResponsesItem {
     const val MESSAGE = "message"
     const val FUNCTION_CALL = "function_call"
     const val FUNCTION_CALL_OUTPUT = "function_call_output"
     const val REASONING = "reasoning"
-    /** 模型经服务端 image_generation 工具产出的图片项，`result` 为 base64。 */
+    /** Image item produced by the model via the server-side image_generation tool; `result` is base64. */
     const val IMAGE_GENERATION_CALL = "image_generation_call"
 }
 
-/** Responses content part 的 `type` 取值。 */
+/** Values for the `type` of Responses content parts. */
 object ResponsesPart {
     const val INPUT_TEXT = "input_text"
     const val OUTPUT_TEXT = "output_text"
     const val INPUT_IMAGE = "input_image"
     const val REASONING_TEXT = "reasoning_text"
-    /** reasoning item 的 `summary` 数组元素类型。 */
+    /** Element type of the `summary` array of a reasoning item. */
     const val SUMMARY_TEXT = "summary_text"
-    /** 模型拒答时 message item 里的 part，文本在 `refusal` 字段而非 `text`。 */
+    /** The part in a message item when the model refuses; the text is in the `refusal` field rather than `text`. */
     const val REFUSAL = "refusal"
 }

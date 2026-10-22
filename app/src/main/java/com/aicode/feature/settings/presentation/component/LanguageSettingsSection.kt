@@ -27,11 +27,11 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.Check
 
 /**
- * 语言选择 BottomSheet 弹窗：参考会话长按菜单样式。
+ * Language selection BottomSheet dialog: styled after the session long-press menu.
  *
- * @param currentTag 当前语言 tag，null 表示跟随系统。
- * @param onSelect 选中回调，参数为 tag（null 表示跟随系统）。
- * @param onDismiss 关闭弹窗。
+ * @param currentTag the current language tag; null means follow the system.
+ * @param onSelect selection callback; the argument is the tag (null means follow the system).
+ * @param onDismiss closes the dialog.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +62,7 @@ internal fun LanguageSelectionSheet(
                     .padding(bottom = Spacing.md)
             )
 
-            // 跟随系统
+            // Follow system
             val followSystemSelected = currentTag.isNullOrBlank()
             Surface(
                 onClick = {
@@ -95,7 +95,7 @@ internal fun LanguageSelectionSheet(
                 }
             }
 
-            // 注册的语言列表
+            // List of registered languages
             LanguageRegistry.languages.forEach { lang ->
                 val selected = currentTag == lang.tag
                 Surface(

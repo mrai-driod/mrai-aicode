@@ -10,66 +10,66 @@ data class AIResponse(
     val content: String,
     val toolCalls: List<ToolCall> = emptyList(),
     /**
-     * 模型停止的原因。Anthropic: "end_turn" / "tool_use" / "max_tokens" / "refusal" /
-     * "model_context_window_exceeded" / "pause_turn"；OpenAI: "stop" / "tool_calls" / "length"；
-     * Gemini（generateContent 的 finishReason，全大写）: "STOP" / "MAX_TOKENS" / "SAFETY" 等；
-     * Gemini（Interactions 的 status，小写）: "completed" / "requires_action" / "failed" /
-     * "budget_exceeded"（`incomplete` 已由 [interactionStopReason] 归一为 "length"）。
-     * 当值命中 [TRUNCATION_STOP_REASONS] 时表示输出因 token 上限被截断，Agent 循环应自动续写。
+     * The reason the model stopped. Anthropic: "end_turn" / "tool_use" / "max_tokens" / "refusal" /
+     * "model_context_window_exceeded" / "pause_turn"; OpenAI: "stop" / "tool_calls" / "length";
+     * Gemini (generateContent's finishReason, all uppercase): "STOP" / "MAX_TOKENS" / "SAFETY", etc.;
+     * Gemini (Interactions' status, lowercase): "completed" / "requires_action" / "failed" /
+     * "budget_exceeded" (`incomplete` is normalized to "length" by [interactionStopReason]).
+     * When the value matches [TRUNCATION_STOP_REASONS], it means the output was truncated by the token limit, and the Agent loop should automatically continue writing.
      */
     val stopReason: String? = null,
     /**
-     * 服务端给出的停止原因说明（Anthropic `stop_details.explanation`）。
-     * 拒答时正文可能为空，只有这里有可展示的理由。取不到时为 null。
+     * The explanation of the stop reason given by the server (Anthropic `stop_details.explanation`).
+     * On a refusal the body may be empty, and only this field holds a displayable reason. Null when unavailable.
      */
     val stopDetail: String? = null,
-    /** 本轮模型的完整思考过程（对应 OpenAI/DeepSeek 的 reasoning_content）。非空时需回传给 API，否则 DeepSeek 思考模式会报 400。 */
+    /** The model's complete reasoning for this turn (corresponding to OpenAI/DeepSeek's reasoning_content). When non-empty it must be sent back to the API, otherwise DeepSeek thinking mode returns 400. */
     val reasoning: String? = null,
-    /** Anthropic extended thinking 的加密签名（thinking block 的 signature）。多轮/工具循环须随 thinking 原样回传，否则 400。其他 provider 为 null。 */
+    /** The encrypted signature of Anthropic extended thinking (the thinking block's signature). In multi-turn / tool loops it must be sent back unchanged along with the thinking, otherwise 400. Null for other providers. */
     val signature: String? = null,
     /**
-     * 本轮 provider 原生“思考 / 签名”块的原样快照（JSON 文本），下一轮需原样、原序回传：
-     * - Anthropic：thinking / redacted_thinking 内容块数组（redacted 的 `data` 不可重建，合并多块会被 400）。
-     * - Gemini（generateContent）：model 轮的 `parts` 数组，因为 `thoughtSignature` 是挂在任意 part
-     *   （常在 functionCall part 或最后一个 part）上的元数据，只有整块原样回传才能保住推理连续性。
-     * - Gemini（Interactions）：模型产出的 `steps` 数组（thought / model_output / function_call）。
-     *   官方要求无状态模式下把这些 step 原样回传，thought 上的 `signature` 与 function_call 都不可重建。
-     * 其他 provider 为 null。
+     * A verbatim snapshot (JSON text) of this turn's provider-native "thinking / signature" blocks, which must be sent back unchanged and in the original order on the next turn:
+     * - Anthropic: the array of thinking / redacted_thinking content blocks (a redacted block's `data` cannot be reconstructed, and merging multiple blocks causes a 400).
+     * - Gemini (generateContent): the model turn's `parts` array, because `thoughtSignature` is metadata attached to an arbitrary part
+     *   (often the functionCall part or the last part), and only sending the whole block back unchanged preserves reasoning continuity.
+     * - Gemini (Interactions): the `steps` array produced by the model (thought / model_output / function_call).
+     *   The official docs require these steps to be sent back unchanged in stateless mode; the `signature` on thought and the function_call cannot be reconstructed.
+     * Null for other providers.
      */
     val thinkingBlocksJson: String? = null,
-    /** 本轮输入 token 数（来自 API 返回的 usage）。取不到时为 0。 */
+    /** The number of input tokens for this turn (from the usage returned by the API). 0 when unavailable. */
     val inputTokens: Int = 0,
-    /** 本轮输出 token 数（来自 API 返回的 usage）。取不到时为 0。 */
+    /** The number of output tokens for this turn (from the usage returned by the API). 0 when unavailable. */
     val outputTokens: Int = 0,
-    /** 本轮输入中命中服务端缓存的部分（OpenAI cached_tokens / Anthropic cache_read_input_tokens / Gemini cachedContentTokenCount）。取不到时为 0。 */
+    /** The portion of this turn's input that hit the server-side cache (OpenAI cached_tokens / Anthropic cache_read_input_tokens / Gemini cachedContentTokenCount). 0 when unavailable. */
     val cachedInputTokens: Int = 0,
-    /** 本轮写入服务端缓存的 token 数（Anthropic cache_creation_input_tokens）。按高于普通输入的单价计费，取不到时为 0。 */
+    /** The number of tokens written to the server-side cache for this turn (Anthropic cache_creation_input_tokens). Billed at a higher rate than regular input; 0 when unavailable. */
     val cacheCreationTokens: Int = 0,
     /**
-     * 本轮模型直接输出的图片（Gemini Nano Banana 图像模型走 Interactions 时产出）。
-     * 元素带 base64 数据；工作流负责落盘并构造 UI 附件。其他 provider / 模型恒为空。
+     * Images output directly by the model this turn (produced when a Gemini Nano Banana image model goes through Interactions).
+     * Elements carry base64 data; the workflow is responsible for saving them to disk and building UI attachments. Always empty for other providers / models.
      */
     val images: List<AgentImage> = emptyList()
 ) {
     val isTruncated: Boolean
         get() = stopReason in TRUNCATION_STOP_REASONS
 
-    /** 本轮因服务端策略/上下文超限而中止：正文可能残缺或为空，Agent 循环不应把它当正常完成继续。 */
+    /** This turn was aborted due to server policy / context limit exceeded: the body may be incomplete or empty, and the Agent loop should not treat it as a normal completion and continue. */
     val isAborted: Boolean
         get() = stopReason in ABORT_STOP_REASONS
 
     companion object {
         /**
-         * 输出被 token 上限截断（Anthropic / OpenAI / Gemini 三家的写法）。
-         * Gemini Interactions 的 `incomplete` 由 [interactionStopReason] 归一到 `length` 后命中，
-         * 不直接收录 `incomplete`——Responses API 的同名状态还涵盖 content_filter 等非截断原因。
+         * Output truncated by the token limit (the spellings used by Anthropic / OpenAI / Gemini).
+         * Gemini Interactions' `incomplete` matches after being normalized to `length` by [interactionStopReason];
+         * `incomplete` is not included directly -- the same-named status in the Responses API also covers non-truncation reasons such as content_filter.
          */
         val TRUNCATION_STOP_REASONS = setOf("max_tokens", "length", "MAX_TOKENS")
 
         /**
-         * 需要向用户解释而非静默完成的 stop_reason。
-         * 前两个是 Anthropic；大写那组是 Gemini generateContent 的 finishReason（安全拦截 /
-         * 禁止内容 / 黑名单 / 敏感信息）；最后两个是 Gemini Interactions 的 status。
+         * stop_reason values that need to be explained to the user rather than completed silently.
+         * The first two are Anthropic's; the uppercase group is Gemini generateContent's finishReason (safety block /
+         * prohibited content / blocklist / sensitive information); the last two are Gemini Interactions' status.
          */
         val ABORT_STOP_REASONS = setOf(
             "refusal",
@@ -85,38 +85,38 @@ data class AIResponse(
 }
 
 /**
- * 一次 Key 切换的结果：新 Key 与其在候选列表中的序号（1 起），供 adapter 改写凭据并通知 UI。
+ * The result of one Key switch: the new Key and its index (starting at 1) in the candidate list, for the adapter to rewrite the credential and notify the UI.
  */
 data class KeySwitchOutcome(val newKey: String, val newIndex: Int, val total: Int)
 
 /**
- * 所有候选 Key 都失败时抛出。文案已包含原始失败原因，交由上层原样展示。
+ * Thrown when all candidate Keys have failed. The message already includes the original failure reason, and the upper layer should display it as-is.
  */
 class AllKeysFailedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * 流式补全过程中向上游推送的分块。
- * [TextDelta] 为模型新吐出的一小段文字（增量，非累积）；
- * [Final] 在本轮结束时给出完整结果（聚合后的文字 + 工具调用），供 Agent 循环驱动后续工具执行。
- * [Retrying] 在网络重试时推送，供 UI 展示"正在重试"提示。
- * [KeySwitched] 在多 Key 自动切换时推送，供 UI 提示本次请求已改用的 Key。
+ * Chunks pushed upstream during streaming completion.
+ * [TextDelta] is a small piece of text newly produced by the model (incremental, not cumulative);
+ * [Final] gives the complete result at the end of this turn (aggregated text + tool calls), for the Agent loop to drive subsequent tool execution.
+ * [Retrying] is pushed during a network retry, for the UI to show a "retrying" hint.
+ * [KeySwitched] is pushed during automatic multi-Key switching, for the UI to indicate the Key this request has switched to.
  */
 sealed class AIStreamChunk {
     data class TextDelta(val text: String) : AIStreamChunk()
-    /** 模型新吐出的一小段思考过程（增量，非累积）。仅用于 UI 实时展示，不进入上下文回放。 */
+    /** A small piece of reasoning newly produced by the model (incremental, not cumulative). Used only for real-time UI display; does not enter context replay. */
     data class ReasoningDelta(val text: String) : AIStreamChunk()
     /**
-     * 模型刚开始产出一次工具调用、工具名已经确定（参数还在流式传输中）。
+     * The model has just started producing a tool call, and the tool name is known (the arguments are still streaming in).
      *
-     * 写整份文件、长命令这类工具的参数很长，这段流式可能持续好几秒；期间既没有正文也没有
-     * 思考增量，UI 只能显示笼统的「正在思考」。上游在工具名一出现就推一条本事件，UI 就能把
-     * 状态换成具体场景（「正在编辑文件」）。不参与任何执行判定，纯粹是 UI 提示。
+     * Tools such as writing a whole file or a long command have very long arguments, and this streaming may last several seconds; during that time there is neither body text nor
+     * reasoning deltas, so the UI can only show a generic "Thinking". As soon as the tool name appears, upstream pushes one of these events, letting the UI
+     * switch the status to a specific scenario ("Editing file"). It plays no part in any execution decision; it is purely a UI hint.
      */
     data class ToolCallDeclared(val name: String) : AIStreamChunk()
     data class Final(val response: AIResponse) : AIStreamChunk()
-    /** 网络请求正在重试。仅用于 UI 实时展示，不进入上下文回放。[error] 为触发重试的错误摘要，供 UI 展示具体原因。 */
+    /** The network request is being retried. Used only for real-time UI display; does not enter context replay. [error] is a summary of the error that triggered the retry, for the UI to show the specific reason. */
     data class Retrying(val attempt: Int, val maxRetries: Int, val error: RetryErrorInfo) : AIStreamChunk()
-    /** 当前 Key 不可用，已自动切到第 [newIndex]/[total] 个 Key 并重发本次请求。仅用于 UI 提示。 */
+    /** The current Key is unavailable, and the request has automatically switched to Key [newIndex]/[total] and resent this request. Used only as a UI hint. */
     data class KeySwitched(val newIndex: Int, val total: Int) : AIStreamChunk()
 }
 
@@ -126,75 +126,75 @@ interface AIProvider {
     var useFullUrl: Boolean
 
     /**
-     * 切到该提供商的新版端点：OpenAI 走 Responses API（`v1/responses`），
-     * Gemini 走 Interactions API（`v1beta/interactions`）。Anthropic 忽略。
+     * Switch to this provider's new endpoint: OpenAI uses the Responses API (`v1/responses`),
+     * Gemini uses the Interactions API (`v1beta/interactions`). Ignored by Anthropic.
      */
     var useResponseApi: Boolean
     var model: String
 
     /**
-     * 当前 provider 配置 id（数据库主键），用于关联自定义模型元数据。
-     * 调用前由工作流设置；为空时元数据解析回退纯自动（拉取/内置/默认）。
+     * The current provider config id (database primary key), used to associate custom model metadata.
+     * Set by the workflow before the call; when empty, metadata resolution falls back to fully automatic (fetched / built-in / default).
      */
     var providerId: String
 
     /**
-     * 当前会话 id，仅用于日志归档：调用前由工作流设置，[com.aicode.core.util.AILogger]
-     * 据此把每次请求/响应写到对应会话的文件。为 null 时落到 `session-unknown.log`。
+     * The current session id, used only for log archiving: set by the workflow before the call, and [com.aicode.core.util.AILogger]
+     * uses it to write each request/response to the corresponding session's file. When null, it falls to `session-unknown.log`.
      */
     var logSessionId: String?
 
     /**
-     * 自定义请求头（Header 名 -> 值，值可含 `{{SESSION_ID}}` / `{{API_KEY}}` 占位符）。
-     * 由 [com.aicode.feature.agent.domain.provider.resolveCustomHeaders] 替换占位符后写出，
-     * 完全覆盖该提供商请求的同名默认头。
+     * Custom request headers (header name -> value; values may contain `{{SESSION_ID}}` / `{{API_KEY}}` placeholders).
+     * Placeholders are replaced by [com.aicode.feature.agent.domain.provider.resolveCustomHeaders] before being written out,
+     * completely overriding the same-named default headers for this provider's requests.
      */
     var customHeaders: Map<String, String>
 
     /**
-     * 多 Key 自动切换钩子，由工作流在装配 provider 时注入；为 null 表示不启用（如生图等旁路）。
-     * 入参为本次失败异常、当前使用的 Key、本次请求已试过的 Key 集合。返回非 null 表示已切到
-     * [KeySwitchOutcome.newKey]，adapter 应改写 [apiKey] 并重发；返回 null 表示不是「Key 不可用」
-     * 类失败或候选已用尽（用尽时实现方抛 [AllKeysFailedException]）。
+     * Multi-Key automatic switching hook, injected by the workflow when assembling the provider; null means disabled (e.g. bypasses such as image generation).
+     * The inputs are this failure's exception, the Key currently in use, and the set of Keys already tried for this request. A non-null return means it has switched to
+     * [KeySwitchOutcome.newKey], and the adapter should rewrite [apiKey] and resend; a null return means the failure is not a "Key unavailable"
+     * failure or the candidates are exhausted (when exhausted, the implementation throws [AllKeysFailedException]).
      */
     var keySwitcher: (suspend (Throwable, String, Set<String>) -> KeySwitchOutcome?)?
 
     /**
-     * 本次请求允许的最大输出 token 数，来自模型元数据的输出上限（models.dev `limit.output`）。
-     * 调用前由工作流设置；为 null 时各 adapter 用自身默认值或不发该参数。
+     * The maximum number of output tokens allowed for this request, from the output limit in the model metadata (models.dev `limit.output`).
+     * Set by the workflow before the call; when null, each adapter uses its own default or does not send this parameter.
      */
     var maxOutputTokens: Int?
 
     /**
-     * 本次请求的采样温度，调用前由工作流按模型元数据设置（见 [fixedTemperature]）。
-     * null 表示请求里不带该字段、用服务端默认——服务端把温度固定住的模型（kimi-k3、gpt-5 系等）
-     * 带上任何值都会 400。
+     * The sampling temperature for this request, set by the workflow before the call according to the model metadata (see [fixedTemperature]).
+     * Null means the request does not include this field and uses the server default -- for models whose temperature is fixed by the server (such as kimi-k3, the gpt-5 series, etc.),
+     * sending any value causes a 400.
      */
     var temperature: Float?
 
     /**
-     * 流式请求等待首个内容块的上限（毫秒），调用前由工作流按「偏好设置 → 网络」写入。
-     * 默认 5 分钟；0 表示不限制，此时仅靠连接超时与手动取消兜底。
+     * The upper limit (in milliseconds) for a streaming request to wait for the first content chunk, written by the workflow before the call according to "Preferences -> Network".
+     * Default 5 minutes; 0 means no limit, in which case only the connection timeout and manual cancellation provide a fallback.
      */
     var firstByteTimeoutMs: Long
 
     /**
-     * 流式响应中相邻两个数据块之间的最大等待（毫秒），0（默认）表示不限制。
-     * 非 0 时超过该间隔未收到任何数据即关闭流，触发可重试的 IOException。
+     * The maximum wait (in milliseconds) between two adjacent data chunks in a streaming response; 0 (default) means no limit.
+     * When non-zero, if no data is received for longer than this interval the stream is closed, triggering a retriable IOException.
      */
     var streamIdleTimeoutMs: Long
 
     /**
-     * 网络请求（含流式）的最大重试次数，不含首次请求；调用前由工作流按「偏好设置 → 网络」写入。
-     * 默认 6；0 表示失败即抛出、不重试。
+     * The maximum number of retries for network requests (including streaming), not counting the first request; written by the workflow before the call according to "Preferences -> Network".
+     * Default 6; 0 means throw on failure with no retry.
      */
     var maxNetworkRetries: Int
 
     /**
-     * 单轮补全。[tools] 会以提供商的 function-calling 格式真正发给模型，
-     * 模型若决定调用工具，结果会出现在返回的 [AIResponse.toolCalls] 中。
-     * [reasoningEffort] 为思考强度（"low"/"medium"/"high"），仅 OpenAI 系生效；
-     * Anthropic/Gemini 与不支持该参数的模型忽略。
+     * Single-turn completion. [tools] is actually sent to the model in the provider's function-calling format,
+     * and if the model decides to call a tool, the result appears in the returned [AIResponse.toolCalls].
+     * [reasoningEffort] is the reasoning effort ("low"/"medium"/"high"), effective only for the OpenAI family;
+     * Anthropic/Gemini and models that do not support this parameter ignore it.
      */
     suspend fun complete(
         systemPrompt: String,
@@ -204,10 +204,10 @@ interface AIProvider {
     ): AIResponse
 
     /**
-     * 流式单轮补全：以 SSE 逐字接收模型回复。文字以 [AIStreamChunk.TextDelta] 增量推送，
-     * 本轮结束时以 [AIStreamChunk.Final] 给出聚合后的完整 [AIResponse]（含工具调用）。
-     * 工具调用的 function-calling 语义与 [complete] 一致。
-     * [reasoningEffort] 同 [complete]。
+     * Streaming single-turn completion: receives the model's reply word by word via SSE. Text is pushed incrementally as [AIStreamChunk.TextDelta],
+     * and at the end of the turn the complete aggregated [AIResponse] (including tool calls) is given as [AIStreamChunk.Final].
+     * The function-calling semantics of tool calls are the same as [complete].
+     * [reasoningEffort] is the same as in [complete].
      */
     fun completeStream(
         systemPrompt: String,
@@ -220,9 +220,9 @@ interface AIProvider {
 private val VERSION_SEGMENT_REGEX = Regex("""^v\d+.*$""", RegexOption.IGNORE_CASE)
 
 /**
- * 把提供商自定义请求头中的占位符替换为运行时值后返回最终待写出的 Header 表。
- * 目前支持 `{{SESSION_ID}}`（当前会话 id，无会话时替换为空串）与 `{{API_KEY}}`（本次实际取用的 Key）。
- * 空 Header 名在保存侧已被清洗，这里再防御性跳过一次。
+ * Replaces placeholders in the provider's custom request headers with runtime values and returns the final header map to write out.
+ * Currently supports `{{SESSION_ID}}` (the current session id, replaced with an empty string when there is no session) and `{{API_KEY}}` (the Key actually used for this request).
+ * Empty header names have already been cleaned on the saving side; they are defensively skipped again here.
  */
 fun resolveCustomHeaders(
     customHeaders: Map<String, String>,
@@ -235,7 +235,7 @@ fun resolveCustomHeaders(
             .replace("{{API_KEY}}", apiKey)
     }
 
-/** 官方给出推荐采样温度、填别的值会明显掉效果的 Gemini 世代；其余 Gemini 不发温度。 */
+/** Gemini generations for which the official docs give a recommended sampling temperature and filling in another value noticeably degrades quality; other Gemini models do not send a temperature. */
 private val GEMINI_MODELS_WITH_SAMPLING_DEFAULTS = listOf(
     Regex("""gemini-2[.-]5([.-]|$)"""),
     Regex("""gemini-3-(flash|pro)([.-]|$)"""),
@@ -244,9 +244,9 @@ private val GEMINI_MODELS_WITH_SAMPLING_DEFAULTS = listOf(
 )
 
 /**
- * 部分模型的采样温度被服务端钉死在某个值上（或官方明确要求用该值），这里按模型 id 给出它。
- * 表外模型返回 null，即请求不带 temperature、用服务端默认值。
- * 仅在模型元数据允许自定义温度时才取用本表：元数据说不允许的（kimi-k3、gpt-5 系等）一律不发。
+ * Some models have their sampling temperature pinned by the server to a specific value (or the official docs explicitly require that value); this table gives it by model id.
+ * Models not in the table return null, meaning the request does not include temperature and uses the server default.
+ * This table is used only when the model metadata allows a custom temperature: for models whose metadata says it is not allowed (such as kimi-k3, the gpt-5 series, etc.), it is never sent.
  */
 fun fixedTemperature(modelId: String): Float? {
     val id = modelId.lowercase()
@@ -255,7 +255,7 @@ fun fixedTemperature(modelId: String): Float? {
         id.contains("minimax-m2") -> 1.0f
         id.contains("gemini") ->
             if (GEMINI_MODELS_WITH_SAMPLING_DEFAULTS.any { it.containsMatchIn(id) }) 1.0f else null
-        // Kimi K2 的思考型（k2-thinking / k2.5 / k2.6 …）固定 1.0，非思考的 K2 固定 0.6。
+        // Kimi K2 thinking variants (k2-thinking / k2.5 / k2.6 ...) are fixed at 1.0, and non-thinking K2 is fixed at 0.6.
         id.contains("kimi-k2") ->
             if (listOf("thinking", "k2.", "k2p", "k2-5").any { id.contains(it) }) 1.0f else 0.6f
         else -> null
@@ -268,17 +268,17 @@ fun fixedTemperature(modelId: String): Float? {
  * already ends with a version segment (e.g. "https://host/v1", "https://host/api/v3", "https://host/v1beta")
  * so it isn't duplicated or conflicted with "v1/".
  *
- * 边界说明（规则 2 的「base 版本优先」假设）：当 base 末尾是版本段、且待拼路径也以版本段开头时，
- * 直接丢弃路径的版本段、以 base 的版本为准。这对项目支持的全部 base 形态都是正确的——
- * 唯一 base 末尾带版本段的内置源是智谱（`https://open.bigmodel.cn/api/paas/v4`，其真实端点是
- * `.../v4/chat/completions`），此时把 OpenAI 默认路径的 `v1` 换成 base 的 `v4` 恰是所需。
- * 其余内置源（OpenAI/Anthropic/Gemini/DeepSeek 等）base 均不含版本段，走末尾拼接分支。
- * 若未来出现「base 与 path 版本段不同、且应以 path 版本为准」的源，需在此改写成
- * 相等才去重、不等则直接拼接，而不是无条件丢弃 path 版本段。
+ * Boundary note (rule 2's "base version takes precedence" assumption): when the end of base is a version segment and the path to append also starts with a version segment,
+ * the path's version segment is discarded outright and base's version is used. This is correct for all base forms supported by the project --
+ * the only built-in source whose base ends with a version segment is Zhipu (`https://open.bigmodel.cn/api/paas/v4`, whose real endpoint is
+ * `.../v4/chat/completions`), and in that case replacing the `v1` in OpenAI's default path with base's `v4` is exactly what is needed.
+ * The other built-in sources (OpenAI/Anthropic/Gemini/DeepSeek, etc.) have bases with no version segment and take the append-to-end branch.
+ * If a source appears in the future where "the base and path version segments differ and the path version should take precedence", this must be rewritten
+ * to deduplicate only when they are equal and otherwise append directly, rather than unconditionally discarding the path version segment.
  */
 /**
- * 上报一次 Key 失败并切到下一个可用 Key。返回 null 表示 [keySwitcher] 未注入、判定为非 Key 故障、
- * 或没有可切换的候选；切换成功时改写 [AIProvider.apiKey] 并把新 Key 并入 [triedKeys]。
+ * Reports a Key failure and switches to the next available Key. A null return means [keySwitcher] was not injected, the failure was judged not to be a Key failure,
+ * or there is no candidate to switch to; on a successful switch, it rewrites [AIProvider.apiKey] and adds the new Key to [triedKeys].
  */
 suspend fun AIProvider.switchKeyOnFailure(error: Throwable, triedKeys: MutableSet<String>): KeySwitchOutcome? {
     val switcher = keySwitcher ?: return null
@@ -294,12 +294,12 @@ fun joinUrl(baseUrl: String, path: String): String {
     
     val lastSegment = base.substringAfterLast('/', "")
     
-    // 1. 如果 base 末尾与 path 开头是完全相同的 segment（如 /v1 与 v1/chat），去重
+    // 1. If the end of base and the start of path are exactly the same segment (e.g. /v1 and v1/chat), deduplicate
     if (lastSegment.isNotEmpty() && cleanPath.startsWith("$lastSegment/", ignoreCase = true)) {
         return "$base/${cleanPath.substring(lastSegment.length + 1)}"
     }
     
-    // 2. 如果 base 末尾已经是版本号（如 /v3, /v2, /v1beta 等），且待拼路径也以版本段开头（如 v1/chat, v1/models）
+    // 2. If the end of base is already a version number (e.g. /v3, /v2, /v1beta, etc.) and the path to append also starts with a version segment (e.g. v1/chat, v1/models)
     if (lastSegment.matches(VERSION_SEGMENT_REGEX)) {
         val pathFirstSegment = cleanPath.substringBefore('/')
         if (pathFirstSegment.matches(VERSION_SEGMENT_REGEX)) {

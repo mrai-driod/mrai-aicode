@@ -29,20 +29,20 @@ class TerminalKeepaliveService : Service() {
     private val binder = LocalBinder()
     private var sessionCount = 0
 
-    /** 用户在设置页开启的常驻保活：为 true 时即便没有后台会话也保持前台通知。 */
+    /** Persistent keepalive enabled by the user on the settings page: when true, the foreground notification is kept even with no background sessions. */
     private var persistent = false
 
     /**
-     * 服务级 WakeLock：有活跃会话时持有 PARTIAL_WAKE_LOCK，确保切后台后 CPU 不休眠、
-     * SSE/网络 I/O 不会被系统挂起。所有会话结束或常驻关闭时释放。
+     * Service-level WakeLock: holds PARTIAL_WAKE_LOCK while there are active sessions, ensuring the CPU does not sleep after moving to the background and
+     * SSE/network I/O is not suspended by the system. Released when all sessions end or persistent keepalive is turned off.
      */
     private var wakeLock: PowerManager.WakeLock? = null
 
     /**
-     * 服务级 WifiLock：有活跃会话时持有 WIFI_MODE_FULL_HIGH_PERF，确保切后台后 Wi-Fi 无线电
-     * 不进入低功耗模式。PARTIAL_WAKE_LOCK 只保 CPU 不休眠，但系统仍可能让 Wi-Fi 降频导致
-     * TCP 长连接 I/O 被挂起——这是切后台 SSE 断网的核心原因。
-     * 浏览器下载不受影响是因为 DownloadManager 跑在系统进程，不受应用后台限制。
+     * Service-level WifiLock: holds WIFI_MODE_FULL_HIGH_PERF while there are active sessions, ensuring the Wi-Fi radio does not
+     * enter low-power mode after moving to the background. PARTIAL_WAKE_LOCK only keeps the CPU awake, but the system may still throttle Wi-Fi, causing
+     * long-lived TCP I/O to be suspended -- this is the core reason SSE disconnects in the background.
+     * Browser downloads are unaffected because DownloadManager runs in the system process and is not subject to app background restrictions.
      */
     private var wifiLock: WifiManager.WifiLock? = null
 
@@ -58,8 +58,8 @@ class TerminalKeepaliveService : Service() {
     override fun onCreate() {
         super.onCreate()
         FileLogger.i(TAG, "Service created")
-        // 进程被系统回收后 START_STICKY 重建：persistent 是内存态会丢失。
-        // 从持久化开关恢复常驻前台，否则服务空转后 stopSelf，保活形同虚设。
+        // After the process is reclaimed by the system and rebuilt via START_STICKY: persistent is in-memory state and will be lost.
+        // Restore persistent foreground mode from the persisted switch, otherwise the service idles and then stopSelf makes keepalive useless.
         serviceScope.launch {
             if (keepaliveSettings.isEnabled()) {
                 persistent = true
@@ -77,9 +77,9 @@ class TerminalKeepaliveService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // 用户从最近任务划掉 app = 明确不要后台运行：停掉前台服务并取消 WorkManager 周期兜底，
-        // 否则进程被杀后服务会被 START_STICKY 或 KeepaliveWorker 重新拉起并弹通知。
-        // 开关本身保持不变，下次打开 app 时由 MainActivity / AIEditorApp 自动恢复。
+        // The user swiping the app away from recents = explicitly not wanting background running: stop the foreground service and cancel the WorkManager periodic fallback,
+        // otherwise after the process is killed the service would be relaunched by START_STICKY or KeepaliveWorker and pop a notification.
+        // The switch itself stays unchanged; next time the app is opened it is restored automatically by MainActivity / AIEditorApp.
         KeepaliveWorker.cancel(this)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -130,11 +130,11 @@ class TerminalKeepaliveService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     /**
-     * 进入前台并刷新通知；文案随「常驻保活 / 后台会话」组合变化。
+     * Enters the foreground and refreshes the notification; the text varies with the combination of persistent keepalive / background sessions.
      *
-     * startForeground 在 Android 12+ 从后台启动前台服务时可能抛
-     * ForegroundServiceStartNotAllowedException，此处捕获仅记录——常驻通知本次未能展示，
-     * 不应让进程崩溃（设置页的开关仍是开启态，下次前台时由 [com.aicode.MainActivity] 恢复）。
+     * startForeground on Android 12+ may throw when starting a foreground service from the background
+     * ForegroundServiceStartNotAllowedException; it is caught and only logged here -- the persistent notification simply fails to show this time,
+     * and must not crash the process (the settings-page switch is still on, and it will be restored by [com.aicode.MainActivity] next time the app is in the foreground).
      */
     private fun ensureForeground() {
         val text = when {
@@ -167,11 +167,11 @@ class TerminalKeepaliveService : Service() {
     }
 
     /**
-     * 获取服务级 PARTIAL_WAKE_LOCK + WIFI_MODE_FULL_HIGH_PERF WifiLock：
-     * - WakeLock 保 CPU 唤醒，防止系统挂起网络 I/O
-     * - WifiLock 保 Wi-Fi 无线电高性能模式，防止切后台后 Wi-Fi 降频导致 TCP 断连
-     * 两者缺一不可：只有 CPU 醒着但 Wi-Fi 休眠，SSE 仍然断。
-     * 仅在有活跃会话时持有，会话全部结束时释放。
+     * Acquires the service-level PARTIAL_WAKE_LOCK + WIFI_MODE_FULL_HIGH_PERF WifiLock:
+     * - WakeLock keeps the CPU awake, preventing the system from suspending network I/O
+     * - WifiLock keeps the Wi-Fi radio in high-performance mode, preventing TCP disconnects caused by Wi-Fi throttling in the background
+     * Both are indispensable: with only the CPU awake but Wi-Fi asleep, SSE still disconnects.
+     * Held only while there are active sessions; released when all sessions end.
      */
     private fun acquireServiceWakeLock() {
         if (wakeLock?.isHeld != true) {
@@ -195,7 +195,7 @@ class TerminalKeepaliveService : Service() {
         }
     }
 
-    /** 释放服务级 WakeLock 和 WifiLock。 */
+    /** Releases the service-level WakeLock and WifiLock. */
     private fun releaseServiceWakeLock() {
         wakeLock?.takeIf { it.isHeld }?.let { lock ->
             runCatching { lock.release() }
@@ -213,7 +213,7 @@ class TerminalKeepaliveService : Service() {
         private const val TAG = "TerminalKeepaliveService"
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "terminal_service"
-        /** 服务级 WakeLock 超时保险：AI 流式生成可能持续很久，给足 60 分钟。 */
+        /** Service-level WakeLock timeout safeguard: AI streaming generation can last a long time, so allow a full 60 minutes. */
         private const val WAKELOCK_TIMEOUT_MS = 60 * 60 * 1000L
         const val ACTION_START_SESSION = "com.aicode.action.START_SESSION"
         const val ACTION_STOP_SESSION = "com.aicode.action.STOP_SESSION"
@@ -221,8 +221,8 @@ class TerminalKeepaliveService : Service() {
         const val ACTION_DISABLE_PERSISTENT = "com.aicode.action.DISABLE_PERSISTENT"
 
         /**
-         * 注册一个活跃会话并拉起前台服务（用于 AI 流式生成 / 后台终端）。
-         * 使用 startForegroundService 而非 startService，确保 Android 8+ 从后台恢复时也能正确启动。
+         * Registers an active session and brings up the foreground service (used for AI streaming generation / background terminals).
+         * Uses startForegroundService rather than startService, ensuring it can also start correctly when restored from the background on Android 8+.
          */
         fun startSession(context: Context) {
             val intent = Intent(context, TerminalKeepaliveService::class.java).apply {
@@ -231,7 +231,7 @@ class TerminalKeepaliveService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        /** 结束一个活跃会话。会话计数归零且无常驻保活时自动停止服务。 */
+        /** Ends an active session. The service stops automatically when the session count reaches zero and there is no persistent keepalive. */
         fun stopSession(context: Context) {
             val intent = Intent(context, TerminalKeepaliveService::class.java).apply {
                 action = ACTION_STOP_SESSION
@@ -240,7 +240,7 @@ class TerminalKeepaliveService : Service() {
                 .onFailure { FileLogger.e(TAG, "stopSession startService failed", it) }
         }
 
-        /** 开启常驻保活（幂等）。使用 startForegroundService 确保后台也能拉起。 */
+        /** Enables persistent keepalive (idempotent). Uses startForegroundService so it can be brought up from the background too. */
         fun enablePersistent(context: Context) {
             val intent = Intent(context, TerminalKeepaliveService::class.java).apply {
                 action = ACTION_ENABLE_PERSISTENT
@@ -248,7 +248,7 @@ class TerminalKeepaliveService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        /** 关闭常驻保活（幂等）。仅在确曾开启过时调用，避免为关闭而凭空拉起 Service。 */
+        /** Disables persistent keepalive (idempotent). Only call when it was actually enabled, to avoid bringing up a Service just to turn it off. */
         fun disablePersistent(context: Context) {
             val intent = Intent(context, TerminalKeepaliveService::class.java).apply {
                 action = ACTION_DISABLE_PERSISTENT
@@ -257,7 +257,7 @@ class TerminalKeepaliveService : Service() {
                 .onFailure { FileLogger.e(TAG, "disablePersistent startService failed", it) }
         }
 
-        /** 判断保活服务当前是否在运行。WorkManager 兜底拉起前先探测，避免反复 startService。 */
+        /** Checks whether the keepalive service is currently running. The WorkManager fallback probes this before bringing it up, to avoid repeated startService calls. */
         @Suppress("DEPRECATION")
         fun isRunning(context: Context): Boolean {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager

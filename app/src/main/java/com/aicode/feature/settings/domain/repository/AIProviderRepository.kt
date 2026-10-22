@@ -12,6 +12,6 @@ interface AIProviderRepository {
     suspend fun updateModels(id: String, models: List<String>)
     suspend fun setProviderEnabled(id: String, isEnabled: Boolean)
 
-    /** 按传入顺序重排提供商（重分配 sortOrder 并整体保存）。 */
+    /** Reorders providers in the order passed in (reassigns sortOrder and saves them as a whole). */
     suspend fun reorderProviders(providers: List<AIProviderConfig>)
 }

@@ -37,14 +37,14 @@ import compose.icons.feathericons.AlertTriangle
 import compose.icons.feathericons.Info
 
 /**
- * 「上下文窗口统一高级设置」二级页。
+ * "Unified context window advanced settings" sub-page.
  *
- * 开启后所有模型忽略自身元数据里的上下文窗口，统一采用本页配置的值——
- * 用于网关/自部署模型元数据不准（如 8k 老模型被报成 128k，导致请求超长报错）的场景。
+ * When enabled, all models ignore the context window in their own metadata and uniformly use the value configured on this page --
+ * for scenarios where gateway/self-hosted model metadata is inaccurate (e.g. an old 8k model reported as 128k, causing over-long request errors).
  *
- * 必填规则：总上下文窗口、输出窗口必须为正整数，否则开关自动回到关闭态（存储层也有同一重兜底）。
- * 输入窗口可选，留空则由 [com.aicode.feature.settings.domain.model.ModelContextPolicy] 按
- * 「总窗口 − 输出预留」推导。
+ * Required-field rule: the total context window and output window must be positive integers; otherwise the toggle automatically returns to off (the storage layer has the same fallback).
+ * The input window is optional; if left empty, it is derived by [com.aicode.feature.settings.domain.model.ModelContextPolicy] as
+ * "total window - output reserve".
  */
 @Composable
 internal fun ContextWindowSection(
@@ -67,7 +67,7 @@ internal fun ContextWindowSection(
     val contextValue = parsed(contextText)
     val inputValue = parsed(inputText)
     val outputValue = parsed(outputText)
-    // 必填缺失时不允许保存：保存动作会按此自动关闭开关，避免出现「开着却没值」。
+    // Saving is not allowed when a required field is missing: the save action automatically turns the toggle off accordingly, avoiding an "on but with no value" state.
     val canSave = contextValue != null && outputValue != null
 
     Column(
@@ -200,7 +200,7 @@ internal fun ContextWindowSection(
     }
 }
 
-/** 字段标题 + 必填星标。 */
+/** Field title + required asterisk. */
 @Composable
 private fun FieldLabel(text: String, required: Boolean) {
     Row {
@@ -219,6 +219,6 @@ private fun FieldLabel(text: String, required: Boolean) {
     }
 }
 
-/** 保存行点击区：抽出以便 canSave 变化时才重建手势。 */
+/** Click area of the save row: extracted so the gesture is only rebuilt when canSave changes. */
 private fun Modifier.saveButton(onClick: () -> Unit): Modifier =
     this.clickable(onClick = onClick)

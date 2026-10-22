@@ -63,17 +63,17 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** 底部悬浮 tab 栏的单个 tab 项：图标 + 文案。 */
+/** A single tab item in the bottom floating tab bar: icon + label. */
 data class FloatingTabItem(
     val icon: ImageVector,
     val label: String
 )
 
 /**
- * 底部悬浮液态玻璃 Tab 栏（PagerState 联动版）：
- * - 滑动页面主体时，底栏指示器 100% 毫秒级跟手同步平移；
- * - 长按底栏左右拖拽时，上方页面 1:1 同步平滑滑动，松手弹簧吸附；
- * - 点击 Tab 项平滑滚动至对应页面。
+ * Bottom floating liquid glass Tab bar (PagerState-linked version):
+ * - When swiping the page body, the bottom bar indicator follows the finger with 100% millisecond-level synchronized translation;
+ * - When long-pressing the bottom bar and dragging left/right, the page above slides smoothly in 1:1 sync, and springs to snap on release;
+ * - Tapping a Tab item smoothly scrolls to the corresponding page.
  */
 @Composable
 fun FloatingTabBar(
@@ -101,7 +101,7 @@ fun FloatingTabBar(
     val mutedSurfaceColor = MaterialTheme.semanticColors.mutedSurface
     val pageBackgroundColor = MaterialTheme.semanticColors.pageBackground
 
-    // 材质与描边画笔
+    // Material and border brushes
     val glassBackgroundBrush = remember(isLight, surfaceColor, surfaceVariantColor, cardSurfaceColor, mutedSurfaceColor) {
         if (isLight) {
             Brush.verticalGradient(
@@ -140,7 +140,7 @@ fun FloatingTabBar(
     val tabBounds = remember { mutableStateMapOf<Int, Rect>() }
     val density = LocalDensity.current
 
-    // 计算 Pager 连续位置（支持页面滑动与底栏双向插值）
+    // Compute the Pager continuous position (supports page swiping and bidirectional interpolation with the bottom bar)
     val continuousPosition by remember {
         derivedStateOf {
             (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, items.lastIndex.toFloat())
@@ -160,7 +160,7 @@ fun FloatingTabBar(
         tabBounds[pagerState.currentPage]?.left ?: 0f
     }
 
-    // 果冻拉伸：在位移时根据 offsetFraction 产生平滑微拉伸
+    // Jelly stretch: produces a smooth slight stretch based on offsetFraction during displacement
     val stretchScaleX = 1f + 0.14f * (1f - abs(fraction - 0.5f) * 2f)
 
     Box(
@@ -357,8 +357,8 @@ fun FloatingTabBar(
 }
 
 /**
- * 底部悬浮液态玻璃 Tab 栏（基础选中索引版）：
- * 用于非 Pager 页面的向后兼容。
+ * Bottom floating liquid glass Tab bar (basic selected-index version):
+ * Used for backwards compatibility on non-Pager pages.
  */
 @Composable
 fun FloatingTabBar(

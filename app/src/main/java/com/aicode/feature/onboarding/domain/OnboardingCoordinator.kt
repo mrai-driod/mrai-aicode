@@ -5,47 +5,47 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * 新手引导协调器：连接 UI 状态机 [OnboardingStateHolder] 与持久化。
+ * Onboarding coordinator: connects the UI state machine [OnboardingStateHolder] with persistence.
  */
 class OnboardingCoordinator(
     private val stateHolder: OnboardingStateHolder,
     private val onPersist: suspend (OnboardingStatus) -> Unit,
     private val scope: CoroutineScope
 ) {
-    /** 启动引导判定：仅当未完成/进行中时激活。 */
+    /** Launch decision for onboarding: activates only when not completed / still in progress. */
     fun initialize(status: OnboardingStatus) {
         if (status == OnboardingStatus.IN_PROGRESS) {
             stateHolder.start()
         }
     }
 
-    /** 推进到下一步（或完成）。 */
+    /** Advances to the next step (or completes). */
     fun nextStep() {
         stateHolder.nextStep()
         val current = stateHolder.state.value
         scope.launch { onPersist(current.status) }
     }
 
-    /** 回退或跳转到指定步骤（如关闭弹窗时回退到触发按钮）。 */
+    /** Goes back or jumps to the specified step (e.g. falling back to the triggering button when a dialog closes). */
     fun goToStep(targetStep: OnboardingStep) {
         stateHolder.goToStep(targetStep)
         val current = stateHolder.state.value
         scope.launch { onPersist(current.status) }
     }
 
-    /** 用户主动跳过引导。 */
+    /** The user actively skips onboarding. */
     fun skip() {
         stateHolder.skip()
         scope.launch { onPersist(OnboardingStatus.SKIPPED) }
     }
 
-    /** 用户完成引导。 */
+    /** The user completes onboarding. */
     fun complete() {
         stateHolder.completeNow()
         scope.launch { onPersist(OnboardingStatus.COMPLETED) }
     }
 
-    /** 重置并重新启动引导（设置页触发）。 */
+    /** Resets and restarts onboarding (triggered from Settings). */
     fun resetAndStart() {
         stateHolder.start()
         scope.launch { onPersist(OnboardingStatus.IN_PROGRESS) }

@@ -1,6 +1,6 @@
 package com.aicode.feature.credentials.domain.model
 
-/** 一条 Git 远程仓库凭据（每主机一条，id 即 host 小写）。无 Android 依赖。 */
+/** One Git remote repository credential (one per host, id is the lowercased host). No Android dependencies. */
 data class GitCredential(
     val id: String,
     val host: String,

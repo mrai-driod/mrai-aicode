@@ -48,15 +48,15 @@ class AnthropicAdapter @Inject constructor(
     override var streamIdleTimeoutMs: Long = 0L
     override var maxNetworkRetries: Int = MAX_NETWORK_RETRIES
 
-    /** 是否启用显式缓存断点（cache_control）。默认开启；第三方兼容网关严格校验未知字段时由设置项关闭。 */
+    /** Whether to enable explicit cache breakpoints (cache_control). Enabled by default; disabled via a setting when a third-party compatible gateway strictly validates unknown fields. */
     var cacheBreakpointsEnabled: Boolean = true
 
-    /** 自定义请求头：占位符替换后写出，完全覆盖同名默认头。 */
+    /** Custom request headers: written out after placeholder replacement, completely overriding default headers of the same name. */
     override var customHeaders: Map<String, String> = emptyMap()
 
     override var maxOutputTokens: Int? = null
 
-    // null 时请求体不带 temperature（Gson 跳过 null 字段），交由服务端默认；开启 thinking 时官方要求必须不带。
+    // When null, the request body carries no temperature (Gson skips null fields), leaving it to the server default; the official requirement is that it must be omitted when thinking is enabled.
     override var temperature: Float? = null
 
     private fun extraHeaders(): Map<String, String> =
@@ -75,7 +75,7 @@ class AnthropicAdapter @Inject constructor(
                 name = tool.name,
                 description = tool.description,
                 input_schema = tool.toJsonSchema(),
-                // 断点预算有限（每请求最多 4 个），tools 只打最后一个。
+                // The breakpoint budget is limited (at most 4 per request), so only mark the last tool.
                 cache_control = if (cacheBreakpointsEnabled && index == tools.lastIndex) CACHE_BREAKPOINT else null
             )
         }
@@ -116,7 +116,7 @@ class AnthropicAdapter @Inject constructor(
         var thinkingText = ""
         var signature: String? = null
         val toolCalls = mutableListOf<ToolCall>()
-        // thinking / redacted_thinking 块按返回原序原样留存，回传时不得修改也不得重排。
+        // thinking / redacted_thinking blocks are kept as-is, in their returned order; they must not be modified or reordered when sent back.
         val thinkingBlocks = mutableListOf<AnthropicContentBlock>()
 
         for (block in response.content) {
@@ -174,10 +174,10 @@ class AnthropicAdapter @Inject constructor(
             stream = true
         )
         val seq = AILogger.logRequest(logSessionId, "Anthropic", model, "POST", url, request)
-        // 原始 SSE 分批落盘（见 AILogger.beginRawSse），本轮结束在 finally 收尾。
+        // Raw SSE is written to disk in batches (see AILogger.beginRawSse), finalised in finally at the end of this turn.
         val sseLog = AILogger.beginRawSse(logSessionId, "Anthropic", seq)
 
-        // 流式请求整体可重试；重试前上层会收到 Retrying 事件并清空已展示文本。
+        // A streaming request is retryable as a whole; before a retry the upper layer receives a Retrying event and clears the displayed text.
         val triedKeys = mutableSetOf(apiKey)
         try {
             streamWithStaircaseRetry(
@@ -193,21 +193,21 @@ class AnthropicAdapter @Inject constructor(
                     withFirstContentTimeout(firstByteTimeoutMs) { firstContent ->
             val textBuilder = StringBuilder()
             val budget = StreamBudget()
-            // content block index -> 累积中的 tool_use（仅 tool_use 块建条目，保序）。
+            // content block index -> tool_use being accumulated (entries created only for tool_use blocks, order-preserving).
             val toolBlocks = LinkedHashMap<Int, ToolBlockAcc>()
             var stopReason: String? = null
             var stopDetail: String? = null
-            // 未收到 message_stop 就到了流尾（对端 EOF / 代理提前断开 / 网络切换）。
-            // 已有正文时降级交付而不是整轮失败，详见 [logStreamTruncated]。
+            // Reached the end of the stream without receiving message_stop (peer EOF / proxy disconnecting early / network switch).
+            // When body text already exists, deliver in degraded form instead of failing the whole turn; see [logStreamTruncated].
             var truncatedByNetwork = false
             var sseLines = 0
             var streamInputTokens = 0
             var streamOutputTokens = 0
             var streamCachedInputTokens = 0
             var streamCacheCreationTokens = 0
-            // thinking block 的加密签名（signature_delta 事件携带），随 Final 上抛供工具循环回传。
+            // The thinking block's encrypted signature (carried by the signature_delta event), passed up with Final for the tool loop to send back.
             var signature: String? = null
-            // content block index -> thinking / redacted_thinking 累积；按 index 分槽，避免一轮多个思考块被合并。
+            // content block index -> thinking / redacted_thinking accumulation; slotted by index so multiple thinking blocks in one turn are not merged.
             val thinkingBlocks = LinkedHashMap<Int, ThinkingBlockAcc>()
 
             val body = firstContent.awaitBody(api.streamMessage(url = url, apiKey = apiKey, extraHeaders = extraHeaders(), request = request))
@@ -220,17 +220,17 @@ class AnthropicAdapter @Inject constructor(
                 }
                 try {
                     val reader = rb.charStream().buffered()
-                    // 收到服务端 message_stop 事件即 break 正常结束；readLine() 返回 null 说明
-                    // 结束标记还没到、连接就没了（网络中断/TCP 重置/代理提前断开）。
-                    // 只有正文还没收到时才抛异常让重试/日志接管——那时重发既安全又可能拿到完整回答；
-                    // 已经吐了字就降级交付（标记截断输出，由 Agent 循环自动续写），
-                    // 否则用户会看到整轮失败、之前流过的内容全部作废。
+                    // Break and end normally as soon as the server's message_stop event is received; readLine() returning null means
+                    // the end marker had not yet arrived and the connection was already gone (network interruption/TCP reset/proxy disconnecting early).
+                    // Only throw an exception to let retry/logging take over when no body text has been received yet — resending then is both safe and may get a complete answer;
+                    // once text has already streamed out, deliver in degraded form (mark the output as truncated, and the Agent loop continues writing automatically),
+                    // otherwise the user would see the whole turn fail and all previously streamed content discarded.
                     while (true) {
                         coroutineContext.ensureActive()
                         val line = reader.readLine()
                         if (line == null) {
                             if (!textBuilder.isSalvageableAfterTruncation()) {
-                                throw IOException("SSE 流被中断：未收到 message_stop 结束标记（疑似网络断开）")
+                                throw IOException("SSE stream interrupted: no message_stop end marker received (suspected network disconnect)")
                             }
                             truncatedByNetwork = true
                             logStreamTruncated("Anthropic", textBuilder.length, sseLines)
@@ -243,22 +243,22 @@ class AnthropicAdapter @Inject constructor(
                         if (data.isEmpty()) continue
                         sseLog.append(line)
                         val obj = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: continue
-                        // 单行 SSE 解析：不同上游/模型的字段类型偶有出入，Gson 的 getAsJsonObject/getAsJsonArray
-                        // 在类型不符时会直接抛 ClassCastException，asString/asInt 对非原始值抛 UnsupportedOperationException。
-                        // 单行异常不应中断整条流——宽松解析，出错仅跳过该行；必须放行 CancellationException。
+                        // Single-line SSE parsing: field types from different upstreams/models occasionally differ, and Gson's getAsJsonObject/getAsJsonArray
+                        // throws ClassCastException directly on a type mismatch, and asString/asInt throws UnsupportedOperationException on non-primitive values.
+                        // A single-line exception should not interrupt the whole stream — parse leniently, skip the line on error; CancellationException must be let through.
                         try {
                             when (obj.get("type")?.asString) {
                                 "error" -> {
                                     val errObj = obj.getAsJsonObject("error")
                                     val code = errObj?.get("type")?.takeIf { !it.isJsonNull }?.asString
-                                    val msg = errObj?.get("message")?.takeIf { !it.isJsonNull }?.asString ?: "未知错误"
+                                    val msg = errObj?.get("message")?.takeIf { !it.isJsonNull }?.asString ?: "Unknown error"
                                     throw StreamApiException(code, msg)
                                 }
                                 "message_start" -> {
                                     val usage = obj.get("message")?.takeIf { it.isJsonObject }?.asJsonObject
                                         ?.get("usage")?.takeIf { it.isJsonObject }?.asJsonObject
                                     streamInputTokens = usage?.get("input_tokens")?.takeIf { !it.isJsonNull }?.asInt ?: 0
-                                    // 缓存命中/写入数在 message_start 的 usage 里返回；部分上游会在 message_delta 补全，见该分支的覆盖逻辑。
+                                    // Cache hit/write counts are returned in the usage of message_start; some upstreams complete them in message_delta, see the override logic in that branch.
                                     streamCachedInputTokens = usage?.get("cache_read_input_tokens")?.takeIf { !it.isJsonNull }?.asInt ?: 0
                                     streamCacheCreationTokens = usage?.get("cache_creation_input_tokens")?.takeIf { !it.isJsonNull }?.asInt ?: 0
                                 }
@@ -274,8 +274,8 @@ class AnthropicAdapter @Inject constructor(
                                                 id = block.get("id")?.asString ?: "",
                                                 name = name
                                             )
-                                            // 工具名先于参数到达：立刻告诉 UI「模型准备调什么」，
-                                            // 免得参数流式期间一直停在「正在思考」
+                                            // The tool name arrives before the arguments: immediately tell the UI "what the model is about to call",
+                                            // so it does not stay on "thinking" while the arguments stream in
                                             if (name.isNotEmpty()) emit(AIStreamChunk.ToolCallDeclared(name))
                                         }
                                         "thinking" -> thinkingBlocks[index] = ThinkingBlockAcc(type = "thinking").also { acc ->
@@ -288,7 +288,7 @@ class AnthropicAdapter @Inject constructor(
                                             }
                                             acc.signature = block.get("signature")?.takeIf { !it.isJsonNull }?.asString
                                         }
-                                        // redacted_thinking 的 data 在 start 事件一次性给全，没有对应 delta。
+                                        // redacted_thinking's data is given in full in the start event, with no corresponding delta.
                                         "redacted_thinking" -> thinkingBlocks[index] = ThinkingBlockAcc(type = "redacted_thinking").also { acc ->
                                             acc.data = block.get("data")?.takeIf { !it.isJsonNull }?.asString
                                             if (!acc.data.isNullOrEmpty()) {
@@ -319,7 +319,7 @@ class AnthropicAdapter @Inject constructor(
                                                     thinkingBlocks.getOrPut(idx) { ThinkingBlockAcc(type = "thinking") }
                                                         .thinking.append(t)
                                                 }
-                                                // 思考内容不落库、可重试重流出，但收到即说明连接已活，取消首字节超时。
+                                                // Thinking content is not persisted and can be re-streamed on retry, but receiving it means the connection is alive, so cancel the first-byte timeout.
                                                 firstContent.receivedContent()
                                                 onContent()
                                                 emit(AIStreamChunk.ReasoningDelta(t))
@@ -354,9 +354,9 @@ class AnthropicAdapter @Inject constructor(
                                             stopDetail = it
                                         }
                                     val usage = obj.get("usage")?.takeIf { it.isJsonObject }?.asJsonObject
-                                    // 官方协议 message_delta 的 usage 只有 output_tokens，但部分上游（如 New API 中转）
-                                    // 会在此携带完整 usage，且这里的 input_tokens 才是终态值、与 message_start 可能不同，
-                                    // 故存在即覆盖，避免总输入少算未缓存的那部分。
+                                    // In the official protocol, message_delta's usage only has output_tokens, but some upstreams (e.g. New API relays)
+                                    // carry the full usage here, and the input_tokens here is the final value, which may differ from message_start,
+                                    // so when present it overrides, to avoid undercounting the uncached part of the total input.
                                     usage?.get("input_tokens")?.takeIf { !it.isJsonNull }?.asInt?.let {
                                         streamInputTokens = it
                                     }
@@ -375,7 +375,7 @@ class AnthropicAdapter @Inject constructor(
                             throw e
                         } catch (e: Exception) {
                             coroutineContext.ensureActive()
-                            // 该行 SSE 解析失败，跳过；不影响已累积文本与后续行。
+                            // This line of SSE failed to parse; skip it; it does not affect already accumulated text or subsequent lines.
                         }
                     }
                 } finally {
@@ -385,7 +385,7 @@ class AnthropicAdapter @Inject constructor(
             }
 
             val toolCalls = toolBlocks.values
-                // 断流时入参几乎必然半截，残缺参数去执行工具（写文件/跑命令）风险远大于丢掉这次调用。
+                // On disconnection the arguments are almost inevitably partial; executing a tool (writing a file/running a command) with incomplete arguments is far riskier than dropping this call.
                 .filter { !truncatedByNetwork || looksLikeCompleteJsonObject(it.args.toString()) }
                 .map { acc ->
                     ToolCall(id = acc.id, name = acc.name, arguments = parseArgs(acc.args.toString()))
@@ -403,17 +403,17 @@ class AnthropicAdapter @Inject constructor(
             AILogger.logError(logSessionId, "Anthropic", enriched, seq)
             throw enriched
         } finally {
-            // 无论成功/失败/取消，把已收到的原始 SSE 落盘（重试时会从上次中断处续写）。
+            // Whether it succeeded/failed/was cancelled, write the raw SSE received so far to disk (on retry, writing resumes from the last interruption point).
             sseLog.finish()
         }
     }.flowOn(Dispatchers.IO)
 
-    /** 流式过程中按 content block index 累积的 tool_use 状态。 */
+    /** The tool_use state accumulated by content block index during streaming. */
     private class ToolBlockAcc(val id: String, val name: String) {
         val args = StringBuilder()
     }
 
-    /** 流式过程中按 content block index 累积的 thinking / redacted_thinking 状态。 */
+    /** The thinking / redacted_thinking state accumulated by content block index during streaming. */
     private class ThinkingBlockAcc(val type: String) {
         val thinking = StringBuilder()
         var signature: String? = null
@@ -428,8 +428,8 @@ class AnthropicAdapter @Inject constructor(
     }
 
     /**
-     * 最大输出 token：优先用模型元数据的输出上限，缺失时回退 [DEFAULT_MAX_TOKENS]。
-     * 开启 thinking 时思考预算计入 max_tokens，须留出正文空间，故不得低于预算 + [MIN_CONTENT_TOKENS]。
+     * Maximum output tokens: prefer the output limit from the model metadata, falling back to [DEFAULT_MAX_TOKENS] when missing.
+     * When thinking is enabled, the thinking budget counts toward max_tokens, so room must be left for body text; it must therefore not be less than the budget + [MIN_CONTENT_TOKENS].
      */
     private fun resolveMaxTokens(thinking: AnthropicThinkingConfig?): Int {
         val limit = maxOutputTokens?.takeIf { it > 0 } ?: DEFAULT_MAX_TOKENS
@@ -437,11 +437,11 @@ class AnthropicAdapter @Inject constructor(
         return maxOf(limit, budget + MIN_CONTENT_TOKENS)
     }
 
-    /** thinking / redacted_thinking 块原样序列化为快照；无块时 null。 */
+    /** Serialises thinking / redacted_thinking blocks as-is into a snapshot; null when there are no blocks. */
     private fun encodeThinkingBlocks(blocks: List<AnthropicContentBlock>): String? =
         blocks.takeIf { it.isNotEmpty() }?.let { gson.toJson(it) }
 
-    /** 反序列化 [encodeThinkingBlocks] 的快照；损坏或为空时返回空列表，由调用方回退旧逻辑。 */
+    /** Deserialises the [encodeThinkingBlocks] snapshot; returns an empty list when corrupted or empty, and the caller falls back to the old logic. */
     private fun decodeThinkingBlocks(json: String): List<AnthropicContentBlock> {
         if (json.isBlank()) return emptyList()
         return runCatching {
@@ -450,11 +450,11 @@ class AnthropicAdapter @Inject constructor(
     }
 
     /**
-     * 思考强度 → Anthropic thinking 配置。
-     * - 新模型（4.6+/5 系，支持 adaptive）：effort 档位直传 output_config，thinking 用 adaptive+summarized；
-     *   "none" 关闭思考用 disabled；"minimal" 无对应档，归一到 low（官方仅 low/medium/high/xhigh/max）。
-     * - 旧模型（4.5 及更早，仅 budget_tokens）：low/medium/high 映射 1024/4096/8192（须小于 max_tokens），
-     *   minimal 归一到 low，xhigh/max 归一到 high。
+     * Thinking strength -> Anthropic thinking configuration.
+     * - New models (4.6+/5 series, supporting adaptive): the effort level is passed directly to output_config, and thinking uses adaptive+summarized;
+     *   "none" disables thinking using disabled; "minimal" has no corresponding level and is normalised to low (officially only low/medium/high/xhigh/max).
+     * - Old models (4.5 and earlier, budget_tokens only): low/medium/high map to 1024/4096/8192 (must be less than max_tokens),
+     *   minimal is normalised to low, xhigh/max are normalised to high.
      */
     private fun buildThinkingConfig(reasoningEffort: String?): Pair<AnthropicThinkingConfig?, AnthropicOutputConfig?> {
         if (reasoningEffort == null) return null to null
@@ -462,12 +462,12 @@ class AnthropicAdapter @Inject constructor(
             if (reasoningEffort == "none") {
                 return AnthropicThinkingConfig(type = "disabled") to null
             }
-            // 官方 effort 无 minimal 档，归一到 low，避免透传非法档位被 400。
+            // There is no minimal level in the official effort; normalise to low to avoid passing an illegal level through and getting a 400.
             val effort = if (reasoningEffort == "minimal") "low" else reasoningEffort
             return AnthropicThinkingConfig(type = "adaptive", display = "summarized") to AnthropicOutputConfig(effort = effort)
         }
         val budget = when (reasoningEffort) {
-            // Anthropic 无 minimal 档：归一到最接近的 low（避免同一档位一边 400 一边忽略的分裂）。
+            // Anthropic has no minimal level: normalise to the closest, low (to avoid a split where the same level gets a 400 on one side and is ignored on the other).
             "minimal", "low" -> 1024
             "medium" -> 4096
             "high", "xhigh", "max" -> 8192
@@ -476,7 +476,7 @@ class AnthropicAdapter @Inject constructor(
         return AnthropicThinkingConfig(type = "enabled", budget_tokens = budget) to null
     }
 
-    /** 是否支持 adaptive thinking：4.6+ 及 5 系（claude-<family>-4-6/4-7/4-8 或主版本 5）。 */
+    /** Whether adaptive thinking is supported: 4.6+ and the 5 series (claude-<family>-4-6/4-7/4-8 or major version 5). */
     private fun supportsAdaptiveThinking(): Boolean {
         val m = Regex("claude-(?:opus|sonnet|haiku|fable|mythos)-(\\d+)(?:-(\\d+))?").find(model)
         val major = m?.groupValues?.get(1)?.toIntOrNull() ?: return false
@@ -484,7 +484,7 @@ class AnthropicAdapter @Inject constructor(
         return major >= 5 || (major == 4 && (minor ?: 0) >= 6)
     }
 
-    /** 把累积的工具入参 JSON 字符串解析为 JsonObject；为空或非法时回退为空对象。 */
+    /** Parses the accumulated tool-argument JSON string into a JsonObject; falls back to an empty object when empty or invalid. */
     private fun parseArgs(raw: String): JsonObject {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return JsonObject(emptyMap())
@@ -493,9 +493,9 @@ class AnthropicAdapter @Inject constructor(
 
     private fun convertToAnthropicMessages(messages: List<AgentMessage>, addMessageBreakpoint: Boolean): MutableList<AnthropicMessage> {
         val result = mutableListOf<AnthropicMessage>()
-        // 防御性跟踪：上一个 assistant 消息是否包含 tool_use
+        // Defensive tracking: whether the previous assistant message contains tool_use
         var lastAssistantHadToolUse = false
-        // 最后一条普通 user 消息（非 tool_result）在 result 中的索引，供 messages 断点打点。
+        // The index in result of the last plain user message (not a tool_result), for marking messages breakpoints.
         var lastPlainUserIndex: Int? = null
 
         for (message in messages) {
@@ -507,8 +507,8 @@ class AnthropicAdapter @Inject constructor(
                 }
                 is AgentMessage.AssistantMessage -> {
                     val contentBlocks = mutableListOf<AnthropicContentBlock>()
-                    // 工具循环/多轮时须把上轮 thinking / redacted_thinking 块原样、原序回传，否则 400。
-                    // 优先用原生快照（唯一能满足「不得修改」的形式）；旧数据/备份恢复只有 signature 时退回单块。
+                    // In tool loops / multi-turn use, the previous turn's thinking / redacted_thinking blocks must be sent back as-is and in original order, otherwise a 400 results.
+                    // Prefer the native snapshot (the only form that can satisfy "do not modify"); for old data/backup restores with only a signature, fall back to a single block.
                     val snapshot = decodeThinkingBlocks(message.thinkingBlocksJson)
                     if (snapshot.isNotEmpty()) {
                         contentBlocks.addAll(snapshot)
@@ -546,9 +546,9 @@ class AnthropicAdapter @Inject constructor(
                     }
                 }
                 is AgentMessage.ToolResultMessage -> {
-                    // 防御性清理：跳过没有配对 tool_use 的孤立 tool_result
+                    // Defensive cleanup: skip orphan tool_results with no paired tool_use
                     if (!lastAssistantHadToolUse) continue
-                    // 文件类工具喂模型用精简投影文本（减少完整 diff 回传的 token），UI/持久化仍走完整 result。
+                    // File tools feed the model a compact projection text (reducing the tokens of returning a full diff); the UI/persistence still use the full result.
                     val modelText = message.modelResult
                         ?: modelToolResultText(message.toolName, message.result)
                         ?: message.result
@@ -569,9 +569,9 @@ class AnthropicAdapter @Inject constructor(
                         tool_use_id = message.id,
                         content = content
                     )
-                    // 同一条 assistant 里的多个 tool_use，其 tool_result 必须全部放进紧随的那一条 user 消息：
-                    // 官方端会把连续的 user 消息合并成一轮，但部分兼容网关不合并，会直接报
-                    // "`tool_use` ids were found without `tool_result` blocks immediately after"。
+                    // For multiple tool_uses in the same assistant message, all their tool_results must go into the single immediately following user message:
+                    // the official endpoint merges consecutive user messages into one turn, but some compatible gateways do not merge and report directly
+                    // "`tool_use` ids were found without `tool_result` blocks immediately after".
                     val previous = result.lastOrNull()
                     val previousBlocks = (previous?.content as? List<*>)?.filterIsInstance<AnthropicContentBlock>()
                     if (
@@ -587,8 +587,8 @@ class AnthropicAdapter @Inject constructor(
             }
         }
 
-        // messages 断点：打在最后一条普通 user 消息的 text 块上（Anthropic 不允许打在 tool_result/thinking/image 块）。
-        // 工具循环中最后一条 user 是 tool_result 时不打点，保持 system+tools 两个断点即可。
+        // Messages breakpoint: placed on the text block of the last plain user message (Anthropic does not allow it on tool_result/thinking/image blocks).
+        // When the last user message in a tool loop is a tool_result, do not mark it; keeping just the system+tools two breakpoints is enough.
         if (addMessageBreakpoint) {
             val idx = lastPlainUserIndex
             if (idx != null) {
@@ -617,7 +617,7 @@ class AnthropicAdapter @Inject constructor(
         return result
     }
 
-    /** 显式缓存断点值：Anthropic ephemeral prompt caching。 */
+    /** Explicit cache breakpoint value: Anthropic ephemeral prompt caching. */
     private fun buildSystemPayload(systemPrompt: String): Any? {
         if (systemPrompt.isBlank()) return null
         if (!cacheBreakpointsEnabled) return systemPrompt
@@ -682,21 +682,21 @@ class AnthropicAdapter @Inject constructor(
     }
 
     private companion object {
-        /** 显式缓存断点：Anthropic ephemeral prompt caching。 */
+        /** Explicit cache breakpoint: Anthropic ephemeral prompt caching. */
         val CACHE_BREAKPOINT = mapOf("type" to "ephemeral")
 
         /**
-         * Anthropic 的 `input_tokens` 只算未命中缓存的部分，总输入还要加上 cache_read / cache_creation——
-         * 与 OpenAI（`prompt_tokens` 含 `cached_tokens`）、Gemini（`promptTokenCount`）口径对齐。
-         * 上下文占用、压缩触发、费用与缓存命中率都按总输入算。
+         * Anthropic's `input_tokens` only counts the part that missed the cache; the total input must also add cache_read / cache_creation —
+         * aligning with the conventions of OpenAI (`prompt_tokens` includes `cached_tokens`) and Gemini (`promptTokenCount`).
+         * Context usage, compression triggering, cost and cache hit rate are all calculated on the total input.
          */
         fun totalInputTokens(input: Int, cacheRead: Int?, cacheCreation: Int?): Int =
             input + (cacheRead ?: 0) + (cacheCreation ?: 0)
 
-        /** 模型元数据缺输出上限时的兜底最大输出 token。 */
+        /** Fallback maximum output tokens when the model metadata lacks an output limit. */
         const val DEFAULT_MAX_TOKENS = 16384
 
-        /** 开启 thinking 时为正文预留的最小 token 数（max_tokens 必须大于思考预算）。 */
+        /** Minimum number of tokens reserved for body text when thinking is enabled (max_tokens must be greater than the thinking budget). */
         const val MIN_CONTENT_TOKENS = 4096
 
         val gson = com.google.gson.Gson()

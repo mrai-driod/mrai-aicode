@@ -12,12 +12,12 @@ interface RemoteSyncClient {
     suspend fun delete(remotePath: String)
     suspend fun isConnected(): Boolean
 
-    /** 原子重连：断开旧连接并重新建立。供同步引擎的探活/失败重连使用，
-     *  避免 disconnect 与 connect 之间被其它协程插入到半连接状态上操作。 */
+    /** Atomic reconnect: disconnects the old connection and establishes a new one. Used by the sync engine for probing/failure reconnection,
+     *  to prevent other coroutines from operating on a half-connected state between disconnect and connect. */
     suspend fun reconnect(host: String, port: Int, username: String, auth: RemoteAuth)
 
-    /** 轻量探活：连接是否仍然可用。默认复用 isConnected 标志，网络协议可覆盖为真实往返（如 SFTP stat / FTP NOOP），
-     *  以便发现 TCP 半开等 isConnected 检测不到的断连。 */
+    /** Lightweight probe: whether the connection is still usable. By default it reuses the isConnected flag; network protocols may override it with a real round trip (e.g. SFTP stat / FTP NOOP),
+     *  to detect disconnects that isConnected cannot, such as TCP half-open connections. */
     suspend fun ping(): Boolean = isConnected()
 }
 

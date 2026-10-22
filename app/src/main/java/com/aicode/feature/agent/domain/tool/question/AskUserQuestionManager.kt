@@ -10,13 +10,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 管理 ask_user_question 工具的 park-and-resume 流程。
+ * Manages the park-and-resume flow of the ask_user_question tool.
  *
- * 镜像 [com.aicode.feature.agent.domain.tool.ToolPermissionManager] 的设计：
- * 工具侧调用 [awaitAnswer] 挂起；UI 侧观察 [pendingQuestion] 渲染面板；
- * 用户选择后调用 [resolve] 唤醒工具侧。
+ * Mirrors the design of [com.aicode.feature.agent.domain.tool.ToolPermissionManager]:
+ * the tool side calls [awaitAnswer] to suspend; the UI side observes [pendingQuestion] to render the panel;
+ * after the user chooses, it calls [resolve] to wake the tool side.
  *
- * 同一时刻只允许一个待决问题（mutex 串行化），与权限弹窗互不干扰。
+ * Only one pending question is allowed at a time (serialised by a mutex), and it does not interfere with the permission dialog.
  */
 @Singleton
 class AskUserQuestionManager @Inject constructor() {
@@ -25,15 +25,15 @@ class AskUserQuestionManager @Inject constructor() {
 
     private val _pendingQuestion = MutableStateFlow<PendingUserQuestion?>(null)
 
-    /** UI 观察此 StateFlow 来决定是否显示问题面板。 */
+    /** The UI observes this StateFlow to decide whether to show the question panel. */
     val pendingQuestion: StateFlow<PendingUserQuestion?> = _pendingQuestion.asStateFlow()
 
     private var currentId: String? = null
     private var currentDecision: CompletableDeferred<UserQuestionAnswer>? = null
 
     /**
-     * 工具侧调用：发起一个问题请求，挂起等待用户回答。
-     * 同一时刻只允许一个请求（由 [requestMutex] 保证串行）。
+     * Tool-side call: starts a question request and suspends waiting for the user's answer.
+     * Only one request is allowed at a time (serialised by [requestMutex]).
      */
     suspend fun awaitAnswer(question: PendingUserQuestion): UserQuestionAnswer = requestMutex.withLock {
         val decision = CompletableDeferred<UserQuestionAnswer>()
@@ -53,7 +53,7 @@ class AskUserQuestionManager @Inject constructor() {
     }
 
     /**
-     * UI 侧调用：用户完成选择后，将答案回传，唤醒挂起的 [awaitAnswer]。
+     * UI-side call: after the user finishes choosing, passes the answer back and wakes the suspended [awaitAnswer].
      */
     @Synchronized
     fun resolve(id: String, answer: UserQuestionAnswer) {

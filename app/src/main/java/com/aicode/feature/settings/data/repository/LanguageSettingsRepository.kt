@@ -24,10 +24,10 @@ private const val PREFS_KEY = "language_tag"
 const val DEFAULT_LANGUAGE_TAG = "en"
 
 /**
- * 持久化用户选择的应用语言。
+ * Persists the app language chosen by the user.
  *
- * 存储值为 BCP-47 language tag（如 "zh"、"en"），null 表示跟随系统。
- * 切换时写入同步 prefs，[com.aicode.MainActivity] 在 attachBaseContext 中读取并 recreate 生效。
+ * The stored value is a BCP-47 language tag (such as "zh" or "en"); null means follow the system.
+ * On a switch it writes the synchronous prefs, which [com.aicode.MainActivity] reads in attachBaseContext and applies via recreate.
  */
 @Singleton
 class LanguageSettingsRepository @Inject constructor(
@@ -55,7 +55,7 @@ class LanguageSettingsRepository @Inject constructor(
     /** Mrai fork: English is the default language when the user has not picked one. */
     suspend fun snapshot(): String? = languageFlow.first() ?: DEFAULT_LANGUAGE_TAG
 
-    /** 同步读取语言 tag，供 attachBaseContext 在 Activity 创建前调用（此时 Hilt 尚未注入）。 */
+    /** Reads the language tag synchronously, for attachBaseContext to call before the Activity is created (when Hilt has not been injected yet). */
     fun getLanguageSync(): String? = syncPrefs.getString(PREFS_KEY, null) ?: DEFAULT_LANGUAGE_TAG
 
     suspend fun restore(value: String?) {

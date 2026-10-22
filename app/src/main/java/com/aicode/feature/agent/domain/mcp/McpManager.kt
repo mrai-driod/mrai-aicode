@@ -35,7 +35,7 @@ data class McpServerStatus(
     enum class State { CONNECTING, CONNECTED, FAILED, DISABLED }
 }
 
-// reloadMutex 串行化重连，避免设置页连点导致并发注册/反注册竞态。
+// reloadMutex serialises reconnects, avoiding concurrent register/unregister races from rapid taps on the settings page.
 @Singleton
 class McpManager @Inject constructor(
     private val configRepository: McpConfigRepository,
@@ -59,28 +59,28 @@ class McpManager @Inject constructor(
     val statuses: StateFlow<List<McpServerStatus>> = _statuses.asStateFlow()
 
     fun start() {
-        // 跟随当前工作区切换自动重载（首帧立即发射当前值，等价启动即重连；
-        // 项目切换时合并配置与 stdio 工具的项目路径都会变化，需要重建连接）。
+        // Automatically reloads when the current workspace switches (the first frame immediately emits the current value, equivalent to reconnecting at startup;
+        // when a project switches, both the merged config and the project path for stdio tools change, so connections must be rebuilt).
         scope.launch {
             workspaceRepository.current.collectLatest {
                 reload()
             }
         }
-        // 配置文件被外部（容器内/手工）直接编辑：数秒内自动重载，使新增/删除/启停即时生效。
+        // The config file is edited externally (inside the container / by hand): reload automatically within a few seconds so additions/deletions/enable-disable take effect immediately.
         scope.launch {
             configRepository.externalChanges.collect {
-                FileLogger.i(TAG, "检测到 MCP 配置文件外部变更，自动重载")
+                FileLogger.i(TAG, "Detected an external change to the MCP config file, reloading automatically")
                 reload()
             }
         }
-        // 容器 profile 切换：stdio server 的进程跑在旧容器的 rootfs 上，必须重建才能用新容器；
-        // HTTP server 不依赖容器，不受影响。drop(1) 跳过启动首帧（reload 已处理）。
+        // Container profile switch: the stdio server process runs on the old container's rootfs and must be rebuilt to use the new container;
+        // HTTP servers do not depend on the container and are unaffected. drop(1) skips the first startup frame (reload already handled it).
         scope.launch {
             containerSettingsRepository.activeProfileIdFlow.drop(1).collect {
                 reloadStdioServers()
             }
         }
-        // 默认容器变化：远程模式下 stdio server 运行在默认容器上，同样需要重建。
+        // Default container change: in remote mode the stdio server runs on the default container, so it likewise needs rebuilding.
         scope.launch {
             containerSettingsRepository.defaultContainerIdFlow.drop(1).collect {
                 if (currentActiveProfile().mode == ExecutionMode.REMOTE_SSH) {
@@ -92,7 +92,7 @@ class McpManager @Inject constructor(
 
     suspend fun reload() = reloadMutex.withLock {
         val servers = configRepository.getEffectiveServers()
-        FileLogger.i(TAG, "重新加载 MCP 配置，共 ${servers.size} 个 server")
+        FileLogger.i(TAG, "Reloading MCP config, ${servers.size} servers in total")
 
         teardown()
 
@@ -101,7 +101,7 @@ class McpManager @Inject constructor(
             return@withLock
         }
 
-        // 先把所有 server 置为「连接中/禁用」，UI 立即有反馈。
+        // First set every server to "connecting/disabled" so the UI gives immediate feedback.
         _statuses.value = servers.map { cfg ->
             McpServerStatus(
                 name = cfg.name,
@@ -109,14 +109,14 @@ class McpManager @Inject constructor(
             )
         }
 
-        // 并行连接所有启用的 server；各自独立失败。
+        // Connect all enabled servers in parallel; each fails independently.
         val results = withContext(Dispatchers.IO) {
             servers.filter { it.enabled }.map { cfg ->
                 async { connectOne(cfg) }
             }.awaitAll()
         }
 
-        // 合并禁用项与连接结果，保持原始顺序。
+        // Merge the disabled entries with the connection results, preserving the original order.
         val byName = results.associateBy { it.name }
         _statuses.value = servers.map { cfg ->
             byName[cfg.name] ?: McpServerStatus(cfg.name, McpServerStatus.State.DISABLED)
@@ -126,10 +126,10 @@ class McpManager @Inject constructor(
     private suspend fun connectOne(cfg: McpServerConfig): McpServerStatus {
         val t0 = System.currentTimeMillis()
         return try {
-            FileLogger.i(TAG, "[${cfg.name}] 开始连接（${if (cfg.isStdio) "stdio" else "HTTP"}）")
+            FileLogger.i(TAG, "[${cfg.name}] Starting connection (${if (cfg.isStdio) "stdio" else "HTTP"})")
             val transport = if (cfg.isStdio) {
-                // stdio server 跑在「运行时容器」上：本地模式用当前容器，远程 SSH 模式用默认容器。
-                // 容器未就绪不自动初始化，直接失败并引导去终端页完成初始化。
+                // The stdio server runs on the "runtime container": local mode uses the current container, remote SSH mode uses the default container.
+                // If the container is not ready, do not initialise it automatically; fail directly and direct the user to the terminal page to finish initialisation.
                 val runtimeProfile = resolveMcpRuntimeProfile()
                 containerEngine.notReadyHintFor(runtimeProfile)?.let {
                     throw IllegalStateException(it)
@@ -162,10 +162,10 @@ class McpManager @Inject constructor(
                     registeredToolNames.add(tool.name)
                 }
             }
-            FileLogger.i(TAG, "[${cfg.name}] 连接成功，注册 ${enabledTools.size}/${tools.size} 个工具（${System.currentTimeMillis() - t0}ms）")
+            FileLogger.i(TAG, "[${cfg.name}] Connected successfully, registered ${enabledTools.size}/${tools.size} tools (${System.currentTimeMillis() - t0}ms)")
             McpServerStatus(cfg.name, McpServerStatus.State.CONNECTED, toolCount = enabledTools.size)
         } catch (e: Exception) {
-            FileLogger.e(TAG, "[${cfg.name}] 连接失败（${System.currentTimeMillis() - t0}ms）", e)
+            FileLogger.e(TAG, "[${cfg.name}] Connection failed (${System.currentTimeMillis() - t0}ms)", e)
             McpServerStatus(cfg.name, McpServerStatus.State.FAILED, error = e.message)
         }
     }
@@ -177,8 +177,8 @@ class McpManager @Inject constructor(
     }
 
     /**
-     * 仅重连单个 server（保存/启用开关/编辑刷新用），其他 server 的连接与已注册工具不受影响。
-     * 配置中不存在该 name 时静默返回。
+     * Reconnects a single server only (used for save / enable toggle / edit refresh); other servers' connections and registered tools are unaffected.
+     * Silently returns when that name does not exist in the config.
      */
     suspend fun reloadServer(name: String) = reloadMutex.withLock {
         val cfg = configRepository.getEffectiveServers().firstOrNull { it.name == name } ?: return@withLock
@@ -196,8 +196,8 @@ class McpManager @Inject constructor(
     }
 
     /**
-     * 仅重连当前未连接的 server（已连接的跳过），新会话时兜底：manageMcp 新增/删除只改配置不重连，
-     * 提示「下次会话生效」；本方法让新会话真正连上未连接的 server，不打断已连接的工具。
+     * Reconnects only currently unconnected servers (connected ones are skipped), as a fallback for new sessions: manageMcp additions/deletions only change the config without reconnecting,
+     * prompting "takes effect next session"; this method makes a new session actually connect the unconnected servers without interrupting already-connected tools.
      */
     suspend fun reconnectUnconnected() = reloadMutex.withLock {
         val servers = configRepository.getEffectiveServers().filter { it.enabled }
@@ -209,8 +209,8 @@ class McpManager @Inject constructor(
     }
 
     /**
-     * 异步兜底重连未连接的 server（不阻塞调用方）。新会话创建不应等待 MCP 就绪：
-     * stdio server 首跑可能长时间卡在下载依赖/握手超时，同步等待会让「新建会话」看起来卡死。
+     * Asynchronously reconnects unconnected servers as a fallback (does not block the caller). Creating a new session should not wait for MCP to be ready:
+     * a stdio server's first run can stall for a long time downloading dependencies / timing out on the handshake, and waiting synchronously would make "new session" look frozen.
      */
     fun reconnectUnconnectedAsync() {
         scope.launch { reconnectUnconnected() }
@@ -227,20 +227,20 @@ class McpManager @Inject constructor(
         _statuses.value = _statuses.value.map { if (it.name == cfg.name) result else it }
     }
 
-    /** 解析 stdio server 的运行时容器：本地模式用当前 profile，远程 SSH 模式用默认容器。 */
+    /** Resolves the runtime container for a stdio server: local mode uses the current profile, remote SSH mode uses the default container. */
     private suspend fun resolveMcpRuntimeProfile(): ContainerProfile {
         val active = currentActiveProfile()
         return if (active.mode == ExecutionMode.REMOTE_SSH) resolveDefaultContainerProfile() else active
     }
 
-    /** 当前激活 profile：按 id 从配置列表解析，找不到回退内置 Alpine。 */
+    /** The currently active profile: resolved by id from the config list, falling back to the built-in Alpine when not found. */
     private suspend fun currentActiveProfile(): ContainerProfile {
         val id = containerSettingsRepository.activeProfileIdFlow.first()
         val profiles = containerSettingsRepository.customProfilesFlow.first()
         return profiles.firstOrNull { it.id == id } ?: ContainerProfile.BUILTIN_ALPINE
     }
 
-    /** 默认容器：设置的 id 且为本地 PRoot 模式；找不到/被删/是远程则回退内置 Alpine。 */
+    /** Default container: the configured id and in local PRoot mode; if not found/deleted/remote, falls back to the built-in Alpine. */
     private suspend fun resolveDefaultContainerProfile(): ContainerProfile {
         val id = containerSettingsRepository.defaultContainerIdFlow.first()
         val profiles = containerSettingsRepository.customProfilesFlow.first()
@@ -249,20 +249,20 @@ class McpManager @Inject constructor(
     }
 
     /**
-     * 容器相关配置变化后重建所有 stdio server（HTTP 不依赖容器，不动）。
-     * 旧进程钉在旧容器的 rootfs 上，必须 teardown 后才能用新容器拉起；单个 server 失败不影响其它。
+     * After container-related config changes, rebuild all stdio servers (HTTP does not depend on the container and is left alone).
+     * Old processes are pinned to the old container's rootfs and must be torn down before they can be launched with the new container; a single server failing does not affect the others.
      */
     private suspend fun reloadStdioServers() = reloadMutex.withLock {
         val servers = configRepository.getEffectiveServers().filter { it.enabled && it.isStdio }
         if (servers.isEmpty()) return@withLock
-        FileLogger.i(TAG, "容器配置变化，重建 ${servers.size} 个 stdio MCP server")
+        FileLogger.i(TAG, "Container config changed, rebuilding ${servers.size} stdio MCP servers")
         for (cfg in servers) {
             teardownServer(cfg.name)
             reconnectOne(cfg)
         }
     }
 
-    /** 删除 server 时仅断开其连接并反注册其工具，不影响其他 server。 */
+    /** When deleting a server, only disconnects it and unregisters its tools, without affecting other servers. */
     suspend fun removeServer(name: String) = reloadMutex.withLock {
         teardownServer(name)
         _statuses.value = _statuses.value.filterNot { it.name == name }

@@ -26,14 +26,14 @@ class FtpSyncClient : RemoteSyncClient {
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val CONTROL_READ_TIMEOUT_MS = 15_000
         private const val DATA_TIMEOUT_MS = 30_000
-        // 内置 FTP 服务器实测空闲 ~30s 即关控制连接，保活间隔必须显著小于它。
+        // The built-in FTP server was measured to close the control connection after ~30s idle, so the keep-alive interval must be significantly smaller.
         private const val CONTROL_KEEPALIVE_SECONDS = 15L
         private const val CONTROL_KEEPALIVE_REPLY_SECONDS = 10L
     }
 
     private val ftpClient = FTPClient()
 
-    /** FTPClient 非线程安全：同一实例上的并发命令会让控制连接回复串台，故所有操作串行化。 */
+    /** FTPClient is not thread-safe: concurrent commands on the same instance would interleave control-connection replies, so all operations are serialized. */
     private val mutex = Mutex()
     private var isConnected = false
 
@@ -56,13 +56,13 @@ class FtpSyncClient : RemoteSyncClient {
             throw IllegalArgumentException("FTP only supports Password authentication")
         }
 
-        // 编码须在 connect 前设置：影响控制命令与路径的编解码（非 ASCII 路径）。
+        // Encoding must be set before connect: it affects encoding/decoding of control commands and paths (non-ASCII paths).
         ftpClient.setControlEncoding(StandardCharsets.UTF_8.name())
         ftpClient.setAutodetectUTF8(true)
         ftpClient.setConnectTimeout(CONNECT_TIMEOUT_MS)
         ftpClient.setDefaultTimeout(CONTROL_READ_TIMEOUT_MS)
         ftpClient.setDataTimeout(DATA_TIMEOUT_MS)
-        // 传输期间数据连接忙、控制连接空闲，靠 NOOP 保活，避免被服务器/路由器按 idle 断开。
+        // During transfers the data connection is busy while the control connection is idle; NOOP keep-alive prevents the server/router from disconnecting it as idle.
         ftpClient.setControlKeepAliveTimeout(Duration.ofSeconds(CONTROL_KEEPALIVE_SECONDS))
         ftpClient.setControlKeepAliveReplyTimeout(Duration.ofSeconds(CONTROL_KEEPALIVE_REPLY_SECONDS))
 
@@ -80,13 +80,13 @@ class FtpSyncClient : RemoteSyncClient {
 
         ftpClient.enterLocalPassiveMode()
         ftpClient.setFileType(FTP.BINARY_FILE_TYPE)
-        FileLogger.i(TAG, "FTP 控制通道编码=${ftpClient.controlEncoding}, UTF8 特性=${ftpClient.hasFeature("UTF8")}")
+        FileLogger.i(TAG, "FTP control channel encoding=${ftpClient.controlEncoding}, UTF8 feature=${ftpClient.hasFeature("UTF8")}")
         isConnected = true
     }
 
     private fun doDisconnect() {
         if (ftpClient.isConnected) {
-            // 连接可能已半开，logout/disconnect 本身也可能失败，忽略后继续。
+            // The connection may already be half-open and logout/disconnect may themselves fail; ignore and continue.
             runCatching { ftpClient.logout() }
             runCatching { ftpClient.disconnect() }
         }
@@ -116,7 +116,7 @@ class FtpSyncClient : RemoteSyncClient {
                 FileOutputStream(localFile).use { fos ->
                     val success = ftpClient.retrieveFile(remotePath, fos)
                     if (!success) {
-                        val detail = "FTP 下载失败: $remotePath, reply=${ftpClient.replyCode} ${ftpClient.replyString.trim()}"
+                        val detail = "FTP download failed: $remotePath, reply=${ftpClient.replyCode} ${ftpClient.replyString.trim()}"
                         if (FTPReply.isNegativePermanent(ftpClient.replyCode)) throw RemoteFileRejectedException(detail)
                         throw IOException(detail)
                     }
@@ -138,7 +138,7 @@ class FtpSyncClient : RemoteSyncClient {
                 FileInputStream(localFile).use { fis ->
                     val success = ftpClient.storeFile(remotePath, fis)
                     if (!success) {
-                        val detail = "FTP 上传失败: $remotePath, reply=${ftpClient.replyCode} ${ftpClient.replyString.trim()}"
+                        val detail = "FTP upload failed: $remotePath, reply=${ftpClient.replyCode} ${ftpClient.replyString.trim()}"
                         if (FTPReply.isNegativePermanent(ftpClient.replyCode)) throw RemoteFileRejectedException(detail)
                         throw IOException(detail)
                     }
@@ -149,7 +149,7 @@ class FtpSyncClient : RemoteSyncClient {
     override suspend fun createDirectory(remotePath: String) =
         withContext(Dispatchers.IO) { mutex.withLock { makeDirectories(remotePath) } }
 
-    /** 逐级建目录（FTP 的 MKD 只建一级），已存在导致的失败忽略。 */
+    /** Creates directories level by level (FTP MKD only creates one level); failures due to already existing are ignored. */
     private fun makeDirectories(path: String) {
         val absolute = path.startsWith("/")
         var current = ""
@@ -165,7 +165,7 @@ class FtpSyncClient : RemoteSyncClient {
     override suspend fun delete(remotePath: String) =
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                // 先尝试当做文件删除，如果失败则当做目录删除
+                // Try deleting as a file first; if that fails, delete as a directory
                 if (!ftpClient.deleteFile(remotePath)) {
                     ftpClient.removeDirectory(remotePath)
                 }
@@ -178,15 +178,15 @@ class FtpSyncClient : RemoteSyncClient {
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 if (!ftpClient.isConnected) {
-                    FileLogger.w(TAG, "FTP 探活: ftpClient.isConnected=false")
+                    FileLogger.w(TAG, "FTP probe: ftpClient.isConnected=false")
                     return@withLock false
                 }
                 try {
                     val ok = ftpClient.sendNoOp()
-                    if (!ok) FileLogger.w(TAG, "FTP 探活 NOOP 未获成功回复: reply=${ftpClient.replyCode}")
+                    if (!ok) FileLogger.w(TAG, "FTP probe NOOP did not get a successful reply: reply=${ftpClient.replyCode}")
                     ok
                 } catch (e: IOException) {
-                    FileLogger.w(TAG, "FTP 探活失败: ${e.javaClass.simpleName}: ${e.message}")
+                    FileLogger.w(TAG, "FTP probe failed: ${e.javaClass.simpleName}: ${e.message}")
                     false
                 }
             }

@@ -7,28 +7,28 @@ import com.aicode.feature.settings.domain.model.ProviderKey
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** 一次 Key 切换的结果，供调用方改写凭据并提示「已切换到第 N 个 Key」。 */
+/** The result of one key switch, for the caller to rewrite the credential and prompt "Switched to key N". */
 data class KeySwitchResult(
     val newKey: String,
-    /** 1 起的新 Key 序号。 */
+    /** The 1-based index of the new key. */
     val newIndex: Int,
     val total: Int
 )
 
 /**
- * 多 Key 轮换器：决定某个 provider 在某条会话上该用哪个 API Key，并在 Key 不可用时切到下一个。
+ * Multi-key rotator: decides which API key a provider should use on a given session, and switches to the next one when a key is unavailable.
  *
- * 状态全部是运行时内存态、不落库：进程重启后回到第一个 Key、冷却记录清空——多 Key 的意义是
- * 遇到鉴权/额度/限流问题时能立刻绕开，没有必须跨进程保持的语义。
+ * All state is runtime in-memory state, not persisted: after a process restart it returns to the first key and cooldown records are cleared — the point of multi-key is
+ * to be able to bypass authentication/quota/rate-limit problems immediately; there is no semantics that must be preserved across processes.
  *
- * **会话粘性**是这里的核心约束：服务端 prompt 缓存按 API Key 隔离，同一会话逐请求换 Key 会让
- * 每轮都落到没有缓存的 Key 上，缓存命中率归零、成本和首字延迟一起恶化。因此只在会话首次取
- * Key、或当前 Key 被判定不可用时才换，其余情况一直粘住同一个 Key。
+ * **Session stickiness** is the core constraint here: the server-side prompt cache is isolated per API key, so changing the key on every request within the same session would make
+ * every round land on a key with no cache, driving the cache hit rate to zero and worsening both cost and first-byte latency. Therefore the key is only changed when a session first obtains
+ * a key, or when the current key is judged unavailable; in all other cases it sticks to the same key.
  */
 @Singleton
 class ProviderKeyRotator @Inject constructor() {
 
-    /** 由最近一次 [activeKey] 记录的 provider Key 配置，供失败上报时读取候选与冷却时长。 */
+    /** The provider key configuration recorded by the most recent [activeKey], for reading candidates and the cooldown duration when a failure is reported. */
     private data class KeySetup(
         val keys: List<ProviderKey>,
         val strategy: KeyRotationStrategy,
@@ -39,18 +39,18 @@ class ProviderKeyRotator @Inject constructor() {
 
     private val setups = mutableMapOf<String, KeySetup>()
 
-    /** providerId + Key → 冷却截止时间戳（毫秒）。 */
+    /** providerId + key → cooldown deadline timestamp (milliseconds). */
     private val cooldownUntil = mutableMapOf<String, Long>()
 
-    /** providerId → Key 值 → 平滑加权轮询的当前权重（运行时内存态）。 */
+    /** providerId → key value → current weight for smooth weighted round-robin (runtime in-memory state). */
     private val weightedState = mutableMapOf<String, MutableMap<String, Long>>()
 
-    /** providerId → 最近一次选中的 Key，供余额查询等旁路请求取「当前活动 Key」。 */
+    /** providerId → the most recently selected key, for bypass requests such as balance queries to obtain the "currently active key". */
     private val lastSelected = mutableMapOf<String, String>()
 
     /**
-     * providerId + sessionId → 该会话粘住的 Key。会话数量无上界，用访问序 LRU 兜住内存，
-     * 被淘汰的老会话下次请求重新分配 Key 即可，没有正确性问题。
+     * providerId + sessionId → the key this session sticks to. The number of sessions is unbounded, so an access-order LRU bounds memory;
+     * an evicted old session simply gets a key reassigned on its next request, with no correctness issue.
      */
     private val sessionKeys = object : LinkedHashMap<String, String>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
@@ -58,8 +58,8 @@ class ProviderKeyRotator @Inject constructor() {
     }
 
     /**
-     * 取 [config] 在 [sessionId] 上当前该用的 Key；没有任何可用 Key、或所有 Key 都在冷却时返回 null。
-     * 同时把该 provider 的 Key 配置快照下来，供后续 [reportFailure] 使用。
+     * Get the key [config] should currently use on [sessionId]; returns null when there is no usable key, or all keys are cooling down.
+     * Also snapshots this provider's key configuration for later use by [reportFailure].
      */
     fun activeKey(config: AIProviderConfig, sessionId: String?): String? {
         val keys = config.effectiveApiKeys
@@ -83,8 +83,8 @@ class ProviderKeyRotator @Inject constructor() {
     }
 
     /**
-     * 只读地取该 provider 当前活动的 Key：不建会话绑定、不推进轮询游标。
-     * 供余额查询这类旁路请求使用——它们要反映「聊天正在用哪个 Key」，而不该干扰轮换节奏。
+     * Read-only retrieval of this provider's currently active key: creates no session binding and does not advance the round-robin cursor.
+     * For bypass requests such as balance queries — they should reflect "which key the chat is using", without disturbing the rotation rhythm.
      */
     fun currentKey(config: AIProviderConfig): String? {
         val keys = config.effectiveApiKeys
@@ -97,11 +97,11 @@ class ProviderKeyRotator @Inject constructor() {
     }
 
     /**
-     * 上报一次可归因于 [key] 的失败：**立即**切到下一个可用 Key、把 [key] 打入冷却并重绑会话，
-     * 返回切换结果；没有可切换的候选（候选已试完、或全部在冷却）时返回 null——此时**不冷却** [key]，
-     * 避免把最后一个可用 Key 也锁死、让用户在一段时间内完全无法发起请求。
+     * Report a failure attributable to [key]: **immediately** switch to the next usable key, put [key] into cooldown and rebind the session,
+     * and return the switch result; returns null when there is no candidate to switch to (all candidates tried, or all cooling down) — in that case [key] is **not** cooled down,
+     * to avoid locking up the last usable key as well and leaving the user completely unable to make requests for a period of time.
      *
-     * [triedKeys] 为本次请求已试过的 Key（含 [key] 自身），用于避免同一次请求内重复试同一个 Key。
+     * [triedKeys] are the keys already tried for this request (including [key] itself), used to avoid trying the same key repeatedly within one request.
      */
     fun reportFailure(
         providerId: String,
@@ -113,7 +113,7 @@ class ProviderKeyRotator @Inject constructor() {
             val setup = setups[providerId] ?: return null
             if (setup.keys.none { it.value == key }) return null
 
-            // 先确认有可切换的候选，没有就别冷却——把最后一个可用 Key 冷却只会让用户在一段时间内完全不可用
+            // First confirm there is a candidate to switch to; if not, do not cool down — cooling down the last usable key would only leave the user completely unable to use it for a period of time
             val next = pick(providerId, setup.keys, setup.strategy, exclude = triedKeys + key) ?: return null
             if (setup.cooldownMillis > 0) {
                 cooldownUntil[stateKey(providerId, key)] = System.currentTimeMillis() + setup.cooldownMillis
@@ -121,14 +121,14 @@ class ProviderKeyRotator @Inject constructor() {
             sessionId?.let { sessionKeys[sessionBinding(providerId, it)] = next }
             lastSelected[providerId] = next
             val index = setup.keys.indexOfFirst { it.value == next } + 1
-            FileLogger.i(TAG, "Key 切换 provider=$providerId ${key.masked()} → ${next.masked()} (第 $index/${setup.keys.size} 个)")
+            FileLogger.i(TAG, "Key switched provider=$providerId ${key.masked()} → ${next.masked()} (key $index/${setup.keys.size})")
             return KeySwitchResult(newKey = next, newIndex = index, total = setup.keys.size)
         }
     }
 
     /**
-     * 按策略挑一个可选 Key：排除 [exclude]（本次已试过）与处于冷却中的 Key，权重 ≤ 0 的也不参与；
-     * 没有可选时返回 null。不做「全冷却就退回最早到期者再试一遍」的回退——那等于拿已知不可用的 Key 硬打。
+     * Pick a selectable key by strategy: exclude [exclude] (already tried this time) and keys in cooldown; keys with weight ≤ 0 do not participate either;
+     * Returns null when none is selectable. Does not fall back to "if all are cooling down, go back to the earliest expiring one and try again" — that would be forcing a request through with a key known to be unusable.
      */
     private fun pick(
         providerId: String,
@@ -147,8 +147,8 @@ class ProviderKeyRotator @Inject constructor() {
     }
 
     /**
-     * 平滑加权轮询（SWRR）：每轮给各候选加上自身权重、取当前权重最大者，再给选中者减去候选总权重。
-     * 无需按权重展开成虚拟列表，权重可到百万级；分布均匀且不会一直落在同一个 Key 上。
+     * Smooth weighted round-robin (SWRR): each round adds each candidate's own weight to it, takes the one with the largest current weight, then subtracts the total candidate weight from the selected one.
+     * No need to expand into a virtual list by weight; weights can reach the millions; the distribution is even and does not keep landing on the same key.
      */
     private fun weightedRoundRobin(providerId: String, participants: List<ProviderKey>): String {
         val current = weightedState.getOrPut(providerId) { mutableMapOf() }
@@ -181,7 +181,7 @@ class ProviderKeyRotator @Inject constructor() {
 
     private fun sessionBinding(providerId: String, sessionId: String) = "$providerId\u0000$sessionId"
 
-    /** 日志脱敏：只留末 4 位，避免把完整 Key 写进日志文件。 */
+    /** Log masking: keep only the last 4 characters, to avoid writing the full key into the log file. */
     private fun String.masked(): String = if (length <= 4) "****" else "****${takeLast(4)}"
 
     private companion object {

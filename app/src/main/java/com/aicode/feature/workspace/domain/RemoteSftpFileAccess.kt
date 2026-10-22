@@ -31,24 +31,24 @@ import javax.inject.Inject
 
 private const val TAG = "RemoteSftpFileAccess"
 
-/** 单次 SFTP 读写缓冲大小。 */
+/** Buffer size for a single SFTP read/write. */
 private const val IO_CHUNK = 32 * 1024
 
-/** `readFile` / `readBytes` 的远程文件大小上限（字节）：超过即抛 [RemoteOutputTooLargeException]，避免整篇读进内存。 */
+/** Size limit (bytes) for remote files read via `readFile` / `readBytes`: exceeding it throws [RemoteOutputTooLargeException] to avoid loading the whole file into memory. */
 private const val MAX_REMOTE_READ_BYTES = 8L * 1024 * 1024
 
-/** 远程文件超过上限时抛出：调用方据此给出「内容过大」提示，而不是误判为文件不存在。 */
+/** Thrown when a remote file exceeds the limit: callers use this to show a "content too large" hint instead of misreporting the file as missing. */
 class RemoteOutputTooLargeException(message: String) : IOException(message)
 
 /**
- * [FileAccessProvider] 的远程实现：走 SFTP 协议读写远程文件。
+ * Remote implementation of [FileAccessProvider]: reads and writes remote files over SFTP.
  *
- * **独立通道**：SFTP 跑在 [RemoteSshConnection.sftp] 建立的第二条 SSH transport 上，与 Bash/命令的
- * exec 通道隔离——sshj 的 SFTP 有间歇性 Buffer 溢出（hierynomus/sshj#461），共用 transport 时崩溃会
- * 一并拖垮命令通道；分开后只影响文件读写，通道失效时丢弃、下次调用自动重建。
+ * **Separate channel**: SFTP runs on a second SSH transport established by [RemoteSshConnection.sftp], isolated from the Bash/command
+ * exec channel — sshj SFTP has an intermittent buffer overflow (hierynomus/sshj#461); sharing a transport would let a crash
+ * take down the command channel as well; separated, it only affects file I/O, and a failed channel is discarded and rebuilt on the next call.
  *
- * 路径映射：AI 给的 `~/workspace/...` 映射到当前选中工作区的远程绝对路径；其它绝对路径（如 `/etc/...`）
- * 直接作为远程绝对路径使用。sshj 的 [SFTPClient] 非线程安全，所有操作经 [sftpMutex] 串行化。
+ * Path mapping: AI-provided `~/workspace/...` maps to the remote absolute path of the currently selected workspace; other absolute paths (e.g. `/etc/...`)
+ * are used directly as remote absolute paths. sshj's [SFTPClient] is not thread-safe, so all operations are serialized via [sftpMutex].
  */
 class RemoteSftpFileAccess @Inject constructor(
     private val connection: RemoteSshConnection,
@@ -57,25 +57,25 @@ class RemoteSftpFileAccess @Inject constructor(
 
     private val sftpMutex = Mutex()
 
-    /** 当前选中工作区在远程服务器上的真实路径（如 /data/.../test/111）。 */
+    /** The real path of the currently selected workspace on the remote server (e.g. /data/.../test/111). */
     private fun currentWorkspaceRoot(): String {
-        val cfg = connection.config ?: throw IllegalStateException("SSH 未连接")
-        // currentPath() 远程模式返回选中工作区的远程绝对路径；未选中时回退到 remoteWorkspacePath
+        val cfg = connection.config ?: throw IllegalStateException("SSH not connected")
+        // currentPath() in remote mode returns the remote absolute path of the selected workspace; falls back to remoteWorkspacePath when none is selected
         val path = workspaceRepository.currentPath()
         return if (path.isNotBlank() && path != "/") path else cfg.remoteWorkspacePath.trimEnd('/')
     }
 
-    /** 把 AI 路径映射到远程服务器上的真实路径。 */
+    /** Maps an AI path to the real path on the remote server. */
     private fun toRemotePath(path: String): String =
         remotePathFor(path, currentWorkspaceRoot(), connection.remoteHome)
 
-    /** 把远程路径还原为 AI 视角的容器路径（回显用）。 */
+    /** Converts a remote path back to the AI-facing container path (for display). */
     private fun toDisplayPathFromRemote(remotePath: String): String =
         displayPathFor(remotePath, currentWorkspaceRoot())
 
     /**
-     * 在独立 SFTP 通道上串行执行 [block]。传输层异常时丢弃当前通道（下次调用自动重建）后原样抛出；
-     * 业务错误（文件不存在/已存在、SFTP 状态码错误）不重建。不做自动重试——写操作重试可能重复落盘。
+     * Runs [block] serially on the dedicated SFTP channel. On a transport error, discards the current channel (rebuilt automatically on the next call) and rethrows as-is;
+     * business errors (file not found / already exists, SFTP status errors) do not trigger a rebuild. No automatic retry — retrying a write could duplicate data on disk.
      */
     private fun <T> withSftp(block: (SFTPClient) -> T): T = runBlocking {
         withContext(Dispatchers.IO) {
@@ -91,14 +91,14 @@ class RemoteSftpFileAccess @Inject constructor(
     }
 
     /**
-     * 复用已打开的 SFTP 通道执行一次操作（不重新取 client）。供 [readLines] 惰性迭代使用：每次只锁住
-     * 一次读取，`yield` 在锁外，调用方中途放弃迭代时不会把 [sftpMutex] 永久占住。
+     * Runs one operation reusing the already-open SFTP channel (without fetching a new client). Used by [readLines] for lazy iteration: each lock covers
+     * a single read, `yield` happens outside the lock, so abandoning iteration midway does not hold [sftpMutex] forever.
      */
     private fun <T> onSftp(block: () -> T): T = runBlocking {
         withContext(Dispatchers.IO) { sftpMutex.withLock { guarded(block) } }
     }
 
-    /** 传输层异常时丢弃 SFTP 通道（下次调用自动重建）后原样抛出；业务错误不重建。 */
+    /** On a transport error, discards the SFTP channel (rebuilt automatically on the next call) and rethrows as-is; business errors do not trigger a rebuild. */
     private suspend fun <T> guarded(block: () -> T): T = try {
         block()
     } catch (e: Exception) {
@@ -111,15 +111,15 @@ class RemoteSftpFileAccess @Inject constructor(
     override fun readFile(path: String): String = String(readAll(toRemotePath(path)), Charsets.UTF_8)
 
     /**
-     * 惰性逐行读取：每次只物化当前一行（单行封顶 64K 字符），读到哪算哪，整文件不进内存。
-     * 序列可重复迭代（每次迭代重新打开远程文件）；调用方需在 IO 线程上迭代。
+     * Lazy line-by-line reading: only the current line is materialized at a time (capped at 64K characters per line), read on demand, without loading the whole file into memory.
+     * The sequence is re-iterable (each iteration reopens the remote file); callers must iterate on an IO thread.
      */
     override fun readLines(path: String): Sequence<String> {
         val remote = toRemotePath(path)
         return sequence {
             val reader = withSftp { sftp ->
                 val attrs = sftp.statExistence(remote) ?: throw NoSuchFileException(File(remote))
-                if (attrs.type == FileMode.Type.DIRECTORY) throw IOException("是目录，无法按文件读取: $remote")
+                if (attrs.type == FileMode.Type.DIRECTORY) throw IOException("Is a directory, cannot read as a file: $remote")
                 BoundedLineReader(InputStreamReader(RemoteFileInputStream(sftp.open(remote))))
             }
             try {
@@ -208,7 +208,7 @@ class RemoteSftpFileAccess @Inject constructor(
 
     override fun writeStream(path: String, input: InputStream, overwrite: Boolean): Long {
         val remote = toRemotePath(path)
-        // 先落到 .aicode-part 再改名：传输中途断开时不会在目标位置留下半截文件
+        // Write to .aicode-part first, then rename: a disconnect mid-transfer will not leave a partial file at the target
         val tmp = "$remote.aicode-part"
         return withSftp { sftp ->
             if (sftp.statExistence(remote) != null && !overwrite) throw FileAlreadyExistsException(File(remote))
@@ -230,7 +230,7 @@ class RemoteSftpFileAccess @Inject constructor(
                 runCatching { sftp.rm(tmp) }
                 throw e
             }
-            // 目标已存在时先删再改名（SFTP v3 无跨平台可靠的「覆盖改名」）
+            // If the target already exists, delete it before renaming (SFTP v3 has no reliable cross-platform overwrite-rename)
             if (sftp.statExistence(remote) != null) runCatching { sftp.rm(remote) }
             sftp.rename(tmp, remote)
             written
@@ -247,17 +247,17 @@ class RemoteSftpFileAccess @Inject constructor(
             }
             tempFile
         } catch (e: Exception) {
-            // 用完即删：临时文件不依赖 deleteOnExit（只在进程退出清），失败路径也回收，避免长会话累积。
+            // Delete after use: temp files do not rely on deleteOnExit (only cleaned up at process exit); the failure path also cleans up to avoid accumulation over long sessions.
             runCatching { tempFile.delete() }
             if (e is NoSuchFileException) throw e
-            FileLogger.e(TAG, "copyToLocal 失败: $remote", e)
+            FileLogger.e(TAG, "copyToLocal failed: $remote", e)
             throw NoSuchFileException(File(remote))
         }
     }
 
     override fun delete(path: String) {
         val remote = toRemotePath(path)
-        // 接口约定 delete 只删文件或空目录：目录非空时 rmdir 失败 → 抛异常（与本地 File.delete() 对齐）。
+        // Interface contract: delete only removes files or empty directories: rmdir fails on a non-empty directory → throws (aligned with local File.delete()).
         withSftp { sftp ->
             val attrs = sftp.statExistence(remote) ?: return@withSftp
             if (attrs.type == FileMode.Type.DIRECTORY) sftp.rmdir(remote) else sftp.rm(remote)
@@ -325,13 +325,13 @@ class RemoteSftpFileAccess @Inject constructor(
 
     override fun toDisplayPath(path: String): String = toDisplayPathFromRemote(toRemotePath(path))
 
-    /** 读取远程文件全部字节；不存在抛 [NoSuchFileException]，超过 [MAX_REMOTE_READ_BYTES] 抛 [RemoteOutputTooLargeException]。 */
+    /** Reads all bytes of a remote file; throws [NoSuchFileException] if missing, [RemoteOutputTooLargeException] if it exceeds [MAX_REMOTE_READ_BYTES]. */
     private fun readAll(remote: String): ByteArray = withSftp { sftp ->
         val attrs = sftp.statExistence(remote) ?: throw NoSuchFileException(File(remote))
-        if (attrs.type == FileMode.Type.DIRECTORY) throw IOException("是目录，无法按文件读取: $remote")
+        if (attrs.type == FileMode.Type.DIRECTORY) throw IOException("Is a directory, cannot read as a file: $remote")
         if (attrs.size > MAX_REMOTE_READ_BYTES) {
             throw RemoteOutputTooLargeException(
-                "远程文件超过 ${MAX_REMOTE_READ_BYTES / 1024 / 1024}MB，请改用 start_line/end_line 分段读取"
+                "Remote file exceeds ${MAX_REMOTE_READ_BYTES / 1024 / 1024}MB, please read it in sections using start_line/end_line"
             )
         }
         sftp.open(remote).use { rf -> readFully(rf) }
@@ -359,7 +359,7 @@ class RemoteSftpFileAccess @Inject constructor(
         }
     }
 
-    /** 递归删除（SFTP 无递归删除原语）：后序遍历，目录在子项删完后 rmdir。 */
+    /** Recursive delete (SFTP has no recursive-delete primitive): post-order traversal, rmdir a directory after its children are deleted. */
     private fun deleteRecursive(sftp: SFTPClient, remote: String) {
         val attrs = sftp.statExistence(remote) ?: return
         if (attrs.type == FileMode.Type.DIRECTORY) {
@@ -374,7 +374,7 @@ class RemoteSftpFileAccess @Inject constructor(
         }
     }
 
-    /** 递归复制（SFTP 无服务端复制原语）：目录建好后逐项复制，文件流式读写。 */
+    /** Recursive copy (SFTP has no server-side copy primitive): creates directories, then copies item by item, streaming file reads/writes. */
     private fun copyRecursive(sftp: SFTPClient, from: String, to: String) {
         val attrs = sftp.statExistence(from) ?: throw NoSuchFileException(File(from))
         if (attrs.type == FileMode.Type.DIRECTORY) {
@@ -406,7 +406,7 @@ class RemoteSftpFileAccess @Inject constructor(
     }
 }
 
-/** 把 SFTP [RemoteFile] 的随机读适配为顺序 [InputStream]，供 [BoundedLineReader] 惰性逐行读取。 */
+/** Adapts random reads on an SFTP [RemoteFile] to a sequential [InputStream] for lazy line-by-line reading by [BoundedLineReader]. */
 private class RemoteFileInputStream(private val file: RemoteFile) : InputStream() {
     private var offset = 0L
     private val single = ByteArray(1)
@@ -429,7 +429,7 @@ private class RemoteFileInputStream(private val file: RemoteFile) : InputStream(
     override fun close() = file.close()
 }
 
-/** SFTP 权限集合 → 9 位 rwx 字符串（如 `rw-r--r--`）。 */
+/** SFTP permission set → 9-character rwx string (e.g. `rw-r--r--`). */
 internal fun formatPermissions(perms: Set<FilePermission>): String {
     fun bit(p: FilePermission, c: Char) = if (p in perms) c else '-'
     return buildString {
@@ -445,10 +445,10 @@ internal fun formatPermissions(perms: Set<FilePermission>): String {
     }
 }
 
-/** AI 路径 → 远程真实路径：`~/workspace` 前缀映射到 [workspaceRoot]，其它绝对路径原样使用。 */
+/** AI path → remote real path: the `~/workspace` prefix maps to [workspaceRoot], other absolute paths are used as-is. */
 internal fun remotePathFor(path: String, workspaceRoot: String, remoteHome: String?): String {
     val root = workspaceRoot.trimEnd('/')
-    // CONTAINER_ROOT 是 ~/workspace，展开 ~ 后做前缀匹配
+    // CONTAINER_ROOT is ~/workspace; expand ~ before prefix matching
     val wsRoot = (remoteHome ?: "~").trimEnd('/') + "/workspace"
     val p = path.trim().let {
         if (it.startsWith("~/")) {
@@ -465,7 +465,7 @@ internal fun remotePathFor(path: String, workspaceRoot: String, remoteHome: Stri
     }
 }
 
-/** 远程真实路径 → AI 视角的容器路径（回显用）。 */
+/** Remote real path → AI-facing container path (for display). */
 internal fun displayPathFor(remotePath: String, workspaceRoot: String): String {
     val root = workspaceRoot.trimEnd('/')
     return when {

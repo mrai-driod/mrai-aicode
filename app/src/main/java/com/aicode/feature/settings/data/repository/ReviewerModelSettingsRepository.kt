@@ -13,10 +13,10 @@ private val Context.reviewerModelDataStore by preferencesDataStore(
 )
 
 /**
- * 持久化「AI 命令审查器专用模型」选择（providerId + model 两字符串）。
+ * Persists the "AI command reviewer model" selection (two strings: providerId + model).
  *
- * 「自主执行」挡位下，每条待授权命令先交审查器模型独立评审；未配置专用模型（providerId 为空）
- * 即跟随当前聊天模型。DataStore 用法与 TitleModelSettingsRepository 一致。
+ * In "autonomous execution" mode, each command awaiting authorization is first independently reviewed by the reviewer model; when no dedicated model is configured (providerId is empty),
+ * it follows the current chat model. DataStore usage is consistent with TitleModelSettingsRepository.
  */
 @Singleton
 class ReviewerModelSettingsRepository @Inject constructor(
@@ -25,15 +25,15 @@ class ReviewerModelSettingsRepository @Inject constructor(
     context.reviewerModelDataStore, "reviewer_provider_id", "reviewer_model"
 ) {
 
-    /** 写入审查器专用模型（设空字符串即等同 [clear]）。 */
+    /** Writes the reviewer-specific model (setting an empty string is equivalent to [clear]). */
     suspend fun setReviewerModel(providerId: String, model: String) = setSelection(providerId, model)
 
-    /** 清空配置——回退到「跟随当前聊天模型」。 */
+    /** Clears the configuration — falls back to "follow the current chat model". */
     suspend fun clear() = clearSelection()
 
-    /** 读取一次当前审查器专用 providerId（冷读用）。 */
+    /** Reads the current reviewer-specific providerId once (for cold reads). */
     suspend fun getReviewerProviderId(): String = readProviderId()
 
-    /** 读取一次当前审查器专用 model（冷读用）。 */
+    /** Reads the current reviewer-specific model once (for cold reads). */
     suspend fun getReviewerModel(): String = readModel()
 }

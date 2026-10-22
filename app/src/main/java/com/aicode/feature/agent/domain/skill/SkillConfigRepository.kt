@@ -28,13 +28,13 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.putJsonArray
 
 /**
- * 技能启停配置持久化，支持全局 + 项目级两级：
- * - 全局：当前执行环境的 `~/.aicode/skills.json`（跨项目保留）；
- * - 项目级：`workspacePath/.aicode/skills.json`（随工作区走，可 git 追踪）。
+ * Persistence for skill enable/disable configuration, supporting two levels, global + project-level:
+ * - Global: `~/.aicode/skills.json` in the current execution environment (kept across projects);
+ * - Project-level: `workspacePath/.aicode/skills.json` (travels with the workspace, can be tracked by git).
  *
- * 格式：`{"disabled": ["skill-a", "skill-b"]}`，仅存「禁用名单」这一个事实；
- * 生效禁用集合 = 全局 + 项目并集。每次读取都从磁盘加载，外部手工编辑即时生效；
- * 名单中不存在的技能名在过滤时天然被忽略，无需清理。
+ * Format: `{"disabled": ["skill-a", "skill-b"]}`; it stores only the single fact of the "disabled list";
+ * the effective disabled set = the union of global + project. Every read loads from disk, so external manual edits take effect immediately;
+ * skill names in the list that no longer exist are naturally ignored when filtering, so no cleanup is needed.
  */
 @Singleton
 class SkillConfigRepository @Inject constructor(
@@ -43,20 +43,20 @@ class SkillConfigRepository @Inject constructor(
     private val fileChangeHub: FileChangeHub,
     private val fileAccess: FileAccessProvider
 ) {
-    /** 本地全局配置文件，仅用于宿主文件变更监听。 */
+    /** The local global config file, used only for host file-change watching. */
     private fun globalFile(): File = File(containerInstaller.aicodeDir, CONFIG_FILE)
 
-    /** 当前工作区的项目级配置文件：`workspacePath/.aicode/skills.json`。 */
+    /** The project-level config file of the current workspace: `workspacePath/.aicode/skills.json`. */
     private fun projectFile(): File = File(projectAicodeRoot.current(), CONFIG_FILE)
 
-    /** 当前生效的禁用技能名集合（全局 + 项目并集，归一化为小写）。 */
+    /** The currently effective set of disabled skill names (union of global + project, normalized to lowercase). */
     fun disabledNames(): Set<String> {
         val global = readGlobalDisabled()
         val project = readDisabled(projectFile())
         return (global + project).map { it.lowercase() }.toSet()
     }
 
-    /** 在指定作用域的配置中启用/禁用某个技能。 */
+    /** Enables/disables a skill in the config of the given scope. */
     fun setDisabled(name: String, disabled: Boolean, scope: SkillScope) {
         val names = (if (scope == SkillScope.GLOBAL) readGlobalDisabled() else readDisabled(projectFile()))
             .toMutableSet()
@@ -72,17 +72,17 @@ class SkillConfigRepository @Inject constructor(
         if (fileAccess.isFile(GLOBAL_CONFIG_PATH)) parseDisabled(fileAccess.readFile(GLOBAL_CONFIG_PATH))
         else emptySet()
     }.getOrElse {
-        FileLogger.w(TAG, "读取 $CONFIG_FILE 失败: ${it.message}")
+        FileLogger.w(TAG, "Failed to read $CONFIG_FILE: ${it.message}")
         emptySet()
     }
 
-    // ── 外部变更监听：容器内/手工直接增删改技能目录或 skills.json 后，数秒内通知 UI 刷新 ──
+    // -- External change watching: after the skill directory or skills.json is added to, deleted from, or edited directly in the container / by hand, notify the UI to refresh within a few seconds --
 
     private val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
-     * 技能目录或配置文件被外部修改时广播一次。订阅驱动：只在有订阅者（设置页）期间才由
-     * [FileChangeHub] 监听技能目录与两个 skills.json，无人订阅时零开销。
+     * Broadcasts once when the skill directory or a config file is modified externally. Subscription-driven: only while there are subscribers (the settings page) does
+     * [FileChangeHub] watch the skill directory and the two skills.json files; with no subscribers there is zero overhead.
      */
     val changes: SharedFlow<Unit> = merge(
         fileChangeHub.watchAicode(SKILLS_DIR, recursive = true),
@@ -91,11 +91,11 @@ class SkillConfigRepository @Inject constructor(
         fileChangeHub.watchWorkspace("${FileChangeHub.CONTAINER_ROOT}/$AICODE_DIR")
     ).mapNotNull { batch ->
         if (!batch.changes.any(::isSkillChange)) return@mapNotNull null
-        FileLogger.i(TAG, "检测到技能目录或配置变化，已通知刷新")
+        FileLogger.i(TAG, "Detected a change to the skill directory or config; refresh notified")
         Unit
     }.shareIn(watchScope, SharingStarted.WhileSubscribed(), replay = 0)
 
-    /** 技能相关变更：两个 skills.json，或全局/项目技能目录自身及其下的任何文件。 */
+    /** A skill-related change: either of the two skills.json files, or the global/project skill directory itself or any file under it. */
     private fun isSkillChange(change: FileChange): Boolean {
         val path = change.hostPath
         if (path == globalFile().absolutePath) return true
@@ -117,7 +117,7 @@ class SkillConfigRepository @Inject constructor(
 
         fun parseDisabled(raw: String): Set<String> {
             val root = runCatching { JSON.parseToJsonElement(raw).jsonObject }.getOrElse {
-                FileLogger.w(TAG, "技能配置 JSON 解析失败: ${it.message}")
+                FileLogger.w(TAG, "Failed to parse skill config JSON: ${it.message}")
                 return emptySet()
             }
             return (root["disabled"] as? JsonArray)
@@ -136,7 +136,7 @@ class SkillConfigRepository @Inject constructor(
         fun readDisabled(file: File): Set<String> {
             if (!file.isFile) return emptySet()
             return runCatching { parseDisabled(file.readText()) }.getOrElse {
-                FileLogger.w(TAG, "读取 ${file.name} 失败: ${it.message}")
+                FileLogger.w(TAG, "Failed to read ${file.name}: ${it.message}")
                 emptySet()
             }
         }
@@ -144,11 +144,11 @@ class SkillConfigRepository @Inject constructor(
         fun writeDisabled(file: File, names: Set<String>) {
             file.parentFile?.mkdirs()
             val json = serializeDisabled(names)
-            // 临时文件 + rename 原子落盘，避免写一半崩溃损坏配置
+            // Temp file + rename for an atomic write, so a crash mid-write does not corrupt the config
             val tmp = File(file.parentFile, "${file.name}.tmp")
             tmp.writeText(json)
             if (!tmp.renameTo(file)) {
-                // rename 失败（罕见），回退直接写，避免丢配置
+                // If rename fails (rare), fall back to writing directly so the config is not lost
                 file.writeText(json)
             }
         }

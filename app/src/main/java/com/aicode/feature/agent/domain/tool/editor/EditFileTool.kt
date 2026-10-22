@@ -23,21 +23,21 @@ import javax.inject.Inject
 private const val TAG = "EditFileTool"
 
 /**
- * 基于「精确字符串匹配」的文件编辑工具，取代旧的按行号 insert/replace/delete 三件套。
+ * A file editing tool based on exact string matching, replacing the old line-number insert/replace/delete trio.
  *
- * 选择字符串匹配而非行号的原因：连续编辑时，第一次修改会让后续所有行号发生漂移，
- * 行号方案因此天然脆弱。字符串匹配只依赖内容本身，且一个工具即可覆盖三种语义：
- *   - 替换：old_string -> new_string
- *   - 删除：new_string 传空串
- *   - 插入：把某段替换为「它自身 + 新内容」
+ * Why string matching rather than line numbers: during consecutive edits, the first change shifts all subsequent line numbers,
+ * so the line-number approach is inherently fragile. String matching depends only on the content itself, and one tool covers three semantics:
+ *   - Replace: old_string -> new_string
+ *   - Delete: pass an empty string as new_string
+ *   - Insert: replace a passage with "itself + the new content"
  *
- * 一次调用可对同一个文件进行多处编辑：传入 edits 数组，按数组顺序依次应用，
- * 每个编辑都在前一个编辑的结果之上匹配。整批编辑是「全有或全无」的——只要有任何
- * 一个编辑匹配失败（找不到或匹配多处而未开 replace_all），整次调用都不写盘并报错，
- * 文件不会处于改了一半的状态。
+ * One call can make several edits to the same file: pass an edits array, applied in array order,
+ * with each edit matching on top of the result of the previous edit. The whole batch is all-or-nothing -- if any
+ * edit fails to match (not found, or matching several places without replace_all enabled), the whole call writes nothing to disk and reports an error,
+ * so the file is never left half-edited.
  *
- * 为保证安全，默认要求每个 old_string 在当前内容中唯一；若有多处匹配，需提供更长的
- * 上下文，或对该编辑显式设置 replace_all=true 才会全部替换。
+ * For safety, by default each old_string must be unique in the current content; if there are multiple matches, provide longer
+ * context, or explicitly set replace_all=true on that edit to replace them all.
  */
 class EditFileTool @Inject constructor(
     private val fileAccess: FileAccessProvider
@@ -48,7 +48,7 @@ class EditFileTool @Inject constructor(
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.WRITE_WORKSPACE)
 
-    /** edits 数组单个元素的结构，供 function-calling 的 items schema。 */
+    /** The structure of one element of the edits array, for the function-calling items schema. */
     private val editItemSchema: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
@@ -80,10 +80,10 @@ class EditFileTool @Inject constructor(
         )
     )
 
-    /** 解析后的单个编辑。 */
+    /** One parsed edit. */
     private data class Edit(val oldString: String, val newString: String, val replaceAll: Boolean)
 
-    /** 单个编辑应用后的差异，用于 UI 渲染与喂回模型。 */
+    /** The difference after applying one edit, for UI rendering and feeding back to the model. */
     private data class Hunk(val startLine: Int, val added: Int, val removed: Int, val diff: String)
 
     override fun buildPermissionRequest(
@@ -111,7 +111,7 @@ class EditFileTool @Inject constructor(
             val edits = parseEdits(args)
                 ?: return ToolResult.Error("Missing required parameter: edits", "MISSING_EDITS")
 
-            // 逐个校验编辑本身的合法性（空 old_string / 无变化），避免无意义改动。
+            // Validate each edit itself for validity (empty old_string / no change), avoiding meaningless changes.
             edits.forEachIndexed { i, e ->
                 if (e.oldString.isEmpty()) {
                     return ToolResult.Error("Edit ${i + 1}'s old_string must not be empty; use writeFile to create a file", "EMPTY_OLD_STRING")
@@ -123,11 +123,11 @@ class EditFileTool @Inject constructor(
 
             FileLogger.d(TAG, "edit_file path=$path (edits=${edits.size})")
             if (!fileAccess.exists(path)) {
-                FileLogger.w(TAG, "edit_file 文件不存在: $path")
+                FileLogger.w(TAG, "edit_file file does not exist: $path")
                 return ToolResult.Error("File does not exist: $path", "FILE_NOT_FOUND")
             }
 
-            // 先在内存里顺序应用所有编辑；任一失败立刻返回、绝不写盘（全有或全无）。
+            // First apply all edits in order in memory; any failure returns immediately and never writes to disk (all or nothing).
             var content = fileAccess.readFile(path)
             val hunks = ArrayList<Hunk>(edits.size)
             var totalReplacements = 0
@@ -135,22 +135,22 @@ class EditFileTool @Inject constructor(
             edits.forEachIndexed { i, e ->
                 val occurrences = content.split(e.oldString).size - 1
                 if (occurrences == 0) {
-                    FileLogger.w(TAG, "edit_file 第 ${i + 1} 个编辑未匹配: $path")
+                    FileLogger.w(TAG, "edit_file edit ${i + 1} did not match: $path")
                     return ToolResult.Error(
                         "Edit ${i + 1}'s old_string was not found in the file; make sure the content (including indentation/line breaks) matches the current file exactly",
                         "NO_MATCH"
                     )
                 }
                 if (occurrences > 1 && !e.replaceAll) {
-                    FileLogger.w(TAG, "edit_file 第 ${i + 1} 个编辑匹配 $occurrences 处且非 replace_all: $path")
+                    FileLogger.w(TAG, "edit_file edit ${i + 1} matched $occurrences places and replace_all is not set: $path")
                     return ToolResult.Error(
                         "Edit ${i + 1}'s old_string matches $occurrences places in the file; provide a longer unique context, or set replace_all=true for this edit",
                         "MULTIPLE_MATCHES"
                     )
                 }
 
-                // 变更在「应用本编辑前」内容中的起始行号（1 基）。因为内容已包含此前所有编辑的结果，
-                // 这个行号已经反映了前序编辑造成的行漂移，对自上而下的常规编辑顺序是准确的。
+                // The starting line number (1-based) of the change in the content "before this edit is applied". Because the content already includes the results of all previous edits,
+                // this line number already reflects the line drift caused by earlier edits, and is accurate for the usual top-to-bottom edit order.
                 val matchIndex = content.indexOf(e.oldString)
                 val startLine = if (matchIndex >= 0) content.substring(0, matchIndex).count { it == '\n' } + 1 else 1
 
@@ -177,7 +177,7 @@ class EditFileTool @Inject constructor(
                 ))
             })
 
-            FileLogger.v(TAG, "edit_file 成功 path=$path edits=${edits.size} replacements=$totalReplacements")
+            FileLogger.v(TAG, "edit_file succeeded path=$path edits=${edits.size} replacements=$totalReplacements")
             ToolResult.Success(
                 JsonObject(mapOf(
                     "status" to JsonPrimitive("edited"),
@@ -191,13 +191,13 @@ class EditFileTool @Inject constructor(
                 ))
             )
         } catch (e: Exception) {
-            FileLogger.e(TAG, "edit_file 异常", e)
+            FileLogger.e(TAG, "edit_file error", e)
             ToolResult.Error(e.message ?: "Failed to edit file", "EDIT_ERROR")
         }
     }
 
     /**
-     * 解析编辑列表：读取 edits 数组。
+     * Parses the edit list: reads the edits array.
      */
     private fun parseEdits(args: Map<String, JsonElement>): List<Edit>? {
         val arr = args["edits"] as? JsonArray ?: return null

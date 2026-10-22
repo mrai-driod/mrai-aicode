@@ -3,47 +3,50 @@ package com.aicode.feature.agent.domain.container
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
-/** 流式执行命令时产生的事件，供终端逐行实时渲染。 */
+/** Events produced while streaming a command execution, for the terminal to render line by line in real time. */
 sealed interface CommandEvent {
-    /** 一行标准输出/错误（stderr 已合并到 stdout）。 */
+    /** One line of standard output/error (stderr has been merged into stdout). */
     data class Line(val text: String) : CommandEvent
-    /** 命令结束，附退出码（兜底 shell 无法取到时为 null）。 */
+    /** The command finished, with its exit code (null when the fallback shell cannot obtain it). */
     data class Exit(val code: Int?) : CommandEvent
 }
 
 /**
- * 一次命令执行的结果：限幅后的完整输出 + 退出码（超时/异常时为 null）。
- * [outputTruncated] 为 true 表示输出超过了引擎上限被截断（不限幅通道见 [MAX_UNBOUNDED_CHARS]），
- * 调用方不应把这种输出当作完整结果解析。
+ * The result of one command execution: the full output after capping + the exit code (null on timeout/error).
+ * [outputTruncated] being true means the output exceeded the engine's cap and was truncated (for the uncapped
+ * channel see [MAX_UNBOUNDED_CHARS]); callers should not parse such output as a complete result.
  */
 data class CommandResult(val output: String, val exitCode: Int?, val outputTruncated: Boolean = false)
 
 /**
- * 命令执行后端抽象：把"在哪执行命令"从硬编码的本地 PRoot 解耦。
+ * Command execution backend abstraction: decouples "where commands are executed" from the hardcoded local PRoot.
  *
- * 两套实现：
- * - [LinuxContainerEngine]：本地 PRoot 容器，原有逻辑零变化；
- * - `RemoteSshEngine`：远程 SSH 服务器，用 sshj exec channel 执行。
+ * Two implementations:
+ * - [LinuxContainerEngine]: the local PRoot container, with the original logic unchanged;
+ * - `RemoteSshEngine`: a remote SSH server, executing via an sshj exec channel.
  *
- * 工具层（[com.aicode.feature.agent.domain.tool.container.ExecuteCommandTool]、
- * [com.aicode.feature.agent.domain.tool.explorer.SearchCodeTool]、
- * [com.aicode.feature.git.domain.GitRepository]）依赖本接口而非具体实现，
- * 由 DI 按当前执行模式注入对应实例。
+ * The tool layer ([com.aicode.feature.agent.domain.tool.container.ExecuteCommandTool],
+ * [com.aicode.feature.agent.domain.tool.explorer.SearchCodeTool],
+ * [com.aicode.feature.git.domain.GitRepository]) depends on this interface rather than a concrete
+ * implementation; DI injects the corresponding instance according to the current execution mode.
  *
- * PRoot 专属方法（[LinuxContainerEngine.startStdioProcess]、
- * [LinuxContainerEngine.buildProotInvocation]、[LinuxContainerEngine.incPromptInFlight] 等）
- * 不属于本接口——它们仅供本地 MCP stdio / 凭据 helper / 终端 PTY 使用，远程模式下仍走本地。
+ * PRoot-specific methods ([LinuxContainerEngine.startStdioProcess],
+ * [LinuxContainerEngine.buildProotInvocation], [LinuxContainerEngine.incPromptInFlight], etc.)
+ * are not part of this interface — they are only for local MCP stdio / credential helpers / the terminal PTY,
+ * and in remote mode they still run locally.
  */
 interface CommandEngine {
 
-    /** 执行后端初始化进度，供 UI 实时展示。远程模式下通常恒为 [ContainerInitState.Ready]。 */
+    /** Execution backend initialization progress, for the UI to display in real time. In remote mode this is normally always [ContainerInitState.Ready]. */
     val initProgress: StateFlow<ContainerInitState>
 
     /**
-     * 流式执行命令：每读到一行就 emit 一个 [CommandEvent.Line]，命令结束 emit [CommandEvent.Exit]。
-     * 首次调用可能触发后端初始化（本地会解压 rootfs）。
+     * Executes a command as a stream: emits a [CommandEvent.Line] for each line read, and emits
+     * [CommandEvent.Exit] when the command ends. The first call may trigger backend initialization
+     * (locally this extracts the rootfs).
      *
-     * [timeoutMs] 为命令最长执行时间（毫秒），超时后强制终止并追加超时提示。
+     * [timeoutMs] is the maximum execution time for the command (milliseconds); on timeout the command is
+     * forcibly terminated and a timeout notice is appended.
      */
     fun runCommandStream(
         command: String,
@@ -52,8 +55,9 @@ interface CommandEngine {
     ): Flow<CommandEvent>
 
     /**
-     * 同步执行命令并返回输出。首次调用可能触发后端初始化。
-     * [timeoutMs] 为命令最长执行时间（毫秒），超时后强制终止，返回已收集的部分输出。
+     * Executes a command synchronously and returns the output. The first call may trigger backend initialization.
+     * [timeoutMs] is the maximum execution time for the command (milliseconds); on timeout the command is
+     * forcibly terminated and the partial output collected so far is returned.
      */
     suspend fun runCommandSync(
         command: String,
@@ -62,8 +66,8 @@ interface CommandEngine {
     ): String
 
     /**
-     * 同 [runCommandSync]，但一并返回退出码（超时/异常时为 null）。
-     * 供需要据退出码判成败的调用方使用（如 git 写操作）。
+     * Same as [runCommandSync], but also returns the exit code (null on timeout/error).
+     * For callers that need to judge success/failure by exit code (e.g. git write operations).
      */
     suspend fun runCommandSyncWithExit(
         command: String,
@@ -72,13 +76,15 @@ interface CommandEngine {
     ): CommandResult
 
     /**
-     * 同 [runCommandSyncWithExit]，但输出**不做限幅截断**（保留连续开头，不插省略提示）。
-     * 供需要完整文本的调用方使用（如 git diff 页读取 diff/文件内容）：
-     * AI 工具链路的默认限幅（[BoundedOutput] 头尾各 2 万字符）会把截断占位符
-     * 混入 diff 数据流，导致 UI 渲染出伪 diff 行。
+     * Same as [runCommandSyncWithExit], but the output is **not capped or truncated** (the continuous beginning
+     * is kept, with no omission notice inserted). For callers that need the complete text (e.g. the git diff
+     * page reading a diff/file contents): the AI tool pipeline's default cap ([BoundedOutput] keeps 20k
+     * characters each at the head and tail) would mix truncation placeholders into the diff data stream,
+     * causing the UI to render fake diff lines.
      *
-     * 输出超过 [MAX_UNBOUNDED_CHARS] 字符即停止保留并置 [CommandResult.outputTruncated]，
-     * 调用方据此提示「输出过大」而不是拿半截数据解析。
+     * Once the output exceeds [MAX_UNBOUNDED_CHARS] characters, retention stops and
+     * [CommandResult.outputTruncated] is set; the caller uses this to prompt "output too large" instead of
+     * parsing half-truncated data.
      */
     suspend fun runCommandSyncUnbounded(
         command: String,
@@ -87,8 +93,9 @@ interface CommandEngine {
     ): CommandResult
 
     /**
-     * 仅在后端已就绪时执行命令；不会触发初始化（不解压 rootfs / 不建 SSH 连接）。
-     * 未就绪时返回 null，让调用方走 fallback。供只读工具做性能增强使用（如 search 优先用 rg）。
+     * Executes a command only when the backend is already ready; does not trigger initialization (does not
+     * extract the rootfs / does not open an SSH connection). Returns null when not ready, letting the caller
+     * fall back. Used by read-only tools as a performance enhancement (e.g. search preferring rg).
      */
     suspend fun runCommandSyncIfReady(
         command: String,
@@ -96,42 +103,46 @@ interface CommandEngine {
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): CommandResult?
 
-    /** 后端是否已安装就绪。本地按 rootfs/proot 判断；远程按 SSH 连接是否存活判断。 */
+    /** Whether the backend is installed and ready. Locally judged by rootfs/proot; remotely by whether the SSH connection is alive. */
     fun isContainerInstalled(): Boolean
 
-    /** 基础包是否已配置完成。本地按 provision 标记判断；远程恒 true（工具由用户自行保证）。 */
+    /** Whether the base packages have finished being provisioned. Locally judged by the provision marker; remotely always true (the user guarantees the tools themselves). */
     fun isProvisioned(): Boolean
 
-    /** 默认命令 shell 路径。本地按 provision 状态选 bash/sh；远程通常为 /bin/bash。 */
+    /** The default command shell path. Locally bash/sh is chosen by provision state; remotely it is usually /bin/bash. */
     fun defaultShell(): String
 
     /**
-     * 后端是否已就绪可执行命令。null 表示就绪；非 null 为未就绪的原因提示，
-     * 由调用方展示给用户并引导其完成初始化（本地为「请先进入终端页面初始化」）。
+     * Whether the backend is ready to execute commands. null means ready; non-null is a hint explaining why it
+     * is not ready, which the caller shows to the user to guide them through initialization (locally,
+     * "Please go to the terminal page to initialize first").
      *
-     * 默认实现恒返回 null（远程 SSH 的连接失败由首次命令自动重试处理，不属此类）。
-     * [LinuxContainerEngine] 覆写为按 rootfs/provision 状态返回引导文案。
+     * The default implementation always returns null (remote SSH connection failures are handled by automatic
+     * retry on the first command and are not in this category).
+     * [LinuxContainerEngine] overrides this to return guidance text based on the rootfs/provision state.
      */
     fun notReadyHint(): String? = null
 
     /**
-     * 幂等地确保后端可用：本地会解压 rootfs/proot 并配置基础包（首次耗时）；
-     * 远程则建立 SSH 连接。仅由终端页（唯一初始化入口）调用，命令执行入口不再自动触发。
+     * Idempotently ensures the backend is usable: locally this extracts the rootfs/proot and provisions the
+     * base packages (slow on first run); remotely it establishes the SSH connection. Called only by the
+     * terminal page (the sole initialization entry point); command execution entry points no longer trigger it automatically.
      */
     suspend fun ensureInstalled()
 
     companion object {
-        /** 命令默认超时（毫秒）。 */
+        /** Default command timeout (milliseconds). */
         const val DEFAULT_TIMEOUT_MS = 120_000L
 
-        /** 命令超时上限（毫秒）。 */
+        /** Maximum command timeout (milliseconds). */
         const val MAX_TIMEOUT_MS = 1_800_000L
     }
 }
 
 /**
- * 日志打印前对命令串脱敏：命令可能带 env 前缀（如面板脚本的 `AICODE_PROVIDER_API_KEY=...`）
- * 或内联凭据（`--header "Authorization: Bearer ..."`）。按敏感键名把值打码为 `***`。
+ * Redacts a command string before logging: the command may carry an env prefix (e.g. a panel script's
+ * `AICODE_PROVIDER_API_KEY=...`) or inline credentials (`--header "Authorization: Bearer ..."`).
+ * Values are masked to `***` by sensitive key name.
  */
 private val SENSITIVE_COMMAND_VALUE_REGEX = Regex(
     """(?i)(?<![A-Za-z0-9])(api[_-]?key|access[_-]?token|auth[_-]?token|token|password|passwd|secret|authorization|auth[_-]?cookie|cookie)\b\s*([=:])\s*(['"]?)(?:Bearer\s+|Basic\s+)?[^\s'"]+"""

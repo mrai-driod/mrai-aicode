@@ -21,25 +21,25 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * [FileAccessProvider] 的真机 ROOT 实现：全部文件操作经 `su -c` 以 root 身份在真机上执行。
+ * Device ROOT implementation of [FileAccessProvider]: all file operations are executed on the device as root via `su -c`.
  *
- * 不走 java.io.File 直读，避免 uid 错配——root shell 命令创建的文件属 root，app uid 未必可读；
- * 统一经 root shell 后，文件工具与 `execute_command` 看到/操作的完全是同一批文件。
+ * Does not read directly via java.io.File, to avoid uid mismatch -- files created by root shell commands belong to root and the app uid may not be able to read them;
+ * once everything goes through the root shell, the file tools and `execute_command` see and operate on exactly the same files.
  *
- * 路径映射（对齐 [WorkspacePathMapper] 的容器布局）：
- * - `~/workspace[/…]`（含展开后的 `$HOME/workspace` 别名）→ 当前工作区的真机绝对路径；
- * - `~/.aicode[/…]`（含 `/root/.aicode` 写法）→ 全局配置目录 [ContainerInstaller.aicodeDir]；
- * - 其它绝对路径（`/etc/…`、`/data/…`）→ 原样作为真机路径（真机通道的意义所在）；
- * - 相对路径 → 挂到当前工作区根下。
+ * Path mapping (aligned with the container layout of [WorkspacePathMapper]):
+ * - `~/workspace[/...]` (including the expanded `$HOME/workspace` alias) -> the current workspace's real device absolute path;
+ * - `~/.aicode[/...]` (including the `/root/.aicode` form) -> the global config directory [ContainerInstaller.aicodeDir];
+ * - Other absolute paths (`/etc/...`, `/data/...`) -> used as-is as device paths (the point of the device channel);
+ * - Relative paths -> mounted under the current workspace root.
  *
- * 实现要点：
- * - 每个操作一次 `su` fork（Magisk/KernelSU 记住授权后无感）；内容传输用 base64——
- *   读取经 stdout 回传，写入经 stdin 管道喂给 `base64 -d`（不受 argv 长度上限约束）；
- * - 脚本约定退出码：0 成功 / 2 不存在（[NoSuchFileException]）/ 3 已存在（[FileAlreadyExistsException]）/
- *   4 超过读取上限（[RemoteOutputTooLargeException]）/ 5 写入后长度校验失败 / 其它 [IOException]；
- * - 已知限制：旧实现按行/按 tab 切分目录列举输出，文件名含换行或制表符会解析异常；
- *   现已改为 `find -printf` + NUL 分隔（见 [DeviceRootListing]），不再有该限制；
- *   读写上限 [MAX_READ_BYTES]/[MAX_WRITE_BYTES]（内容需整体过内存）。
+ * Implementation notes:
+ * - One `su` fork per operation (seamless once Magisk/KernelSU remembers the grant); content transfer uses base64 --
+ *   reads return via stdout, writes are fed via a stdin pipe to `base64 -d` (not constrained by the argv length limit);
+ * - Script exit-code convention: 0 success / 2 does not exist ([NoSuchFileException]) / 3 already exists ([FileAlreadyExistsException]) /
+ *   4 exceeds the read limit ([RemoteOutputTooLargeException]) / 5 post-write length check failed / other [IOException];
+ * - Known limitation: the old implementation split directory-listing output by line / by tab, so file names containing newlines or tabs parsed incorrectly;
+ *   this is now `find -printf` + NUL separation (see [DeviceRootListing]) and the limitation no longer applies;
+ *   read/write limits [MAX_READ_BYTES]/[MAX_WRITE_BYTES] (content must pass through memory as a whole).
  */
 @Singleton
 class DeviceRootFileAccess @Inject constructor(
@@ -52,28 +52,28 @@ class DeviceRootFileAccess @Inject constructor(
     private companion object {
         const val TAG = "DeviceRootFileAccess"
 
-        /** 单文件读取上限（字节），超限抛 [RemoteOutputTooLargeException]。 */
+        /** Per-file read limit (bytes); throws [RemoteOutputTooLargeException] when exceeded. */
         const val MAX_READ_BYTES = 8L * 1024 * 1024
 
-        /** 单次写入上限（字节）：内容需 base64 后整体过 stdin。 */
+        /** Per-write limit (bytes): the content must pass through stdin as a whole after base64 encoding. */
         const val MAX_WRITE_BYTES = 8L * 1024 * 1024
 
-        /** 单次 shell 输出累积上限（字节）：8MB 文件的 base64 ≈ 11.2MB，留余量到 12MB。 */
+        /** Per-shell-output accumulation limit (bytes): the base64 of an 8MB file is about 11.2MB, leaving headroom up to 12MB. */
         const val MAX_OUTPUT_BYTES = 12 * 1024 * 1024
 
         /**
-         * 文件头批量读取的单批预算（字节）：头部只有几千字节，一次 su 往返即可取回上百个技能的文件头；
-         * 受 [MAX_OUTPUT_BYTES] 约束（base64 放大约 1/3，取一半留余量）。
+         * Per-batch budget for batch file-head reads (bytes): heads are only a few thousand bytes, so one su round trip can fetch the heads of hundreds of skill files;
+         * constrained by [MAX_OUTPUT_BYTES] (base64 inflates size by about 1/3, so take half to leave headroom).
          */
         const val HEAD_READ_BUDGET_BYTES = 4L * 1024 * 1024
 
-        /** 常规操作超时（毫秒）。 */
+        /** Timeout for regular operations (milliseconds). */
         const val DEFAULT_TIMEOUT_MS = 60_000L
 
-        /** 目录列举超时（毫秒）：大目录逐项 stat 较慢，放宽。 */
+        /** Directory-listing timeout (milliseconds): per-item stat on large directories is slower, so this is relaxed. */
         const val LIST_TIMEOUT_MS = 120_000L
 
-        /** 批量读取每批文件数：按单文件 8MB 上限保守取小值，保证单批输出不撞 [MAX_OUTPUT_BYTES]。 */
+        /** Files per batch read: chosen conservatively small against the 8MB per-file limit, so a single batch's output does not hit [MAX_OUTPUT_BYTES]. */
         const val BATCH_READ_CHUNK = 32
 
         val STDIN_FROM_DEV_NULL: ProcessBuilder.Redirect =
@@ -82,9 +82,9 @@ class DeviceRootFileAccess @Inject constructor(
         fun q(s: String): String = DeviceRootEngine.shellQuote(s)
     }
 
-    // ---------- 路径映射 ----------
+    // ---------- Path mapping ----------
 
-    /** 把 AI 提供的路径解析为真机绝对路径。 */
+    /** Resolve a path provided by AI to a real device absolute path. */
     private fun resolve(path: String): String {
         val ws = workspaceRepository.currentPath().trim().trimEnd('/')
         val home = pathHomeResolver.home().trimEnd('/')
@@ -117,13 +117,13 @@ class DeviceRootFileAccess @Inject constructor(
         return if (idx <= 0) "/" else real.substring(0, idx)
     }
 
-    // ---------- shell 执行 ----------
+    // ---------- Shell execution ----------
 
     private data class ShResult(val output: String, val exitCode: Int, val truncated: Boolean)
 
     /**
-     * 经 `su -c` 同步执行脚本并捕获全部输出。顺序：写 stdin（可选）→ 读 stdout 到 EOF → waitFor，
-     * 单向流动无管道死锁；看门狗超时 destroy/forcibly 解除 read 阻塞。
+     * Execute a script synchronously via `su -c` and capture all output. Order: write stdin (optional) -> read stdout to EOF -> waitFor,
+     * one-way flow with no pipe deadlock; a watchdog timeout uses destroy/forcibly to unblock the read.
      */
     private fun sh(script: String, stdin: ByteArray? = null, timeoutMs: Long = DEFAULT_TIMEOUT_MS): ShResult {
         val pb = ProcessBuilder(listOf("su", "-c", script))
@@ -136,11 +136,11 @@ class DeviceRootFileAccess @Inject constructor(
         watchdog.start()
         try {
             if (stdin != null) {
-                // 子进程可能提前退出（如 overwrite=false 的 exit 3）→ Broken pipe 属正常，忽略
+                // The child process may exit early (e.g. exit 3 when overwrite=false) -> a broken pipe is normal; ignore it
                 try {
                     process.outputStream.use { it.write(stdin); it.flush() }
                 } catch (e: IOException) {
-                    FileLogger.d(TAG, "stdin 写入中断（子进程已退出）: ${e.message}")
+                    FileLogger.d(TAG, "stdin write interrupted (child process already exited): ${e.message}")
                 }
             }
             val output = ByteArrayOutputStream()
@@ -150,7 +150,7 @@ class DeviceRootFileAccess @Inject constructor(
                 val n = try {
                     process.inputStream.read(buf)
                 } catch (e: IOException) {
-                    break // 看门狗 destroy 关管道
+                    break // Watchdog destroy closes the pipe
                 }
                 if (n < 0) break
                 if (output.size() < MAX_OUTPUT_BYTES) output.write(buf, 0, n) else truncated = true
@@ -160,7 +160,7 @@ class DeviceRootFileAccess @Inject constructor(
             } catch (e: InterruptedException) {
                 -1
             }
-            if (timedOut.get()) throw IOException("root shell 执行超时（>${timeoutMs}ms）")
+            if (timedOut.get()) throw IOException("root shell execution timed out (>${timeoutMs}ms)")
             return ShResult(output.toString(Charsets.UTF_8.name()), exit, truncated)
         } finally {
             watchdog.interrupt()
@@ -168,31 +168,31 @@ class DeviceRootFileAccess @Inject constructor(
         }
     }
 
-    /** 按脚本退出码约定抛对应异常；0 直接返回。 */
+    /** Throw the corresponding exception per the script exit-code convention; return directly on 0. */
     private fun ShResult.throwForError(displayPath: String) {
         when (exitCode) {
             0 -> return
             2 -> throw NoSuchFileException(displayPath)
             3 -> throw FileAlreadyExistsException(displayPath)
             4 -> throw RemoteOutputTooLargeException(
-                "文件超过真机通道读取上限（${MAX_READ_BYTES / 1024 / 1024}MB）: $displayPath"
+                "File exceeds the device channel read limit (${MAX_READ_BYTES / 1024 / 1024}MB): $displayPath"
             )
-            5 -> throw IOException("写入校验失败（落盘长度不符）: $displayPath")
-            else -> throw IOException("root shell 失败(exit=$exitCode): ${output.take(300)}")
+            5 -> throw IOException("Write verification failed (written length mismatch): $displayPath")
+            else -> throw IOException("root shell failed (exit=$exitCode): ${output.take(300)}")
         }
     }
 
-    /** 单条件 test：exit 0 → true。 */
+    /** Single-condition test: exit 0 -> true. */
     private fun testFlag(real: String, flag: String): Boolean =
         sh("test $flag ${q(real)}").exitCode == 0
 
-    // ---------- 读 ----------
+    // ---------- Read ----------
 
     override fun readFile(path: String): String = String(readBytes(path), Charsets.UTF_8)
 
     /**
-     * 逐行读取。与本地/远程实现不同：真机通道每次迭代重新经 `su` 读全文件（非流式），
-     * 受 [MAX_READ_BYTES] 上限约束；序列仍可重复迭代，单行截断由 [boundedLines] 保证。
+     * Read line by line. Unlike the local/remote implementations: the device channel re-reads the whole file via `su` on each iteration (non-streaming),
+     * constrained by the [MAX_READ_BYTES] limit; the sequence is still repeatedly iterable, and single-line truncation is guaranteed by [boundedLines].
      */
     override fun readLines(path: String): Sequence<String> =
         boundedLines { StringReader(readFile(path)) }
@@ -207,15 +207,15 @@ class DeviceRootFileAccess @Inject constructor(
         r.throwForError(path)
         val clean = r.output.filter { !it.isWhitespace() }
         return runCatching { Base64.decode(clean, Base64.DEFAULT) }
-            .getOrElse { throw IOException("base64 解码失败: $path (${it.message})") }
+            .getOrElse { throw IOException("base64 decode failed: $path (${it.message})") }
     }
 
     /**
-     * 批量读取：一次 `su -c` 子进程取回整批文件内容（`path` 行 + base64 行交替输出）。
+     * Batch read: one `su -c` child process fetches the whole batch's contents (`path` lines and base64 lines alternating).
      *
-     * 真机通道每次 [sh] 都要 fork 一个 su 进程（数十~数百毫秒），逐个 [readFile] 在读上百个
-     * 技能文件时会退化成上百次往返——那才是技能扫描把主线程拖到 ANR 的根因，而不是文件本身大。
-     * 分批只为避开单次输出上限 [MAX_OUTPUT_BYTES]（base64 会把体积放大约 1/3）。
+     * Every [sh] call on the device channel forks an su process (tens to hundreds of milliseconds); calling [readFile] one by one on hundreds of
+     * skill files degrades into hundreds of round trips -- that, not the files themselves being large, is the root cause of skill scans dragging the main thread into an ANR.
+     * Batching is only to avoid the per-call output limit [MAX_OUTPUT_BYTES] (base64 inflates size by about 1/3).
      */
     override fun readFiles(paths: List<String>): Map<String, String> {
         if (paths.isEmpty()) return emptyMap()
@@ -240,11 +240,11 @@ class DeviceRootFileAccess @Inject constructor(
     }
 
     /**
-     * 文件头批量读取：一次 `su -c` 子进程取回整批文件的前 [maxBytes] 字节（`path` 行 + base64 行交替输出）。
+     * Batch file-head read: one `su -c` child process fetches the first [maxBytes] bytes of the whole batch (`path` lines and base64 lines alternating).
      *
-     * 与 [readFilesChunk] 同一套协议，区别是只 `head -c` 取文件头——按 frontmatter 的 name 定位技能时，
-     * 上百个 SKILL.md 只需要文件头即可匹配，不必把全部正文拉过 shell 管道。单批按累计头部预算切分
-     * （[HEAD_READ_BUDGET_BYTES]），小文件一批搞定，仍然是一次 su 往返。
+     * Same protocol as [readFilesChunk], except only the head is taken via `head -c` -- when locating a skill by the name in its frontmatter,
+     * the hundreds of SKILL.md files only need their heads to match, instead of pulling all body text through the shell pipe. Batches are split by cumulative head budget
+     * ([HEAD_READ_BUDGET_BYTES]); small files are done in one batch, still a single su round trip.
      */
     override fun readFileHeads(paths: List<String>, maxBytes: Int): Map<String, String> {
         if (paths.isEmpty() || maxBytes <= 0) return emptyMap()
@@ -278,8 +278,8 @@ class DeviceRootFileAccess @Inject constructor(
     }
 
     /**
-     * 解析批量读取的输出：「真实路径行 + base64 行」成对排列，与输入顺序一致；
-     * 读失败（空行 / base64 坏块 / 超上限跳过）的条目缺席。
+     * Parse batch-read output: "real path line + base64 line" pairs, in the same order as the input;
+     * entries that fail to read (empty line / corrupt base64 block / skipped for exceeding the limit) are absent.
      */
     private fun parsePathContentPairs(
         output: String,
@@ -318,17 +318,17 @@ class DeviceRootFileAccess @Inject constructor(
 
     override fun permissions(path: String): String {
         val a = sh("stat -c %A ${q(resolve(path))} 2>/dev/null").output.trim()
-        // %A 形如 "-rw-r--r--"：取 owner 三位；取不到时 root 视角默认可读写执行
+        // %A looks like "-rw-r--r--": take the owner triplet; when unavailable, default to readable/writable/executable from root's perspective
         return if (a.length >= 4) a.substring(1, 4) else "rwx"
     }
 
     override fun listFiles(path: String): List<FileEntry> {
         val real = resolve(path)
-        // 快路径：一条 find -printf 拿回全部属性（单次 su fork，见 DeviceRootListing）。
+        // Fast path: one find -printf fetches all attributes (single su fork, see DeviceRootListing).
         val r = sh(DeviceRootListing.findScript(real), timeoutMs = LIST_TIMEOUT_MS)
         if (r.exitCode == 0) return DeviceRootListing.parseFindOutput(r.output, real)
-        // 兜底：find -printf 不可用（老旧 toybox）时退回旧逐项 stat 脚本，行为不变、只是慢。
-        FileLogger.d(TAG, "find -printf 列举不可用(exit=${r.exitCode})，回退旧脚本: $path")
+        // Fallback: when find -printf is unavailable (old toybox), fall back to the legacy per-item stat script; behaviour unchanged, just slower.
+        FileLogger.d(TAG, "find -printf listing unavailable (exit=${r.exitCode}), falling back to legacy script: $path")
         val legacy = sh(DeviceRootListing.legacyScript(real), timeoutMs = LIST_TIMEOUT_MS)
         legacy.throwForError(path)
         return DeviceRootListing.parseLegacyOutput(legacy.output, real)
@@ -348,12 +348,12 @@ class DeviceRootFileAccess @Inject constructor(
             .toList()
     }
 
-    // ---------- 写 ----------
+    // ---------- Write ----------
 
-    /** 写文件本体：base64 经 stdin 管道喂 `base64 -d`，落盘后 stat 校验长度（对齐 Local 的写后校验）。 */
+    /** Write a file body: base64 is fed via a stdin pipe to `base64 -d`, then stat verifies the length after writing (aligned with Local's post-write check). */
     private fun writeBytesInternal(path: String, bytes: ByteArray, overwrite: Boolean) {
         if (bytes.size > MAX_WRITE_BYTES) {
-            throw IOException("写入内容超过真机通道上限（${MAX_WRITE_BYTES / 1024 / 1024}MB）: $path")
+            throw IOException("Write content exceeds the device channel limit (${MAX_WRITE_BYTES / 1024 / 1024}MB): $path")
         }
         val real = resolve(path)
         val script = buildString {
@@ -365,7 +365,7 @@ class DeviceRootFileAccess @Inject constructor(
         }
         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
         sh(script, stdin = b64.toByteArray(Charsets.US_ASCII)).throwForError(path)
-        FileLogger.i(TAG, "写入(真机): '$path' -> $real (${bytes.size} 字节)")
+        FileLogger.i(TAG, "Write (device): '$path' -> $real (${bytes.size} bytes)")
     }
 
     override fun writeFile(path: String, content: String, overwrite: Boolean, encoding: Charset) =
@@ -375,7 +375,7 @@ class DeviceRootFileAccess @Inject constructor(
         writeBytesInternal(path, bytes, overwrite)
 
     override fun writeStream(path: String, input: InputStream, overwrite: Boolean): Long {
-        // 与 readBytes 同理需整体过内存（base64 经 stdin）；cap 与写上限一致。
+        // Like readBytes, this must pass through memory as a whole (base64 via stdin); the cap matches the write limit.
         val acc = ByteArrayOutputStream()
         val buf = ByteArray(8192)
         var total = 0L
@@ -384,7 +384,7 @@ class DeviceRootFileAccess @Inject constructor(
             if (n < 0) break
             total += n
             if (total > MAX_WRITE_BYTES) {
-                throw IOException("写入内容超过真机通道上限（${MAX_WRITE_BYTES / 1024 / 1024}MB）: $path")
+                throw IOException("Write content exceeds the device channel limit (${MAX_WRITE_BYTES / 1024 / 1024}MB): $path")
             }
             acc.write(buf, 0, n)
         }
@@ -392,15 +392,15 @@ class DeviceRootFileAccess @Inject constructor(
         return total
     }
 
-    // ---------- 目录/文件操作 ----------
+    // ---------- Directory/file operations ----------
 
     override fun mkdirs(path: String) {
-        // 对齐 Local（mkdirs 返回值忽略）：失败静默
+        // Aligned with Local (mkdirs return value ignored): failures are silent
         sh("mkdir -p ${q(resolve(path))} 2>/dev/null; exit 0")
     }
 
     override fun delete(path: String) {
-        // 对齐 Local（file.delete() 返回值忽略）：不存在/失败静默
+        // Aligned with Local (file.delete() return value ignored): missing/failure is silent
         val real = resolve(path)
         sh(
             "if [ -d ${q(real)} ] && [ ! -L ${q(real)} ]; then " +
@@ -448,7 +448,7 @@ class DeviceRootFileAccess @Inject constructor(
         if (dst == src || dst.startsWith("$src/")) {
             throw IOException("destination is the source or its descendant: $newPath")
         }
-        // mv 跨文件系统自动退化为 复制+删除
+        // mv automatically degrades to copy+delete across filesystems
         val script = buildString {
             append("[ -e ").append(q(src)).append(" ] || [ -L ").append(q(src)).append(" ] || exit 2; ")
             append("if [ -e ").append(q(dst)).append(" ] || [ -L ").append(q(dst)).append(" ]; then ")
@@ -460,12 +460,12 @@ class DeviceRootFileAccess @Inject constructor(
         sh(script).throwForError(path)
     }
 
-    // ---------- 本地互转 ----------
+    // ---------- Local conversion ----------
 
     override fun copyToLocal(path: String): File {
         val real = resolve(path)
-        // 工作区 / sdcard 等 app 可直接读的路径免复制快路径（同 Local 语义）；
-        // 仅 root 可读的路径经 su 读字节后落到缓存目录。
+        // Fast path with no copy for paths the app can read directly, such as the workspace / sdcard (same semantics as Local);
+        // paths readable only by root are read via su and written to the cache directory.
         val direct = File(real)
         if (direct.isFile && direct.canRead()) return direct
         val bytes = readBytes(path)
@@ -494,27 +494,27 @@ class DeviceRootFileAccess @Inject constructor(
             ws.isNotEmpty() && p.startsWith("$ws/") -> "~/workspace/" + p.removePrefix("$ws/")
             p == aicodeReal -> "~/.aicode"
             p.startsWith("$aicodeReal/") -> "~/.aicode/" + p.removePrefix("$aicodeReal/")
-            // 真机通道下其余路径即真实路径，原样回显
+            // On the device channel, all other paths are real paths and are displayed as-is
             else -> path
         }
     }
 }
 
-/** 看门狗 destroy 后等待进程自行退出的宽限时间。 */
+/** Grace period to wait for the process to exit on its own after the watchdog destroys it. */
 private const val WATCHDOG_GRACE_MS = 200L
 
-/** 看门狗线程名：崩溃报告里可读，不再是一串 Thread-N。 */
+/** Watchdog thread name: readable in crash reports, no longer a string of Thread-N. */
 private const val WATCHDOG_THREAD_NAME = "RootShWatchdog"
 
 /**
- * `su -c` 看门狗线程体（从 [DeviceRootFileAccess.sh] 提取为文件级函数，便于单测复现中断竞态）。
+ * `su -c` watchdog thread body (extracted from [DeviceRootFileAccess.sh] to a file-level function, so unit tests can reproduce the interrupt race).
  *
- * 时序：睡满 [timeoutMs] → 进程仍活着则判超时并 `destroy` → 宽限 [WATCHDOG_GRACE_MS] 后 `destroyForcibly`。
+ * Timing: sleep for the full [timeoutMs] -> if the process is still alive, declare a timeout and `destroy` -> after the grace period [WATCHDOG_GRACE_MS], `destroyForcibly`.
  *
- * 中断安全性（v1.0.4 真机崩溃根因）：主流程正常结束时会在 finally `interrupt()` 本线程，
- * 中断完全可能落在「判超时之后、宽限 sleep 之前/之中」——**两次 sleep 都必须接住
- * InterruptedException**。旧代码只保护了第一次，第二次裸奔，异常逃出 `run()` 后被默认
- * 未捕获处理器变成整 App 崩溃（DEVICE_ROOT 模式开抽屉列目录即可复现）。
+ * Interrupt safety (root cause of a v1.0.4 real-device crash): when the main flow finishes normally it `interrupt()`s this thread in its finally block,
+ * and the interrupt may well land "after the timeout decision, before/during the grace sleep" -- **both sleeps must catch
+ * InterruptedException**. The old code protected only the first; the second ran unprotected, and the exception escaping `run()` was turned by the default
+ * uncaught-exception handler into a whole-app crash (reproducible in DEVICE_ROOT mode by opening the drawer and listing a directory).
  */
 internal fun runShWatchdog(process: Process, timeoutMs: Long, timedOut: AtomicBoolean) {
     try {

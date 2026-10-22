@@ -13,8 +13,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 识图会话的落盘存储：每个会话一个 JSON 文件，内容为发给识图模型的完整消息历史（含图片 base64），
- * 目录 `~/.aicode/vision-sessions/`，风格同 ToolOutputStore。会话数超上限时按最后修改时间淘汰最久未用的。
+ * On-disk storage for vision sessions: one JSON file per session, containing the full message history sent to the vision model (including image base64),
+ * in the directory `~/.aicode/vision-sessions/`, in the same style as ToolOutputStore. When the number of sessions exceeds the cap, the least recently used are evicted by last-modified time.
  */
 @Singleton
 class VisionSessionStore @Inject constructor(
@@ -29,21 +29,21 @@ class VisionSessionStore @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutex = Mutex()
 
-    /** 会话文件目录（宿主路径）。对外只用于占用统计与清理。 */
+    /** The session file directory (host path). Exposed only for usage statistics and cleanup. */
     val sessionDir: File get() = File(containerInstaller.aicodeDir, SESSION_DIR)
 
     private fun fileFor(id: String): File = File(sessionDir, "vision-$id.json")
 
-    /** 读取会话历史；会话不存在或文件损坏返回 null。 */
+    /** Reads a session's history; returns null if the session does not exist or the file is corrupt. */
     suspend fun load(id: String): List<AgentMessage>? = mutex.withLock {
         val file = fileFor(id)
         if (!file.isFile) return null
         runCatching { json.decodeFromString<List<AgentMessage>>(file.readText()) }
-            .onFailure { FileLogger.w(TAG, "读取识图会话 $id 失败: ${it.message}") }
+            .onFailure { FileLogger.w(TAG, "Failed to read vision session $id: ${it.message}") }
             .getOrNull()
     }
 
-    /** 覆盖写入会话历史并触发淘汰检查。 */
+    /** Overwrites a session's history and triggers the eviction check. */
     suspend fun save(id: String, messages: List<AgentMessage>) = mutex.withLock {
         val file = fileFor(id)
         file.parentFile?.mkdirs()
@@ -51,7 +51,7 @@ class VisionSessionStore @Inject constructor(
         evictIfNeeded()
     }
 
-    /** 删除会话（首次识图失败时清理，避免留下孤儿文件）。 */
+    /** Deletes a session (cleaning up when the first image-understanding call fails, to avoid leaving orphan files). */
     suspend fun delete(id: String) = mutex.withLock {
         fileFor(id).delete()
     }
@@ -63,7 +63,7 @@ class VisionSessionStore @Inject constructor(
             ?: return
         if (files.size <= MAX_SESSIONS) return
         files.drop(MAX_SESSIONS).forEach { old ->
-            FileLogger.i(TAG, "淘汰过期识图会话: ${old.name}")
+            FileLogger.i(TAG, "Evicting expired vision session: ${old.name}")
             old.delete()
         }
     }

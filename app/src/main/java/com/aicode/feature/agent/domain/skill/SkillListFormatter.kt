@@ -1,40 +1,40 @@
 package com.aicode.feature.agent.domain.skill
 
 /**
- * 把启用技能列表格式化为注入系统提示的清单，带总量预算与逐级降级。
+ * Formats the list of enabled skills into a list injected into the system prompt, with a total budget and staged degradation.
  *
- * 对标依据（为什么必须有预算）：
- * - Codex（codex-rs/ext/skills）：技能清单约占上下文 2%（硬顶 10000 token），超预算时先删除
- *   描述退化为纯名称、再整体省略剩余并在提示里告知省略数量，保证大头留给真正的对话。
- * - Claude Code：约 1% 上下文预算，单条描述上限 250 字符。
- * 本机实测（改进前的证据）：118 个技能的纯清单 15441 字符，占 29526 字符系统提示的 53.2%，
- * 且无任何总量约束——同一份统计里 456 条消息 / 239 次工具调用中 loadSkill 调用为 0，
- * 模型对半屏清单直接无视，不如压缩清单 + 强制措辞 + 每轮相关提醒的组合拳。
+ * Benchmarks (why a budget is necessary):
+ * - Codex (codex-rs/ext/skills): the skill list takes about 2% of the context (hard cap 10000 tokens); when over budget it first drops
+ *   descriptions, degrading to name-only entries, then omits the remainder entirely and states the omitted count in the prompt, so the bulk is left for the actual conversation.
+ * - Claude Code: about 1% context budget, with a per-description cap of 250 characters.
+ * Measured on this device (evidence from before the improvement): a plain list of 118 skills was 15441 characters, 53.2% of a 29526-character system prompt,
+ * with no total constraint at all; in the same statistics, out of 456 messages / 239 tool calls, loadSkill calls were 0:
+ * the model simply ignores a half-screen list, which is worse than a compressed list + forceful wording + a per-turn relevance reminder combined.
  *
- * 降级顺序（预算单位为字符，按给定顺序贪心占位，顺序由调用方保证确定性）：
- * 1. `- name: description` 完整条目；
- * 2. 完整条目放不下后，剩余技能退化为 `- name` 纯名称条目（保留可发现性）；
- * 3. 纯名称也放不下则省略，并在末尾告知省略数量与自助查找路径。
+ * Degradation order (the budget unit is characters; entries greedily take space in the given order, whose determinism is guaranteed by the caller):
+ * 1. Full `- name: description` entries;
+ * 2. Once full entries no longer fit, the remaining skills degrade to name-only `- name` entries (preserving discoverability);
+ * 3. If even name-only entries do not fit, they are omitted, and the omitted count and the self-service lookup path are stated at the end.
  */
 object SkillListFormatter {
 
     /**
-     * 清单字符预算。取 Claude Code 1% 与 Codex 2% 之间偏保守的值：按主流 128K 上下文折算，
-     * 1%≈4000 字符、2%≈8000 字符（中英混排），取上限；纯名称降级后实际占用通常低于此值。
-     * 需要调整时只改这里，格式逻辑与测试均与之解耦。
+     * Character budget for the list. Takes a conservative value between Claude Code's 1% and Codex's 2%: converted against a mainstream 128K context,
+     * 1% is about 4000 characters and 2% is about 8000 characters (mixed Chinese/English), and the upper value is taken; after name-only degradation the actual use is usually below this.
+     * To adjust it, change only this value; the formatting logic and tests are decoupled from it.
      */
     const val DEFAULT_CHAR_BUDGET = 8_000
 
-    /** 省略告知行的长度余量：预留出来，避免告知本身把清单顶超预算。 */
+    /** Length allowance for the omission notice line: reserved so the notice itself does not push the list over budget. */
     private const val NOTICE_SLACK = 240
 
-    /** 无描述时的占位，保持清单每行结构一致。 */
-    private const val NO_DESC = "（无描述）"
+    /** Placeholder used when there is no description, keeping the structure of every list line consistent. */
+    private const val NO_DESC = "(No description)"
 
     /**
-     * 格式化技能清单；[skills] 为空返回 ""。
-     * 输出长度不超过 [charBudget]（含省略告知行），除非单条名称本身就超过剩余预算——
-     * 那种情况下宁可不列该条也不会突破预算上限。
+     * Formats the skill list; returns "" when [skills] is empty.
+     * The output length does not exceed [charBudget] (including the omission notice line), unless a single name by itself exceeds the remaining budget:
+     * in that case the entry is not listed at all rather than breaking the budget cap.
      */
     fun format(skills: List<Skill>, charBudget: Int = DEFAULT_CHAR_BUDGET): String {
         if (skills.isEmpty()) return ""
@@ -52,7 +52,7 @@ object SkillListFormatter {
             if (name.isEmpty()) continue
             val fullLine = "- $name: ${skill.description.trim().ifEmpty { NO_DESC }}"
             if (!descPhaseDone) {
-                val cost = fullLine.length + 1 // +1 = 行尾换行
+                val cost = fullLine.length + 1 // +1 = the trailing newline
                 if (used + cost <= limit) {
                     full.appendLine(fullLine)
                     used += cost
@@ -70,7 +70,7 @@ object SkillListFormatter {
             }
         }
 
-        // 一条都放不下（预算小于 NOTICE_SLACK）时只剩告知行，也比空清单好。
+        // When not even one entry fits (budget smaller than NOTICE_SLACK), only the notice line remains, which is still better than an empty list.
         if (full.isEmpty() && namesOnly.isEmpty() && omitted == 0) return ""
 
         return buildString {
@@ -86,9 +86,9 @@ object SkillListFormatter {
         }.trim()
     }
 
-    /** 省略告知：告诉模型少了多少、去哪看全量、以及未列出的也能按名称尝试加载。 */
+    /** Omission notice: tells the model how many were left out, where to see the full list, and that unlisted skills can also be attempted by name. */
     private fun omissionNotice(omitted: Int, charBudget: Int): String =
-        "…另有 $omitted 个技能因提示词预算（上限 $charBudget 字符）未在此列出；" +
-            "完整名单见 ~/.aicode/skills/ 与 <项目根目录>/.aicode/skills/ 目录，" +
-            "任务相关时可用 loadSkill 按名称尝试加载（工具会返回当前可用名单）。"
+        "... $omitted more skills are not listed here because of the prompt budget (limit $charBudget characters); " +
+            "see the full list in ~/.aicode/skills/ and <project root>/.aicode/skills/. " +
+            "If one fits the task, load it by name with loadSkill."
 }

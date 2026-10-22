@@ -3,11 +3,11 @@ package com.aicode.core.util
 import java.io.IOException
 
 /**
- * 把异常转换成对用户有意义的提示文本。
+ * Converts an exception into meaningful prompt text for the user.
  *
- * 很多异常（如 NPE、被取消的请求）的 [Throwable.message] 为 null，
- * 直接使用会显示成 "null"。这里回退到异常类名，并向上追溯 cause 链，
- * 尽量给出可定位问题的信息。
+ * For many exceptions (such as an NPE or a cancelled request), [Throwable.message] is null,
+ * and using it directly would display as "null". This falls back to the exception class name and traces up the cause chain,
+ * to provide as much information as possible to locate the problem.
  */
 fun Throwable.toUserMessage(): String {
     val parts = mutableListOf<String>()
@@ -20,15 +20,15 @@ fun Throwable.toUserMessage(): String {
         current = current.cause
         depth++
     }
-    return parts.joinToString(" · ").ifBlank { "未知错误" }
+    return parts.joinToString(" · ").ifBlank { "Unknown error" }
 }
 
-/** 针对常见异常类型给出更友好的中文说明。 */
+/** Provides friendlier explanations for common exception types. */
 private fun friendlyName(t: Throwable): String = when (t) {
-    is java.net.UnknownHostException -> "无法连接服务器（DNS 解析失败，请检查网络或 Base URL）"
-    is java.net.SocketTimeoutException -> "请求超时（网络较慢或服务无响应）"
-    is java.net.ConnectException -> "连接被拒绝（请检查 Base URL 与端口）"
-    is javax.net.ssl.SSLException -> "SSL 连接失败"
-    is IOException -> "网络读写失败：${t.javaClass.simpleName}"
+    is java.net.UnknownHostException -> "Unable to connect to server (DNS resolution failed, please check your network or Base URL)"
+    is java.net.SocketTimeoutException -> "Request timed out (network is slow or the service is not responding)"
+    is java.net.ConnectException -> "Connection refused (please check the Base URL and port)"
+    is javax.net.ssl.SSLException -> "SSL connection failed"
+    is IOException -> "Network read/write failed: ${t.javaClass.simpleName}"
     else -> t.javaClass.simpleName
 }

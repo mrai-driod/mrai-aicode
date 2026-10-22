@@ -3,70 +3,70 @@ package com.aicode.feature.agent.domain.memory
 import com.aicode.core.util.FileLogger
 import java.io.File
 
-/** 单个编辑项，语义与 editFile 的 edits 一致。 */
+/** A single edit item, with the same semantics as editFile's edits. */
 data class MemoryEdit(
     val oldString: String,
     val newString: String,
     val replaceAll: Boolean
 )
 
-/** 记忆编辑操作的结果。 */
+/** The result of a memory edit operation. */
 sealed interface MemoryEditResult {
-    /** 编辑成功并已写盘。 */
+    /** The edit succeeded and was written to disk. */
     data object Success : MemoryEditResult
 
-    /** 指定名称的记忆不存在。 */
+    /** The memory with the given name does not exist. */
     data class NotFound(val name: String) : MemoryEditResult
 
-    /** 编辑校验或写盘失败。 */
+    /** Edit validation or writing to disk failed. */
     data class Error(val code: String, val message: String) : MemoryEditResult
 }
 
 /**
- * 记忆数据源抽象接口，支持全局和项目级。
+ * Abstraction interface for memory data sources, supporting the global and project levels.
  */
 interface MemorySource {
-    /** 扫描并返回该数据源下当前所有合法的 Memory。 */
+    /** Scans and returns all currently valid Memories from this data source. */
     fun listMemories(): List<Memory>
 
-    /** 读取指定 memory 的完整指令正文；不存在或解析失败时返回 null。 */
+    /** Reads the full instruction body of the given memory; returns null when it does not exist or fails to parse. */
     fun loadContent(name: String): String?
 
-    /** 保存一条记忆（创建或覆盖） */
+    /** Saves one memory (create or overwrite). */
     fun saveMemory(name: String, description: String, content: String): Boolean
 
     /**
-     * 对已有记忆的正文做局部编辑（old_string/new_string 精确匹配），语义与 editFile 一致。
-     * 默认实现基于 [listMemories] 定位记忆文件，在内存中按序应用所有编辑；
-     * 任一编辑校验失败则整批不写盘（原子），成功后用原 name/description 重新格式化写回。
+     * Applies local edits to an existing memory's body (exact old_string/new_string matching), with the same semantics as editFile.
+     * The default implementation locates the memory file via [listMemories] and applies all edits in order in memory;
+     * if any edit fails validation, the whole batch is not written to disk (atomic); on success it is reformatted with the original name/description and written back.
      */
     fun editMemory(name: String, edits: List<MemoryEdit>): MemoryEditResult {
         val memory = listMemories().firstOrNull { it.name.equals(name, ignoreCase = true) }
             ?: return MemoryEditResult.NotFound(name)
         val file = memory.file ?: return MemoryEditResult.NotFound(name)
         if (edits.isEmpty()) {
-            return MemoryEditResult.Error("EMPTY_EDITS", "edits 不能为空，请至少提供一个 {old_string,new_string} 编辑")
+            return MemoryEditResult.Error("EMPTY_EDITS", "edits must not be empty; provide at least one {old_string,new_string} edit")
         }
 
         var content = memory.content
         edits.forEachIndexed { i, e ->
             if (e.oldString.isEmpty()) {
-                return MemoryEditResult.Error("EMPTY_OLD_STRING", "第 ${i + 1} 个编辑的 old_string 不能为空")
+                return MemoryEditResult.Error("EMPTY_OLD_STRING", "The old_string of edit ${i + 1} must not be empty")
             }
             if (e.oldString == e.newString) {
-                return MemoryEditResult.Error("NO_OP", "第 ${i + 1} 个编辑的 old_string 与 new_string 相同，无需修改")
+                return MemoryEditResult.Error("NO_OP", "The old_string and new_string of edit ${i + 1} are identical; no change is needed")
             }
             val occurrences = content.split(e.oldString).size - 1
             if (occurrences == 0) {
                 return MemoryEditResult.Error(
                     "NO_MATCH",
-                    "第 ${i + 1} 个编辑未在记忆「${memory.name}」正文中找到 old_string，请确认内容与 read 返回的正文完全一致（含缩进/换行）"
+                    "Edit ${i + 1} did not find old_string in the body of memory '${memory.name}'; make sure the content matches the body returned by read exactly (including indentation/newlines)"
                 )
             }
             if (occurrences > 1 && !e.replaceAll) {
                 return MemoryEditResult.Error(
                     "MULTIPLE_MATCHES",
-                    "第 ${i + 1} 个编辑的 old_string 在正文中匹配到 $occurrences 处，请提供更长的唯一上下文，或对该编辑设置 replace_all=true"
+                    "The old_string of edit ${i + 1} matched $occurrences places in the body; provide a longer unique context, or set replace_all=true for this edit"
                 )
             }
             content = if (e.replaceAll) content.replace(e.oldString, e.newString)
@@ -78,7 +78,7 @@ interface MemorySource {
             MemoryEditResult.Success
         } catch (e: Exception) {
             FileLogger.e("MemorySource", "Failed to edit memory: $name", e)
-            MemoryEditResult.Error("EDIT_WRITE_FAILED", "写入记忆文件失败: ${e.message}")
+            MemoryEditResult.Error("EDIT_WRITE_FAILED", "Failed to write memory file: ${e.message}")
         }
     }
 
@@ -86,25 +86,25 @@ interface MemorySource {
 
     companion object {
         /**
-         * 将模型传入的记忆名归一化为安全文件名片段。
+         * Normalizes a memory name passed in by the model into a safe file-name fragment.
          *
-         * 记忆名来自大模型工具参数（自由文本），不经处理直接拼到 "$name.md" 会引入路径穿越
-         * （如 "../x" 会写到 memoryRoot 之外）、含分隔符的非法文件名等问题。
-         * 这里只保留「字母/数字/连字符/下划线」 Unicode 字符，其余替换为 '-'，并去首尾连字符；
-         * 结果只含合法文件名字符、不含路径分隔符，且对同一输入确定性可逆，保证
-         * 「写出去的文件名 ↔ MemoryParser.parse 回读的 name」一致。
+         * Memory names come from model tool arguments (free text); appending one directly to "$name.md" without processing would introduce path traversal
+         * (e.g. "../x" would write outside memoryRoot), illegal file names containing separators, and similar problems.
+         * This keeps only Unicode "letters/digits/hyphens/underscores" characters, replaces the rest with '-', and trims leading/trailing hyphens;
+         * the result contains only legal file-name characters and no path separators, and is deterministic for the same input, guaranteeing
+         * that "the file name written out <-> the name read back by MemoryParser.parse" stays consistent.
          */
         fun sanitizeName(raw: String): String {
             val cleaned = raw.map { ch ->
                 if (ch.isLetterOrDigit() || ch == '-' || ch == '_') ch else '-'
             }.joinToString("").trim('-')
-            // 全非法字符时回退一个占位名，避免空文件名
+            // When every character is illegal, fall back to a placeholder name to avoid an empty file name
             return if (cleaned.isBlank()) "memory" else cleaned
         }
 
         /**
-         * 解析 memory 名对应的磁盘文件，并校验解析后的 canonical 路径仍落在 [root] 之内，
-         * 杜绝 sanitize 漏网导致的越界写入。
+         * Resolves the disk file for a memory name, and verifies that the resolved canonical path still lies within [root],
+         * preventing out-of-bounds writes from anything sanitize missed.
          */
         fun resolveMemoryFile(root: File, name: String): File {
             val safe = sanitizeName(name)

@@ -41,18 +41,20 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 真机 ROOT 命令执行后端：AI 的命令不走 PRoot 沙盒容器，直接以 root 身份在真机上执行。
+ * Device ROOT command execution backend: the AI's commands do not go through the PRoot sandbox container, but run
+ * directly as root on the real device.
  *
- * 实现方式（用户拍板）：每条命令经 `su -c` 执行（`ProcessBuilder(listOf("su", "-c", command))`，
- * argv 直传无需 shell 转义）。Magisk/KernelSU 首次执行时弹授权框，用户勾选「记住」后后续命令无感。
+ * Implementation (decided by the user): every command runs via `su -c` (`ProcessBuilder(listOf("su", "-c", command))`,
+ * with argv passed directly so no shell escaping is needed). Magisk/KernelSU shows an authorization dialog on the
+ * first run; once the user checks "remember", subsequent commands are seamless.
  *
- * 与 [com.aicode.feature.agent.domain.container.LinuxContainerEngine] 的差异：
- * - 无 rootfs/proot 安装概念——就绪判定 = 一次 `su` 探测（`id -u` 返回 0）；
- * - [projectPath] 是真机绝对路径，经 `cd '<path>' && <command>` 进入工作目录；
- * - 子进程环境为 su 默认 root 环境（PATH 通常含 /system/bin:/system/xbin:/sbin，具体取决于 su 实现）。
+ * Differences from [com.aicode.feature.agent.domain.container.LinuxContainerEngine]:
+ * - No rootfs/proot installation concept: readiness is determined by a single `su` probe (`id -u` returning 0);
+ * - [projectPath] is a real-device absolute path, entered via `cd '<path>' && <command>`;
+ * - The child process environment is su's default root environment (PATH usually contains /system/bin:/system/xbin:/sbin, depending on the su implementation).
  *
- * 安全提示：该通道下命令以 uid 0 运行，授权挡位（[com.aicode.feature.settings.data.repository.CommandAuthLevel]）
- * 与灾难性 rm 防护照常生效；UI 在切换到本通道时另有倒计时确认。
+ * Security note: commands on this channel run as uid 0; the authorization level ([com.aicode.feature.settings.data.repository.CommandAuthLevel])
+ * and the catastrophic-rm protection still apply as usual, and the UI shows a separate countdown confirmation when switching to this channel.
  */
 @Singleton
 class DeviceRootEngine @Inject constructor(
@@ -62,38 +64,38 @@ class DeviceRootEngine @Inject constructor(
     private val containerInstaller: ContainerInstaller
 ) : CommandEngine {
 
-    // 非 private：终端/文件访问等同类实现需要复用 [shellQuote] 与超时常量。
+    // Not private: peer implementations such as terminal/file access need to reuse [shellQuote] and the timeout constants.
     companion object {
         private const val TAG = "DeviceRootEngine"
 
-        /** 子进程 stdin 接空设备：防「等输入」型程序阻塞到超时（同 LinuxContainerEngine）。 */
+        /** Child process stdin connected to the null device: prevents "waiting for input" programs from blocking until timeout (same as LinuxContainerEngine). */
         private val STDIN_FROM_DEV_NULL: ProcessBuilder.Redirect =
             ProcessBuilder.Redirect.from(java.io.File("/dev/null"))
 
-        /** 命令超时上限（毫秒），与 [CommandEngine.MAX_TIMEOUT_MS] 对齐。 */
+        /** Command timeout upper limit (milliseconds), aligned with [CommandEngine.MAX_TIMEOUT_MS]. */
         private const val MAX_TIMEOUT_MS = CommandEngine.MAX_TIMEOUT_MS
 
-        /** 超时后给进程的优雅退出宽限（毫秒），过后强杀。 */
+        /** Grace period (milliseconds) for the process to exit gracefully after a timeout, after which it is force-killed. */
         private const val TIMEOUT_KILL_GRACE_MS = 200L
 
-        /** su 探测结果缓存时长（毫秒）：避免每条命令都 fork 一次探测进程。 */
+        /** How long an su probe result is cached (milliseconds): avoids forking a probe process for every command. */
         private const val PROBE_CACHE_MS = 30_000L
 
-        /** 单引号包裹 shell 字符串（`'` → `'\''`）。 */
+        /** Wraps a shell string in single quotes (`'` -> `'\''`). */
         fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
     }
 
-    /** 真机通道无需初始化：进度恒 Ready。 */
+    /** The device channel needs no initialization: progress is always Ready. */
     private val _initProgress = MutableStateFlow<ContainerInitState>(ContainerInitState.Ready)
     override val initProgress: StateFlow<ContainerInitState> = _initProgress.asStateFlow()
 
-    /** su 探测缓存：结果 + 探测时刻。 */
+    /** su probe cache: result + probe time. */
     @Volatile
     private var probeCache: Pair<Boolean, Long>? = null
 
     /**
-     * 探测 ROOT 是否可用：`su -c id -u` 退出码 0 且输出首行为 "0"。
-     * 结果缓存 [PROBE_CACHE_MS] 毫秒；首次探测可能触发 su 授权弹窗（取决于 su 实现）。
+     * Probes whether ROOT is available: `su -c id -u` exits with code 0 and its first output line is "0".
+     * The result is cached for [PROBE_CACHE_MS] milliseconds; the first probe may trigger the su authorization dialog (depending on the su implementation).
      */
     private fun probeRoot(): Boolean {
         val now = System.currentTimeMillis()
@@ -107,14 +109,14 @@ class DeviceRootEngine @Inject constructor(
             val exitCode = process.waitFor()
             exitCode == 0 && output.lineSequence().firstOrNull()?.trim() == "0"
         }.getOrElse {
-            FileLogger.w(TAG, "su 探测失败: ${it.message}")
+            FileLogger.w(TAG, "su probe failed: ${it.message}")
             false
         }
         probeCache = ok to now
         return ok
     }
 
-    /** 强制重新探测（设置页「检测 ROOT」按钮用，绕过缓存）。 */
+    /** Forces a re-probe (used by the "Check ROOT" button on the settings page, bypassing the cache). */
     fun reprobeRoot(): Boolean {
         probeCache = null
         return probeRoot()
@@ -149,9 +151,9 @@ class DeviceRootEngine @Inject constructor(
     }.flowOn(Dispatchers.IO)
 
     /**
-     * 流式执行（与 [com.aicode.feature.agent.domain.container.LinuxContainerEngine] 同构）：
-     * 逐行 emit [CommandEvent.Line]，结束 emit [CommandEvent.Exit]；超时由看门狗 destroy 进程解除
-     * readLine 阻塞，并追加超时提示行、Exit(null)。
+     * Streaming execution (isomorphic with [com.aicode.feature.agent.domain.container.LinuxContainerEngine]):
+     * emits [CommandEvent.Line] line by line and [CommandEvent.Exit] at the end; on timeout the watchdog destroys
+     * the process to unblock readLine, appends a timeout notice line, and emits Exit(null).
      */
     private fun streamExec(
         command: String,
@@ -159,14 +161,14 @@ class DeviceRootEngine @Inject constructor(
         timeoutMs: Long
     ): Flow<CommandEvent> = flow {
         val effectiveTimeout = timeoutMs.coerceIn(1L, MAX_TIMEOUT_MS)
-        FileLogger.d(TAG, "执行命令(真机,流式) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
+        FileLogger.d(TAG, "Running command (device, streaming) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
         val process = startRootProcess(command, projectPath)
         val timedOut = AtomicBoolean(false)
         val watchScope = CoroutineScope(Dispatchers.IO + Job())
         val watchdog = launchKillWatchdog(watchScope, process, effectiveTimeout, timedOut, command)
         val cancellationHook = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
             if (cause is CancellationException && process.isAlive) {
-                FileLogger.i(TAG, "命令被取消，终止进程: ${sanitizeCommandForLog(command)}")
+                FileLogger.i(TAG, "Command cancelled, terminating process: ${sanitizeCommandForLog(command)}")
                 runCatching { process.destroy() }
                 runCatching { process.destroyForcibly() }
             }
@@ -180,25 +182,25 @@ class DeviceRootEngine @Inject constructor(
             val exitCode = process.waitFor()
             watchdog.cancel()
             if (timedOut.get()) {
-                FileLogger.w(TAG, "命令超时(${effectiveTimeout}ms)已终止: ${sanitizeCommandForLog(command)}")
+                FileLogger.w(TAG, "Command timed out (${effectiveTimeout}ms), terminated: ${sanitizeCommandForLog(command)}")
                 emit(CommandEvent.Line(timeoutNotice(effectiveTimeout)))
                 emit(CommandEvent.Exit(null))
             } else {
-                if (exitCode != 0) FileLogger.w(TAG, "命令退出码=$exitCode: ${sanitizeCommandForLog(command)}")
+                if (exitCode != 0) FileLogger.w(TAG, "Command exit code=$exitCode: ${sanitizeCommandForLog(command)}")
                 emit(CommandEvent.Exit(exitCode))
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // 与容器引擎同理：看门狗 destroy 关闭管道会让 readLine 抛 IOException，按超时/异常分流，
-            // 保证 Exit 一定 emit、已输出内容不丢。
+            // Same reasoning as the container engine: the watchdog's destroy closes the pipe and makes readLine throw an IOException, so branch on timeout vs. exception
+            // to guarantee that Exit is always emitted and already-produced output is not lost.
             watchdog.cancel()
             if (timedOut.get()) {
                 emit(CommandEvent.Line(timeoutNotice(effectiveTimeout)))
                 emit(CommandEvent.Exit(null))
             } else {
-                FileLogger.e(TAG, "命令读输出异常(已保留此前输出): ${sanitizeCommandForLog(command)}", e)
-                emit(CommandEvent.Line("[命令执行异常：${e.message}]"))
+                FileLogger.e(TAG, "Exception reading command output (previous output preserved): ${sanitizeCommandForLog(command)}", e)
+                emit(CommandEvent.Line("[Command execution exception: ${e.message}]"))
                 emit(CommandEvent.Exit(null))
             }
         } finally {
@@ -249,10 +251,10 @@ class DeviceRootEngine @Inject constructor(
         return CommandResult(r.output, r.exitCode, r.truncated)
     }
 
-    /** 一次真机执行的内部结果：限幅后的完整输出 + 退出码（超时/异常时为 null）。 */
+    /** Internal result of one device execution: the capped full output + exit code (null on timeout/exception). */
     private data class ExecResult(val output: String, val exitCode: Int?, val truncated: Boolean = false)
 
-    /** 同步执行并捕获输出（与容器引擎同构：限幅累积 + 看门狗 + 取消回收）。 */
+    /** Runs synchronously and captures output (isomorphic with the container engine: capped accumulation + watchdog + cancellation cleanup). */
     private suspend fun execCaptured(
         command: String,
         projectPath: String?,
@@ -261,12 +263,12 @@ class DeviceRootEngine @Inject constructor(
     ): ExecResult = withContext(Dispatchers.IO) {
         try {
             val effectiveTimeout = timeoutMs.coerceIn(1L, MAX_TIMEOUT_MS)
-            FileLogger.d(TAG, "执行命令(真机,同步) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
+            FileLogger.d(TAG, "Running command (device, synchronous) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
             val process = startRootProcess(command, projectPath)
             val timedOut = AtomicBoolean(false)
             val cancellationHook = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
                 if (cause is CancellationException && process.isAlive) {
-                    FileLogger.i(TAG, "命令被取消，终止进程: ${sanitizeCommandForLog(command)}")
+                    FileLogger.i(TAG, "Command cancelled, terminating process: ${sanitizeCommandForLog(command)}")
                     runCatching { process.destroy() }
                     runCatching { process.destroyForcibly() }
                 }
@@ -296,7 +298,7 @@ class DeviceRootEngine @Inject constructor(
             }
 
             if (timedOut.get()) {
-                FileLogger.w(TAG, "命令超时(${effectiveTimeout}ms)已终止: ${sanitizeCommandForLog(command)}")
+                FileLogger.w(TAG, "Command timed out (${effectiveTimeout}ms), terminated: ${sanitizeCommandForLog(command)}")
                 output.append(timeoutNotice(effectiveTimeout))
                 output.append("\n")
                 ExecResult(output.build(), null, output.truncated)
@@ -306,12 +308,12 @@ class DeviceRootEngine @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FileLogger.e(TAG, "执行命令异常: ${sanitizeCommandForLog(command)}", e)
+            FileLogger.e(TAG, "Command execution exception: ${sanitizeCommandForLog(command)}", e)
             ExecResult("Error: ${e.message}", null)
         }
     }
 
-    /** 看门狗：到点进程仍存活则标记超时并优雅→强制终止（真机通道无凭据弹窗宽限场景）。 */
+    /** Watchdog: when the deadline arrives and the process is still alive, marks it timed out and terminates it gracefully, then forcibly (the device channel has no credential-dialog grace scenario). */
     private fun launchKillWatchdog(
         scope: CoroutineScope,
         process: Process,
@@ -322,23 +324,23 @@ class DeviceRootEngine @Inject constructor(
         delay(timeoutMs)
         if (!process.isAlive) return@launch
         timedOut.set(true)
-        FileLogger.w(TAG, "命令执行超过 ${timeoutMs}ms，终止进程: ${sanitizeCommandForLog(command)}")
+        FileLogger.w(TAG, "Command execution exceeded ${timeoutMs}ms, terminating process: ${sanitizeCommandForLog(command)}")
         runCatching { process.destroy() }
         delay(TIMEOUT_KILL_GRACE_MS)
         if (process.isAlive) runCatching { process.destroyForcibly() }
     }
 
-    /** 超时提示行（拼进输出，喂回模型/展示给用户）。 */
+    /** Timeout notice line (appended to the output, fed back to the model / shown to the user). */
     private fun timeoutNotice(timeoutMs: Long): String =
-        "[命令执行超时：超过 ${timeoutMs}ms 已被强制终止]"
+        "[Command execution timed out: exceeded ${timeoutMs}ms and was forcibly terminated]"
 
     /**
-     * 以 root 身份启动命令：`su -c '<command>'`；[projectPath] 非空时先 `cd` 进去。
-     * argv 逐项传递（不经 shell 拼接），命令文本本身仍由 root shell 解析（与容器引擎语义一致）。
+     * Starts a command as root: `su -c '<command>'`; when [projectPath] is non-empty, `cd`s into it first.
+     * argv is passed item by item (not concatenated through a shell); the command text itself is still parsed by the root shell (consistent with the container engine's semantics).
      *
-     * 前缀先 `export HOME=<filesDir>`：su 会把 HOME 重置为 /root（设备上不存在），
-     * 而提示词约定工作区别名为 `~/workspace`——HOME 指向 filesDir 后，shell 内 `~/workspace`
-     * 与文件工具的路径别名解析到同一处（经 [refreshWorkspaceLinks] 建的符号链接）。
+     * The prefix first does `export HOME=<filesDir>`: su resets HOME to /root (which does not exist on the device),
+     * while the prompt convention names the workspace alias `~/workspace` - with HOME pointing at filesDir, `~/workspace`
+     * inside the shell and the file tools' path alias resolve to the same place (via the symlink created by [refreshWorkspaceLinks]).
      */
     private fun startRootProcess(command: String, projectPath: String?): Process {
         refreshWorkspaceLinks()
@@ -354,18 +356,19 @@ class DeviceRootEngine @Inject constructor(
         return pb.start()
     }
 
-    /** 上次成功建链的工作区路径：工作区未变时跳过，避免每条命令重复 stat/symlink。 */
+    /** The workspace path for which links were last successfully created: skipped when the workspace is unchanged, avoiding a repeated stat/symlink for every command. */
     @Volatile
     private var linkedWorkspace: String? = null
 
     /**
-     * 在 `$HOME`（App 私有 filesDir）下建 `workspace` / `.aicode` 符号链接，分别指向当前工作区
-     * 与全局配置目录——对齐容器模式里 `~/workspace` bind mount、`/root/.aicode` 绑定的布局，
-     * 让真机 root shell 里手动 `cd ~/workspace`、`ls ~/.aicode` 与文件工具的路径别名一致。
+     * Creates `workspace` / `.aicode` symlinks under `$HOME` (the App's private filesDir), pointing at the current
+     * workspace and the global config directory respectively, mirroring the layout of the `~/workspace` bind mount
+     * and the `/root/.aicode` binding in container mode, so that manually running `cd ~/workspace` or
+     * `ls ~/.aicode` in the device root shell agrees with the file tools' path aliases.
      *
-     * best-effort：链接建在 ext4 的 filesDir 内（app 自己可建，无需 su），指向 /sdcard 等
-     * 外部目标也没问题；仅在目标已是真实目录/文件时不覆盖。任何失败静默忽略——
-     * 文件工具的别名映射不依赖链接真实存在。
+     * Best-effort: the links are created inside filesDir on ext4 (the app can create them itself, no su needed), and
+     * pointing at external targets such as /sdcard is fine too; an existing real directory/file at the target is
+     * never overwritten. Any failure is silently ignored: the file tools' alias mapping does not depend on the links actually existing.
      */
     fun refreshWorkspaceLinks() {
         val ws = workspaceRepository.currentPath().trim().trimEnd('/')
@@ -376,7 +379,7 @@ class DeviceRootEngine @Inject constructor(
         linkedWorkspace = ws
     }
 
-    /** 建单个符号链接；[link] 已是指向同一目标的链接时跳过，已是真实文件/目录时不覆盖。 */
+    /** Creates a single symlink; skipped when [link] is already a link to the same target, and never overwrites an existing real file/directory. */
     private fun linkIfPossible(link: File, target: String) {
         runCatching {
             val path = link.toPath()
@@ -388,6 +391,6 @@ class DeviceRootEngine @Inject constructor(
                 return
             }
             Os.symlink(target, link.absolutePath)
-        }.onFailure { FileLogger.w(TAG, "建符号链接失败 ${link.absolutePath} -> $target: ${it.message}") }
+        }.onFailure { FileLogger.w(TAG, "Failed to create symlink ${link.absolutePath} -> $target: ${it.message}") }
     }
 }

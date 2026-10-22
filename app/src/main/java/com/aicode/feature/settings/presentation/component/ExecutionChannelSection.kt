@@ -44,11 +44,11 @@ import compose.icons.feathericons.Server
 import compose.icons.feathericons.Shield
 
 /**
- * 「命令执行通道」二级设置页：选择 AI 命令/文件/终端的执行环境——
- * 沙盒容器（PRoot）/ 本机 ROOT（su）/ 远程 SSH。
+ * "Command execution channel" secondary settings page: chooses the execution environment for AI commands/files/terminal --
+ * sandbox container (PRoot) / device ROOT (su) / remote SSH.
  *
- * 切到本机 ROOT 需经倒计时确认（[CountdownConfirmDialog]），且 su 探测不可用时不允许切换；
- * 沙盒/远程经由容器 profile 体系恢复（由 ViewModel 的 switchExecutionChannel 处理镜像绑定）。
+ * Switching to device ROOT requires a countdown confirmation ([CountdownConfirmDialog]), and switching is not allowed when the su probe is unavailable;
+ * sandbox/remote are restored via the container profile system (image binding is handled by the ViewModel's switchExecutionChannel).
  */
 @Composable
 internal fun ExecutionChannelSection(
@@ -63,12 +63,12 @@ internal fun ExecutionChannelSection(
     var showDeviceConfirm by remember { mutableStateOf(false) }
     var showRootBlocked by remember { mutableStateOf(false) }
 
-    // 首次进入自动探测一次 ROOT，让用户直接看到状态
+    // Probe ROOT once automatically on first entry so the user sees the status directly
     LaunchedEffect(Unit) {
         if (rootProbeState == RootProbeState.UNKNOWN) onProbeRoot()
     }
 
-    // 展示用镜像名：沙盒取当前激活的本地镜像（否则默认容器/内置），远程取激活的远程镜像（否则第一个）
+    // Display image name: for sandbox use the currently active local image (otherwise the default container/built-in), for remote use the active remote image (otherwise the first)
     val sandboxImageName = profiles.firstOrNull { it.id == activeProfileId && it.mode == ExecutionMode.LOCAL_PROOT }
         ?: profiles.firstOrNull { it.id == defaultContainerId && it.mode == ExecutionMode.LOCAL_PROOT }
         ?: profiles.firstOrNull { it.mode == ExecutionMode.LOCAL_PROOT }
@@ -129,7 +129,7 @@ internal fun ExecutionChannelSection(
             )
         }
 
-        // ── 真机 ROOT：状态检测 + 说明 ──
+        // ── Device ROOT: status check + notes ──
         SettingsGroupHeader(text = stringResource(R.string.channel_device_group))
         SettingsGroup {
             SettingsRow(
@@ -203,7 +203,7 @@ internal fun ExecutionChannelSection(
     }
 }
 
-/** 通道选择行：图标 + 标题/副标题 + 单选钮；[danger] 用于本机 ROOT 的警示配色。 */
+/** Channel selection row: icon + title/subtitle + radio button; [danger] applies the warning colors for device ROOT. */
 @Composable
 private fun ChannelRow(
     icon: ImageVector,

@@ -16,8 +16,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 自定义模型元数据的本地缓存存储（存于 app 缓存目录，可随时被系统清理）。
- * key 为「提供商ID:模型名」复合键；优先级高于拉取/内置元数据。
+ * Local cache store for custom model metadata (kept in the app cache directory, which the system may clear at any time).
+ * The key is the composite "provider ID:model name" key; it takes priority over fetched/built-in metadata.
  */
 @Singleton
 class CustomModelMetadataStore @Inject constructor(
@@ -58,7 +58,7 @@ class CustomModelMetadataStore @Inject constructor(
         return runCatching {
             json.decodeFromString<Map<String, ModelMetadata>>(f.readText(Charsets.UTF_8))
         }.getOrElse {
-            FileLogger.w(TAG, "读取自定义模型元数据失败", it)
+            FileLogger.w(TAG, "Failed to read custom model metadata", it)
             emptyMap()
         }
     }
@@ -67,7 +67,7 @@ class CustomModelMetadataStore @Inject constructor(
         runCatching {
             file().writeText(json.encodeToString(map), Charsets.UTF_8)
         }.onFailure {
-            FileLogger.w(TAG, "写入自定义模型元数据失败", it)
+            FileLogger.w(TAG, "Failed to write custom model metadata", it)
         }
     }
 

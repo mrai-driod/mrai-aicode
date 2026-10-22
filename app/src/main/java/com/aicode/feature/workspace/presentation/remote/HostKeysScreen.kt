@@ -65,7 +65,7 @@ import compose.icons.feathericons.Key
 import compose.icons.feathericons.Plus
 import compose.icons.feathericons.Shield
 
-/** SSH 密钥设置独立页面：底部双 tab——「密钥」管理登录私钥库，「指纹」展示已保存的主机指纹。 */
+/** Standalone SSH key settings page: two bottom tabs — "Keys" manages the login private-key library, "Fingerprints" shows saved host fingerprints. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HostKeysScreen(
@@ -80,7 +80,7 @@ fun HostKeysScreen(
     onNavigateBack: () -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
-    // 系统返回键与顶栏返回箭头一致：回到远程服务器列表，而不是被外层设置页拦截直接跳回首页。
+    // System back behaves like the top-bar back arrow: returns to the remote server list, instead of being intercepted by the outer settings page and jumping straight home.
     BackHandler { onNavigateBack() }
     var detailLoginKey by remember { mutableStateOf<SshLoginKey?>(null) }
     var detailHostAddress by remember { mutableStateOf<String?>(null) }
@@ -291,7 +291,7 @@ fun HostKeysScreen(
     }
 }
 
-/** 居中空态提示。 */
+/** Centered empty-state hint. */
 @Composable
 private fun EmptyCenterHint(text: String) {
     Column(
@@ -309,7 +309,7 @@ private fun EmptyCenterHint(text: String) {
     }
 }
 
-/** 登录密钥行：图标 + 名称/指纹 + 右箭头，左滑删除，点击查看详情。 */
+/** Login key row: icon + name/fingerprint + chevron, swipe to delete, tap to view details. */
 @Composable
 private fun LoginKeyRow(
     key: SshLoginKey,
@@ -368,7 +368,7 @@ private fun LoginKeyRow(
     }
 }
 
-/** 「添加密钥」方式选择：从文件导入 / 粘贴密钥。 */
+/** "Add key" method picker: import from file / paste key. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddLoginKeyMethodSheet(

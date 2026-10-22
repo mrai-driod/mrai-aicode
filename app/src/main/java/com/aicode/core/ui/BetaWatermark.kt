@@ -17,10 +17,10 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.hypot
 
 /**
- * 全屏斜向平铺的「Beta」水印。
+ * Full-screen diagonally tiled "Beta" watermark.
  *
- * 仅当 applicationId 以 `.beta` 结尾（见 beta buildType）时显示，供用户一眼区分测试包与正式版。
- * 无触摸手势，叠加在根布局最上层即可，不拦截交互。
+ * Shown only when the applicationId ends with `.beta` (see the beta buildType), so users can tell a test build from a release build at a glance.
+ * Has no touch gestures; simply overlay it on the topmost layer of the root layout, and it does not intercept interaction.
  */
 @Composable
 fun BetaWatermark(modifier: Modifier = Modifier) {
@@ -41,7 +41,7 @@ fun BetaWatermark(modifier: Modifier = Modifier) {
         }
         val stepX = textSizePx * 4.5f
         val stepY = textSizePx * 3.2f
-        // 画布绕中心旋转后四角会移出可视区，平铺范围按对角线加余量扩展，保证铺满全屏。
+        // After the canvas is rotated around the center, the four corners move outside the visible area, so the tiling range is expanded along the diagonal with extra margin to ensure full-screen coverage.
         val reach = hypot(size.width, size.height) / 2f + textSizePx * 2f
         val canvas = drawContext.canvas.nativeCanvas
         rotate(degrees = -30f) {

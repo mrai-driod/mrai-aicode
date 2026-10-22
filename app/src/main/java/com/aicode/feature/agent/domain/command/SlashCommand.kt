@@ -3,29 +3,29 @@ package com.aicode.feature.agent.domain.command
 import androidx.annotation.StringRes
 import com.aicode.feature.agent.domain.skill.Skill
 
-/** 提示型命令正文里的参数占位符。 */
+/** The argument placeholder in the body of a prompt-style command. */
 internal const val ARGUMENTS_PLACEHOLDER = "\$ARGUMENTS"
 
 /**
- * 把模板里的 `$ARGUMENTS` 替换为 [args]；模板没有占位符且 [args] 非空时，
- * 追加一行，避免用户输入丢失。
+ * Replaces `$ARGUMENTS` in the template with [args]; when the template has no placeholder and [args] is non-empty,
+ * appends a line so the user input is not lost.
  */
 internal fun substituteArguments(template: String, args: String): String = when {
     template.contains(ARGUMENTS_PLACEHOLDER) -> template.replace(ARGUMENTS_PLACEHOLDER, args)
     args.isBlank() -> template
-    else -> "$template\n\n用户附加输入：$args"
+    else -> "$template\n\nAdditional user input: $args"
 }
 
-/** 斜杠命令来源：内置命令（本地动作）或技能（把 SKILL.md 正文注入本轮）。 */
+/** Source of a slash command: a built-in command (local action) or a skill (injects the SKILL.md body into this turn). */
 enum class SlashCommandKind { ACTION, SKILL }
 
 /**
- * 输入框 `/` 菜单的展示模型，内置命令与技能统一表示。
+ * Display model for the `/` menu in the input box, representing built-in commands and skills uniformly.
  *
- * @param name 命令名，不含前导 `/`（如 `status`、`pdf-report`）。
- * @param description 已解析的菜单描述（内置命令取字符串资源，技能取其 `description`）。
- * @param kind 来源类型，供菜单区分展示。
- * @param acceptsArgs 是否接受参数；为 true 时菜单点击会补一个空格，便于继续输入参数。
+ * @param name The command name, without the leading `/` (e.g. `status`, `pdf-report`).
+ * @param description The resolved menu description (for built-in commands, taken from the string resource; for skills, from their `description`).
+ * @param kind The source type, so the menu can distinguish them when displaying.
+ * @param acceptsArgs Whether arguments are accepted; when true, clicking in the menu appends a space so arguments can continue to be typed.
  */
 data class SlashCommand(
     val name: String,
@@ -35,41 +35,41 @@ data class SlashCommand(
 )
 
 /**
- * 内置斜杠命令处理器（本地动作型）。每条命令实现一个此类，
- * 通过 Hilt `@Binds @IntoSet` 汇集到 [SlashCommandRegistry]。
+ * Handler for a built-in slash command (local-action type). Each command implements one of these,
+ * collected into [SlashCommandRegistry] via Hilt `@Binds @IntoSet`.
  *
- * 新增命令只需：新建实现类 + 在 [SlashCommandContext] 补对应方法 + ViewModel 实现 +
- * 在 [SlashCommandModule] 追加一行绑定。
+ * To add a command, just: create an implementation class + add the corresponding method to [SlashCommandContext] + implement it in the ViewModel +
+ * add one binding line in [SlashCommandModule].
  */
 interface ActionCommandHandler {
 
-    /** 命令名，不含前导 `/`。 */
+    /** The command name, without the leading `/`. */
     val name: String
 
-    /** 菜单描述，来自双语字符串资源。 */
+    /** Menu description, from a bilingual string resource. */
     @get:StringRes
     val descriptionRes: Int
 
-    /** 是否接受参数。默认不接受：带多余参数时不命中（回落为普通消息，不吞用户输入）。 */
+    /** Whether arguments are accepted. By default they are not: with extra arguments it does not match (falls back to a normal message, without swallowing the user input). */
     val acceptsArgs: Boolean get() = false
 
-    /** 命中后执行。[args] 为命令名之后的原始文本（已 trim）。 */
+    /** Executed after a match. [args] is the raw text after the command name (already trimmed). */
     fun execute(context: SlashCommandContext, args: String)
 }
 
 /**
- * 命令执行上下文：只暴露命令需要的最小能力，避免命令直接持有 ViewModel。
- * 由 AIAgentViewModel 实现，新增命令时在此接口补方法并在 ViewModel 实现。
+ * Command execution context: exposes only the minimum capabilities commands need, avoiding commands holding the ViewModel directly.
+ * Implemented by AIAgentViewModel; when adding a command, add the method to this interface and implement it in the ViewModel.
  */
 interface SlashCommandContext {
     fun compactCurrentSession()
 
-    /** /usage —— 以 Markdown 表格输出今日与累计的调用次数、token 用量与预估费用。 */
+    /** /usage - outputs today's and cumulative call counts, token usage and estimated cost as a Markdown table. */
     fun showUsage()
 
-    /** /init —— 触发一次 agent 回合，分析代码库并生成/改进项目规则文件；[prompt] 为指令正文。 */
+    /** /init - triggers one agent turn, analyzing the codebase and generating/improving the project rules file; [prompt] is the instruction body. */
     fun initProject(prompt: String)
 
-    /** 技能触发：把 [skill] 正文作为本轮指令执行，[args] 为附加参数。 */
+    /** Skill trigger: executes the [skill] body as this turn's instruction, with [args] as additional arguments. */
     fun runSkill(skill: Skill, args: String)
 }

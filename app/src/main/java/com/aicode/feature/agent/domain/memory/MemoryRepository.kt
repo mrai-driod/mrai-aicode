@@ -13,36 +13,36 @@ class MemoryRepository @Inject constructor(
     private val containerInstaller: ContainerInstaller,
     private val projectAicodeRoot: ProjectAicodeRoot
 ) {
-    /** 按当前会话 projectRoot 创建项目级数据源（内部按执行模式决定存储位置）。 */
+    /** Creates the project-level data source for the current session's projectRoot (it decides the storage location internally by execution mode). */
     private fun projectSource(projectRoot: String) =
         ProjectMemorySource(projectRoot, executionModeHolder, containerInstaller, projectAicodeRoot)
 
-    /** 扫描并聚合全局和项目级的 memory。同名 memory 项目级优先。 */
+    /** Scans and aggregates the global and project-level memories. For same-named memories the project level wins. */
     fun listMemories(projectRoot: String?): List<Memory> {
         val allMemories = mutableListOf<Memory>()
         
-        // 1. 加载全局记忆
+        // 1. Load the global memories
         allMemories.addAll(globalMemorySource.listMemories())
         
-        // 2. 加载项目记忆（如果有）
+        // 2. Load the project memories (if any)
         if (!projectRoot.isNullOrBlank()) {
             allMemories.addAll(projectSource(projectRoot).listMemories())
         }
         
-        // 去重：按 name 小写分组，保留最后加入的（即项目级优先覆盖全局级）
+        // Deduplicate: group by lowercase name and keep the last one added (i.e. the project level overrides the global level)
         return allMemories
             .groupBy { it.name.lowercase() }
             .map { it.value.last() }
     }
 
-    /** 读取指定 memory 的完整指令正文；不存在 / 解析失败返回 null。 */
+    /** Reads the full instruction body of the given memory; returns null when it does not exist / fails to parse. */
     fun loadContent(name: String, projectRoot: String?): String? {
-        // 优先从项目级读取
+        // Read from the project level first
         if (!projectRoot.isNullOrBlank()) {
             val content = projectSource(projectRoot).loadContent(name)
             if (content != null) return content
         }
-        // 回退到全局读取
+        // Fall back to the global level
         return globalMemorySource.loadContent(name)
     }
 
@@ -60,7 +60,7 @@ class MemoryRepository @Inject constructor(
         return when (scope) {
             MemoryScope.GLOBAL -> globalMemorySource.editMemory(name, edits)
             MemoryScope.PROJECT -> {
-                if (projectRoot.isNullOrBlank()) MemoryEditResult.Error("NO_WORKSPACE", "当前未选择工作区，无法编辑项目级记忆")
+                if (projectRoot.isNullOrBlank()) MemoryEditResult.Error("NO_WORKSPACE", "No workspace is currently selected; project-level memories cannot be edited")
                 else projectSource(projectRoot).editMemory(name, edits)
             }
         }

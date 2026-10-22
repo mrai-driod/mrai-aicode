@@ -1,7 +1,7 @@
 {
   "sources": {
     "official": {
-      "name": { "zh": "官方源", "en": "Official" },
+      "name": { "zh": "Official Source", "en": "Official" },
       "distros": {
         "alpine": "https://dl-cdn.alpinelinux.org",
         "ubuntu": "https://cdimage.ubuntu.com",
@@ -9,21 +9,21 @@
       }
     },
     "huawei": {
-      "name": { "zh": "华为云", "en": "Huawei Cloud" },
+      "name": { "zh": "Huawei Cloud", "en": "Huawei Cloud" },
       "distros": {
         "alpine": "https://repo.huaweicloud.com",
         "ubuntu": "https://repo.huaweicloud.com/ubuntu-cdimage"
       }
     },
     "aliyun": {
-      "name": { "zh": "阿里云", "en": "Aliyun" },
+      "name": { "zh": "Aliyun", "en": "Aliyun" },
       "distros": {
         "alpine": "https://mirrors.aliyun.com",
         "ubuntu": "https://mirrors.aliyun.com/ubuntu-cdimage"
       }
     },
     "tencent": {
-      "name": { "zh": "腾讯云", "en": "Tencent Cloud" },
+      "name": { "zh": "Tencent Cloud", "en": "Tencent Cloud" },
       "distros": {
         "alpine": "https://mirrors.cloud.tencent.com",
         "ubuntu": ""
@@ -35,7 +35,7 @@
       "id": "alpine-3.21",
       "name": "Alpine Linux",
       "version": "3.21.7",
-      "description": "极简 Linux 发行版，rootfs 仅数 MB；与内置 Alpine 同分支",
+      "description": "Minimal Linux distribution, rootfs only a few MB; same branch as the built-in Alpine",
       "sizeBytes": 4000000,
       "distro": "alpine",
       "path": "alpine/v3.21/releases/{abi}/alpine-minirootfs-3.21.7-{abi}.tar.gz",
@@ -45,7 +45,7 @@
       "id": "alpine-3.22",
       "name": "Alpine Linux",
       "version": "3.22.5",
-      "description": "极简 Linux 发行版，rootfs 仅数 MB，解压快、占用小",
+      "description": "Minimal Linux distribution, rootfs only a few MB, fast to extract, small footprint",
       "sizeBytes": 4000000,
       "distro": "alpine",
       "path": "alpine/v3.22/releases/{abi}/alpine-minirootfs-3.22.5-{abi}.tar.gz",
@@ -55,7 +55,7 @@
       "id": "alpine-3.23",
       "name": "Alpine Linux",
       "version": "3.23.5",
-      "description": "极简 Linux 发行版，rootfs 仅数 MB，解压快、占用小",
+      "description": "Minimal Linux distribution, rootfs only a few MB, fast to extract, small footprint",
       "sizeBytes": 4000000,
       "distro": "alpine",
       "path": "alpine/v3.23/releases/{abi}/alpine-minirootfs-3.23.5-{abi}.tar.gz",
@@ -65,7 +65,7 @@
       "id": "alpine-3.24",
       "name": "Alpine Linux",
       "version": "3.24.1",
-      "description": "极简 Linux 发行版，rootfs 仅数 MB；当前最新稳定版",
+      "description": "Minimal Linux distribution, rootfs only a few MB; current latest stable release",
       "sizeBytes": 4000000,
       "distro": "alpine",
       "path": "alpine/v3.24/releases/{abi}/alpine-minirootfs-3.24.1-{abi}.tar.gz",
@@ -95,7 +95,7 @@
       "id": "ubuntu-24.04",
       "name": "Ubuntu",
       "version": "24.04.4",
-      "description": "Ubuntu 24.04 LTS (Noble) base rootfs，生态完整，适合作为主力开发环境",
+      "description": "Ubuntu 24.04 LTS (Noble) base rootfs, complete ecosystem, suitable as a primary development environment",
       "sizeBytes": 29000000,
       "distro": "ubuntu",
       "path": "ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-{abi}.tar.gz",
@@ -105,7 +105,7 @@
       "id": "ubuntu-26.04",
       "name": "Ubuntu",
       "version": "26.04.1",
-      "description": "Ubuntu 26.04 LTS (Resolute Raccoon) base rootfs，最新 LTS，生态完整",
+      "description": "Ubuntu 26.04 LTS (Resolute Raccoon) base rootfs, latest LTS, complete ecosystem",
       "sizeBytes": 33000000,
       "distro": "ubuntu",
       "path": "ubuntu-base/releases/26.04/release/ubuntu-base-26.04.1-base-{abi}.tar.gz",
@@ -115,7 +115,7 @@
       "id": "debian-12",
       "name": "Debian",
       "version": "12 (bookworm)",
-      "description": "Debian 12 稳定版，Docker 官方镜像同源 rootfs（debuerreotype 构建）",
+      "description": "Debian 12 stable release, rootfs from the same source as the official Docker image (debuerreotype build)",
       "sizeBytes": 29000000,
       "distro": "debian",
       "path": "job/tianon/job/debuerreotype/job/{abi}/lastSuccessfulBuild/artifact/bookworm/rootfs.tar.xz",
@@ -125,7 +125,7 @@
       "id": "debian-13",
       "name": "Debian",
       "version": "13 (trixie)",
-      "description": "Debian 13 最新稳定版，Docker 官方镜像同源 rootfs（debuerreotype 构建）",
+      "description": "Debian 13 latest stable release, rootfs from the same source as the official Docker image (debuerreotype build)",
       "sizeBytes": 31000000,
       "distro": "debian",
       "path": "job/tianon/job/debuerreotype/job/{abi}/lastSuccessfulBuild/artifact/trixie/rootfs.tar.xz",

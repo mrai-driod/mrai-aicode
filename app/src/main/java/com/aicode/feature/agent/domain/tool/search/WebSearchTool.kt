@@ -28,11 +28,11 @@ class WebSearchTool @Inject constructor() : AgentTool() {
 
     private companion object {
         const val TAG = "WebSearchTool"
-        // 使用与 opencode 一致的 Parallel AI 公开 MCP 接口
+        // Uses the same public Parallel AI MCP interface as opencode
         const val PARALLEL_MCP_URL = "https://search.parallel.ai/mcp"
 
-        // 走全局/提供商代理链路（AppProxy 的全局 ProxySelector + 按 host 分派的认证），
-        // 与对话等其它 HTTP 请求保持一致；lazy 确保 client 在 applyGlobal 之后首次构建。
+        // Goes through the global/provider proxy chain (AppProxy's global ProxySelector + host-dispatched authentication),
+        // consistent with other HTTP requests such as conversations; lazy ensures the client is first built after applyGlobal.
         val client by lazy {
             OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
@@ -81,7 +81,7 @@ class WebSearchTool @Inject constructor() : AgentTool() {
                     )
                 ).toString()
 
-                FileLogger.i(TAG, "发起 WebSearch 请求: $query")
+                FileLogger.i(TAG, "Sending WebSearch request: $query")
 
                 val request = Request.Builder()
                     .url(PARALLEL_MCP_URL)
@@ -94,31 +94,31 @@ class WebSearchTool @Inject constructor() : AgentTool() {
                     val responseCode = resp.code
                     if (responseCode !in 200..299) {
                         val errorStr = resp.body?.string()
-                        FileLogger.e(TAG, "WebSearch 失败: HTTP $responseCode, $errorStr")
+                        FileLogger.e(TAG, "WebSearch failed: HTTP $responseCode, $errorStr")
                         return@withContext ToolResult.Error("Web search failed (HTTP $responseCode)")
                     }
 
-                    // 尝试直接读取普通 JSON 或解析 Event-Stream (SSE) 格式
+                    // Try reading plain JSON directly, or parse the Event-Stream (SSE) format
                     val responseBody = resp.body?.string().orEmpty()
 
-                    // 解析 MCP 返回体
+                    // Parse the MCP response body
                     val rawResultText = parseMcpResponse(responseBody)
 
                     if (rawResultText.isNullOrBlank()) {
-                        ToolResult.Success(kotlinx.serialization.json.JsonPrimitive("No search results found for 「$query」; please try different keywords and retry."))
+                        ToolResult.Success(kotlinx.serialization.json.JsonPrimitive("No search results found for '$query'; please try different keywords and retry."))
                     } else {
                         ToolResult.Success(parseSearchResultPayload(rawResultText) ?: JsonPrimitive(rawResultText))
                     }
                 }
             } catch (e: Exception) {
-                FileLogger.e(TAG, "WebSearch 发生异常", e)
+                FileLogger.e(TAG, "WebSearch error", e)
                 ToolResult.Error("Search failed: ${e.message}")
             }
         }
     }
 
     /**
-     * 兼容解析直接的 JSON 或 SSE (Server-Sent Events) 格式。
+     * Compatibility parsing for direct JSON or SSE (Server-Sent Events) format.
      */
     private fun parseMcpResponse(body: String): String? {
         val lines = body.lines().map { it.trim() }.filter { it.isNotEmpty() }

@@ -45,8 +45,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 按目标尺寸采样解码背景图（inSampleSize 2 的幂缩放，控制峰值内存），失败返回 null。
- * 全局背景层与设置弹窗缩略图共用。
+ * Decodes the background image sampled to the target size (inSampleSize power-of-two scaling, to control peak memory); returns null on failure.
+ * Shared by the global background layer and the settings sheet thumbnail.
  */
 internal fun decodeBackgroundBitmap(path: String, maxWidth: Int, maxHeight: Int): ImageBitmap? =
     runCatching {
@@ -61,14 +61,14 @@ internal fun decodeBackgroundBitmap(path: String, maxWidth: Int, maxHeight: Int)
     }.getOrNull()
 
 /**
- * 自定义背景图设置弹窗：缩略图预览 + 透明度滑块 + 选图/移除。
+ * Custom background image settings sheet: thumbnail preview + opacity slider + pick/remove image.
  *
- * @param imagePath 当前背景图路径，null 表示未设置。
- * @param alpha 当前透明度（0.05~1.0）。
- * @param onPickImage 用户选定图片后回调。
- * @param onAlphaChange 透明度变化回调（写 DataStore，全局背景随之变化；落盘节流在 ViewModel 侧）。
- * @param onRemove 移除背景回调。
- * @param onDismiss 关闭弹窗。
+ * @param imagePath Current background image path; null means not set.
+ * @param alpha Current opacity (0.05~1.0).
+ * @param onPickImage Callback after the user picks an image.
+ * @param onAlphaChange Opacity change callback (writes DataStore, and the global background changes with it; write throttling is handled on the ViewModel side).
+ * @param onRemove Callback to remove the background.
+ * @param onDismiss Callback to dismiss the sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,7 +86,7 @@ internal fun BackgroundImageSheet(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> if (uri != null) onPickImage(uri) }
 
-    // 缩略图预览：按屏幕宽度采样，避免大图全量解码
+    // Thumbnail preview: sampled to screen width to avoid fully decoding large images
     val previewBitmap by produceState<ImageBitmap?>(initialValue = null, imagePath) {
         value = imagePath?.let { path ->
             withContext(Dispatchers.IO) {
@@ -95,8 +95,8 @@ internal fun BackgroundImageSheet(
         }
     }
 
-    // 滑块位置由本地状态驱动：直接绑外部 alpha 会让每次拖动都走「写 DataStore → 回读 → 整个设置页重组」
-    // 的往返，滑块因此跟不上手指。弹窗每次打开都重建，初值取当前设置即可。
+    // The slider position is driven by local state: binding it directly to the external alpha would make every drag go through a "write DataStore -> read back -> recompose the whole settings page"
+    // round trip, so the slider could not keep up with the finger. The sheet is rebuilt every time it opens, so taking the initial value from the current setting is enough.
     var sliderPercent by remember { mutableFloatStateOf(BackgroundSettingsRepository.alphaToSlider(alpha)) }
 
     AdaptiveModalBottomSheet(

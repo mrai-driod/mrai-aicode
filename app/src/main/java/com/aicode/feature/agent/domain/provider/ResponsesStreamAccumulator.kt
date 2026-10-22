@@ -8,18 +8,18 @@ import com.aicode.feature.agent.domain.tool.ToolCall
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 
-/** Responses 响应体 `output` 数组的解析结果。 */
+/** Parse result of a Responses response body's `output` array. */
 internal data class ResponsesOutput(
     val text: String = "",
     val reasoning: String = "",
     val toolCalls: List<ToolCall> = emptyList(),
-    /** 模型经服务端 image_generation 工具产出的图片（`result` base64）。 */
+    /** Images produced by the model via the server-side image_generation tool (`result` base64). */
     val images: List<AgentImage> = emptyList(),
-    /** 官方 Responses 思考项快照（包含 encrypted_content 与 summary），供多轮无状态安全回传。 */
+    /** Official Responses thinking-item snapshot (including encrypted_content and summary), for safe stateless multi-turn resending. */
     val thinkingBlocksJson: String? = null
 )
 
-/** Responses 的 token 用量。 */
+/** Responses token usage. */
 internal data class ResponsesUsage(
     val inputTokens: Int = 0,
     val outputTokens: Int = 0,
@@ -28,11 +28,11 @@ internal data class ResponsesUsage(
 )
 
 /**
- * 解析 Responses 的 `output` 数组：非流式响应与流式终止事件共用。
+ * Parses a Responses `output` array: shared by non-streaming responses and streaming terminal events.
  *
- * 与 Chat Completions 的关键差别：工具调用是 output 里的**顶层 item**（`type: "function_call"`，
- * 自带 `call_id` / `name` / `arguments`），不是 assistant 消息 content 里的一个 part。
- * 按旧写法去 message.content 里找会永远解析不到工具调用。
+ * The key difference from Chat Completions: a tool call is a **top-level item** in the output (`type: "function_call"`,
+ * carrying its own `call_id` / `name` / `arguments`), not a part inside an assistant message's content.
+ * Looking for it in message.content the old way would never parse a tool call.
  */
 internal fun parseResponsesOutput(output: JsonArray?): ResponsesOutput {
     if (output == null) return ResponsesOutput()
@@ -42,7 +42,7 @@ internal fun parseResponsesOutput(output: JsonArray?): ResponsesOutput {
     val images = mutableListOf<AgentImage>()
     var thinkingBlocksSnapshot: String? = null
     output.forEach { element ->
-        // 上游字段类型偶有出入，单个 item 解析失败不应废掉整个响应
+        // Upstream field types occasionally differ; a single item failing to parse should not discard the whole response
         runCatching {
             val item = element.asJsonObject
             when (item.str("type")) {
@@ -50,7 +50,7 @@ internal fun parseResponsesOutput(output: JsonArray?): ResponsesOutput {
                     val part = partEl.asJsonObject
                     when (part.str("type")) {
                         ResponsesPart.OUTPUT_TEXT -> text.append(part.str("text").orEmpty())
-                        // 拒答说明在 refusal 字段，不归入则整个回复为空白
+                        // The refusal explanation is in the refusal field; without including it the whole reply would be blank
                         ResponsesPart.REFUSAL -> text.append(part.str("refusal").orEmpty())
                     }
                 }
@@ -63,16 +63,16 @@ internal fun parseResponsesOutput(output: JsonArray?): ResponsesOutput {
                     )
                 )
 
-                // 服务端生图：图片整块在 item 的 result（base64）里到达，无流式增量。
+                // Server-side image generation: the image arrives as a whole block in the item's result (base64), with no streaming delta.
                 ResponsesItem.IMAGE_GENERATION_CALL -> {
                     item.str("result")?.takeIf { it.isNotEmpty() }?.let { result ->
                         images.add(AgentImage(mimeType = mimeForImageFormat(item.str("output_format")), base64Data = result))
                     }
                 }
 
-                // 思考内容可能在 content（reasoning_text）或 summary（summary_text），视服务而定；
-                // 两边都可能是 null（如不返回思考明文时）。
-                // 同时提取加密思考快照（encrypted_content），供无状态多轮交互安全回传。
+                // Thinking content may be in content (reasoning_text) or summary (summary_text), depending on the service;
+                // either may be null (e.g. when no thinking plaintext is returned).
+                // Also extract the encrypted thinking snapshot (encrypted_content), for safe stateless multi-turn resending.
                 ResponsesItem.REASONING -> {
                     item.arr("content")?.forEach { partEl ->
                         val part = partEl.asJsonObject
@@ -102,7 +102,7 @@ internal fun parseResponsesOutput(output: JsonArray?): ResponsesOutput {
     return ResponsesOutput(text.toString(), reasoning.toString(), toolCalls, images, thinkingBlocksSnapshot)
 }
 
-/** image_generation_call 的 `output_format` → MIME；缺省为官方默认 png。 */
+/** image_generation_call's `output_format` -> MIME; defaults to the official default, png. */
 private fun mimeForImageFormat(format: String?): String = when (format?.lowercase()) {
     "jpeg" -> "image/jpeg"
     "webp" -> "image/webp"
@@ -120,10 +120,10 @@ internal fun parseResponsesUsage(usage: JsonObject?): ResponsesUsage {
 }
 
 /**
- * Responses 的 `status` → 统一 stopReason（沿用 Chat Completions 的取值，供上层复用同一套判定）。
- * 输出被 token 上限截断必须映射成 `length`，否则 [AIResponse.isTruncated] 为 false，
- * Agent 循环不会自动续写，表现为回答被无声截断。截断原因的取值各家不一：
- * OpenAI 官方文档示例给 `max_tokens`，DeepSeek / 部分兼容服务给 `max_output_tokens`。
+ * Responses `status` -> unified stopReason (reusing Chat Completions' values, so the upper layer can reuse the same judgement logic).
+ * Output truncated by the token limit must map to `length`, otherwise [AIResponse.isTruncated] is false,
+ * the Agent loop will not continue writing automatically, and the answer appears silently truncated. Truncation-reason values vary by provider:
+ * OpenAI's official documentation example gives `max_tokens`, while DeepSeek / some compatible services give `max_output_tokens`.
  */
 internal fun responsesStopReason(status: String?, incompleteReason: String?, hasToolCalls: Boolean): String? = when {
     status == "incomplete" && incompleteReason in TRUNCATION_REASONS -> "length"
@@ -134,23 +134,23 @@ internal fun responsesStopReason(status: String?, incompleteReason: String?, has
 
 private val TRUNCATION_REASONS = setOf("max_output_tokens", "max_tokens")
 
-/** 流式事件产生的增量文本，供上层推送给 UI。 */
+/** Incremental text produced by streaming events, for the upper layer to push to the UI. */
 internal sealed class ResponsesDelta {
     data class Text(val text: String) : ResponsesDelta()
     data class Reasoning(val text: String) : ResponsesDelta()
 
-    /** 刚开始产出某次 function_call、工具名已知（参数还在流式传输中），供 UI 提前说清「在调什么」。 */
+    /** A function_call has just started being produced and the tool name is known (the arguments are still streaming), so the UI can say early "what is being called". */
     data class ToolCallDeclared(val name: String) : ResponsesDelta()
 }
 
 /**
- * Responses 流式语义事件累积器。
+ * Responses streaming semantic event accumulator.
  *
- * 事件按 `output_index` 归组：`response.output_item.added` 给出 function_call 的 call_id/name，
- * `response.function_call_arguments.delta` 逐片追加入参，`response.output_item.done` /
- * `response.function_call_arguments.done` 给出完整入参（用于覆盖，防 delta 丢帧）。
- * 终止事件（completed / incomplete）携带完整 response 对象，用于兜底补齐、取 usage 与 status；
- * failed 直接抛 [StreamApiException] 交给重试判定。
+ * Events are grouped by `output_index`: `response.output_item.added` gives the function_call's call_id/name,
+ * `response.function_call_arguments.delta` appends arguments piece by piece, and `response.output_item.done` /
+ * `response.function_call_arguments.done` gives the complete arguments (used to overwrite, guarding against dropped delta frames).
+ * Terminal events (completed / incomplete) carry the full response object, used to complete anything missing, take usage and status;
+ * failed throws [StreamApiException] directly for the retry judgement.
  */
 internal class ResponsesStreamAccumulator {
     var receivedContent: Boolean = false
@@ -167,34 +167,34 @@ internal class ResponsesStreamAccumulator {
     private val budget = StreamBudget()
     private var thinkingBlocksSnapshotJson: String? = null
     private val calls = LinkedHashMap<String, CallAcc>()
-    /** 流中 output_item.done 里到达的图片，按 item id 去重。 */
+    /** Images arriving in output_item.done during the stream, deduplicated by item id. */
     private val images = LinkedHashMap<String, AgentImage>()
-    /** 终止事件里兜底解析出的图片（流中 delta 事件缺失时的补齐来源）。 */
+    /** Images parsed as a fallback from the terminal event (the source for completing anything the stream delta events missed). */
     private val finalImages = mutableListOf<AgentImage>()
-    /** 终止事件里兜底解析出的工具调用（流中 delta 事件缺失时的补齐来源）。 */
+    /** Tool calls parsed as a fallback from the terminal event (the source for completing anything the stream delta events missed). */
     private val finalCalls = mutableListOf<ToolCall>()
     private var status: String? = null
     private var incompleteReason: String? = null
     private var usage = ResponsesUsage()
 
-    /** 是否已收到终止事件。未收到就断流说明流被截断，调用方应按异常处理。 */
+    /** Whether a terminal event has been received. Disconnecting without one means the stream was truncated, and the caller should handle it as an exception. */
     var terminated = false
         private set
 
-    /** 断流降级标记：正文收到一部分但没等到终止事件，见 [markNetworkTruncated]。 */
+    /** Degraded-delivery flag for disconnection: part of the body was received but no terminal event arrived; see [markNetworkTruncated]. */
     private var networkTruncated = false
 
-    /** 已累积的正文长度，供日志与调用方判断断流时是否值得降级交付。 */
+    /** The length of accumulated body text, for logging and for the caller to judge whether degraded delivery is worthwhile on disconnection. */
     val textLength: Int get() = text.length
 
-    /** 断流时是否值得降级交付：正文非空才算（只收到思考/工具名时降级没有意义）。 */
+    /** Whether degraded delivery is worthwhile on disconnection: only if the body text is non-empty (degrading is pointless when only thinking/tool names were received). */
     fun hasSalvageableText(): Boolean = text.isNotBlank()
 
     /**
-     * 断流降级：正文已经收到一部分、连接却先断了（对端 EOF / 代理提前断开 / 网络切换）。
+     * Degraded delivery on disconnection: part of the body was already received, but the connection broke first (peer EOF / proxy disconnecting early / network switch).
      *
-     * 置位后 [toResponse] 把这批内容标成截断输出（stopReason=length，[AIResponse.isTruncated]
-     * 为真 → Agent 循环自动续写），好过让整轮判成失败、已流过的内容全部作废。
+     * Once set, [toResponse] marks this content as truncated output (stopReason=length, [AIResponse.isTruncated]
+     * is true -> the Agent loop continues writing automatically), which is better than failing the whole turn and discarding all already streamed content.
      */
     fun markNetworkTruncated() {
         if (terminated) return
@@ -202,7 +202,7 @@ internal class ResponsesStreamAccumulator {
         terminated = true
     }
 
-    /** 处理一个 SSE data 行解析出的事件对象，返回本次事件带来的增量文本（无则 null）。 */
+    /** Processes the event object parsed from one SSE data line, returning the incremental text this event brings (null if none). */
     fun accept(event: JsonObject): ResponsesDelta? {
         when (event.str("type")) {
             ResponsesEvent.OUTPUT_TEXT_DELTA, ResponsesEvent.REFUSAL_DELTA -> {
@@ -231,7 +231,7 @@ internal class ResponsesStreamAccumulator {
                         item.str("name")?.takeIf { it.isNotEmpty() }?.let { name ->
                             val first = acc.name.isEmpty()
                             acc.name = name
-                            // 工具名先于参数到达：让 UI 提前把状态说具体（每个调用只推一次）
+                            // The tool name arrives before the arguments: let the UI state it concretely early (pushed only once per call)
                             if (first) return ResponsesDelta.ToolCallDeclared(name)
                         }
                     }
@@ -271,7 +271,7 @@ internal class ResponsesStreamAccumulator {
             }
 
             ResponsesEvent.COMPLETED, ResponsesEvent.INCOMPLETE -> {
-                // 先置位：终止语义不能受 response 对象解析异常影响，否则调用方会继续读到流尾、误报断流。
+                // Set the flag first: terminal semantics must not be affected by a response-object parsing exception, otherwise the caller would keep reading to the end of the stream and falsely report a disconnection.
                 terminated = true
                 absorbFinalResponse(event.obj("response"))
             }
@@ -283,14 +283,14 @@ internal class ResponsesStreamAccumulator {
                 val error = response?.obj("error") ?: event.obj("error")
                 throw StreamApiException(
                     code = error?.str("code"),
-                    message = error?.str("message") ?: "Responses 流以 response.failed 结束"
+                    message = error?.str("message") ?: "Responses stream ended with response.failed"
                 )
             }
 
-            // 传输层错误事件：code / message 就在事件自身上（不嵌在 error 对象里）。
+            // Transport-layer error event: the code / message are on the event itself (not nested in an error object).
             ResponsesEvent.ERROR, ResponsesEvent.RESPONSE_ERROR -> throw StreamApiException(
                 code = event.str("code"),
-                message = event.str("message") ?: "Responses 流返回 error 事件"
+                message = event.str("message") ?: "Responses stream returned an error event"
             )
         }
         return null
@@ -299,7 +299,7 @@ internal class ResponsesStreamAccumulator {
     fun toResponse(): AIResponse {
         val streamed = calls.values
             .filter { it.callId.isNotEmpty() || it.name.isNotEmpty() }
-            // 断流时入参几乎必然半截：残缺参数去执行工具（写文件/跑命令）风险远大于丢掉这次调用。
+            // On disconnection the arguments are almost inevitably partial: executing a tool (writing a file/running a command) with incomplete arguments is far riskier than dropping this call.
             .filter { !networkTruncated || looksLikeCompleteJsonObject(it.args.toString()) }
             .map { ToolCall(id = it.callId, name = it.name, arguments = parseToolArguments(it.args.toString())) }
         val toolCalls = streamed + finalCalls.filter { call ->
@@ -319,7 +319,7 @@ internal class ResponsesStreamAccumulator {
         )
     }
 
-    /** 终止事件携带完整 response：取 status/usage，并用顶层 output 兜底补齐流中漏掉的内容。 */
+    /** A terminal event carries the full response: take status/usage, and use the top-level output to complete anything the stream missed. */
     private fun absorbFinalResponse(response: JsonObject?) {
         if (response == null) return
         status = response.str("status")
@@ -346,8 +346,8 @@ private fun JsonObject.str(name: String): String? =
 private fun JsonObject.int(name: String): Int =
     get(name)?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asInt ?: 0
 
-// 下面两个取代 Gson 自带的 getAsJsonArray / getAsJsonObject：它们直接强转，遇到 null
-// （如 reasoning item 的 `content: null`、failed 事件里缺失的 `output`）会抛 ClassCastException。
+// The next two replace Gson's own getAsJsonArray / getAsJsonObject: they cast directly, and hitting null
+// (e.g. a reasoning item's `content: null`, or a missing `output` in a failed event) throws ClassCastException.
 private fun JsonObject.arr(name: String): JsonArray? =
     get(name)?.takeIf { it.isJsonArray }?.asJsonArray
 

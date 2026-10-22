@@ -4,14 +4,14 @@ import com.aicode.feature.settings.domain.model.DEFAULT_KEY_SWITCH_STATUS_CODES
 import retrofit2.HttpException
 
 /**
- * 判断一次 LLM 调用失败是否可归因于当前使用的 API Key——即是否应触发多 Key 自动切换。
+ * Determines whether an LLM call failure can be attributed to the API Key currently in use — i.e. whether multi-Key automatic switching should be triggered.
  *
- * 只认鉴权/权限、计费/额度与限流类失败：HTTP 状态码默认 401/402/403/429（可按提供商覆盖，
- * 见 [AIProviderConfig.keySwitchStatusCodes]），以及流内的额度/鉴权错误码。5xx、408、超时、
- * DNS/连接故障属于服务端或链路问题，换 Key 无益，不应触发切换。
+ * Only recognises authentication/permission, billing/quota and rate-limit failures: HTTP status codes default to 401/402/403/429 (overridable per provider,
+ * see [AIProviderConfig.keySwitchStatusCodes]), plus quota/authentication error codes within the stream. 5xx, 408, timeouts,
+ * DNS/connection faults are server-side or link problems; switching Key is useless for them and should not be triggered.
  *
- * [enrichWithHttpErrorBody] 会把 [HttpException] 包成 IllegalStateException 并把原异常挂在
- * cause 上，所以这里要沿 cause 链找状态码，找不到才退回消息文本匹配。
+ * [enrichWithHttpErrorBody] wraps [HttpException] into IllegalStateException and attaches the original exception
+ * as the cause, so look for the status code along the cause chain here, and only fall back to message-text matching if it is not found.
  */
 fun Throwable.isKeySwitchFailure(statusCodes: Set<Int> = DEFAULT_KEY_SWITCH_STATUS_CODES): Boolean {
     var current: Throwable? = this
@@ -27,7 +27,7 @@ fun Throwable.isKeySwitchFailure(statusCodes: Set<Int> = DEFAULT_KEY_SWITCH_STAT
         depth++
     }
     val text = message?.lowercase() ?: return false
-    // HTTP 状态码的文本兜底同样受 [statusCodes] 约束，否则自定义码表无法真正收窄触发范围
+    // The HTTP status-code text fallback is likewise constrained by [statusCodes]; otherwise a custom code table could not actually narrow the trigger scope
     if (statusCodes.any { text.contains("http $it") }) return true
     return KEY_FAILURE_MESSAGES.any { text.contains(it) }
 }

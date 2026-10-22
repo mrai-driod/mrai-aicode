@@ -51,25 +51,25 @@ import compose.icons.feathericons.Menu
 import compose.icons.feathericons.Plus
 import compose.icons.feathericons.Terminal
 
-/** 标题栏内容区高度（不含状态栏）：52dp 足够放下一行标题 + 一行模型名与 48dp 触控图标。 */
+/** Title bar content height (excluding the status bar): 52dp is enough for one line of title + one line of model name and 48dp touch icons. */
 internal const val CHAT_HEADER_HEIGHT_DP = 52
 
-/** 远程模式额外多一行「连接状态 + token 统计」时的附加高度。 */
+/** Extra height when remote mode adds a "connection status + token stats" row. */
 internal const val CHAT_HEADER_CONNECTION_ROW_DP = 28
 
-/** 标题栏下方待办浮层收起态的消息列表预留高度：单行摘要约 40dp + 与消息流间距 8dp。 */
+/** Reserved message-list height for the collapsed to-do overlay below the title bar: about 40dp for the single-line summary + 8dp spacing from the message stream. */
 internal const val CHAT_TODO_BAR_RESERVE_DP = 48
 
 /**
- * 顶栏：悬浮玻璃层。
+ * Top bar: a floating glass layer.
  *
- * 关键点：**不再占用布局高度**。调用方用 Box 的 align(TopCenter) 把它盖在聊天内容之上，
- * 消息列表只用 contentPadding 预留首屏空间，滚动时内容从玻璃后面穿过——
- * 这才是「让内容延伸到标题栏背后」，而不是单纯把 padding 调小。
+ * Key point: **it no longer occupies layout height**. The caller overlays it on top of the chat content with a Box align(TopCenter),
+ * and the message list only reserves first-screen space via contentPadding, so when scrolling the content passes behind the glass -
+ * that is what "letting content extend behind the title bar" really means, rather than merely shrinking the padding.
  *
- * 高度固定为 [CHAT_HEADER_HEIGHT_DP]（远程模式再加 [CHAT_HEADER_CONNECTION_ROW_DP]），
- * 不随消息滚动变化，因此不会产生布局跳动；状态栏由 statusBarsPadding 处理，
- * 内容不会压到状态栏图标。文字颜色取自玻璃的自适应亮度，保证透明后仍可读。
+ * The height is fixed at [CHAT_HEADER_HEIGHT_DP] (plus [CHAT_HEADER_CONNECTION_ROW_DP] in remote mode),
+ * and does not change as messages scroll, so there is no layout jumping; the status bar is handled by statusBarsPadding,
+ * so content never presses against the status-bar icons. Text colours come from the glass's adaptive luminance, staying readable despite the transparency.
  */
 @Composable
 internal fun ChatHeader(
@@ -90,11 +90,11 @@ internal fun ChatHeader(
     gitActive: Boolean = false,
     browserActive: Boolean = false,
     modifier: Modifier = Modifier,
-    /** 玻璃背景采样层；为 null 时降级为不透明顶栏。 */
+    /** Glass background sampling layer; when null, degrades to an opaque top bar. */
     glassBackdrop: com.styropyr0.prismal.sources.PrismalGlassLayer? = null,
-    /** 背景亮度（0..1），由 rememberGlassLuminance 提供。 */
+    /** Background luminance (0..1), provided by rememberGlassLuminance. */
     glassLuminance: () -> Float = { 0.5f },
-    /** 玻璃上的前景色：随背景亮度自适应，保证标题与模型名始终可读。 */
+    /** Foreground colour on the glass: adapts to the background luminance so the title and model name stay readable. */
     glassContentColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified
 ) {
     val hasGlass = glassBackdrop != null
@@ -119,7 +119,7 @@ internal fun ChatHeader(
                     .height(CHAT_HEADER_HEIGHT_DP.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 大屏常驻侧栏时隐掉汉堡键：侧栏已经摆在左边，再给个开关反而困惑。
+                // On large screens with a permanent drawer, hide the hamburger button: the drawer is already on the left, and another toggle would only confuse.
                 if (showMenuButton) {
                     IconButton(
                         onClick = onOpenDrawer,
@@ -133,7 +133,7 @@ internal fun ChatHeader(
                 } else {
                     Spacer(modifier = Modifier.width(Spacing.sm))
                 }
-                // 标题 + 模型名压进同一行的两行文本里，避免顶栏被撑成三段。
+                // Title + model name are squeezed into two lines of text in the same row, avoiding the top bar being stretched into three sections.
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = sessionTitle,
@@ -180,7 +180,7 @@ internal fun ChatHeader(
                     onClick = onNavigateToTerminal
                 )
             }
-            // 远程模式：连接状态 + token 统计，仅远程会话时占这一行
+            // Remote mode: connection status + token stats; only occupies this row for remote sessions
             if (connectionState != null) {
                 Row(
                     modifier = Modifier
@@ -218,7 +218,7 @@ internal fun ChatHeader(
     }
 }
 
-/** 顶栏工作台入口按钮：大屏右栏开着对应内容时高亮，否则看不出点一下是开还是关。 */
+/** Top-bar workbench entry button: highlighted when the large-screen right pane has the corresponding content open, otherwise you cannot tell whether a tap opens or closes it. */
 @Composable
 private fun WorkbenchIconButton(
     icon: ImageVector,

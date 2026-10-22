@@ -123,7 +123,7 @@ internal fun BranchesTab(
         return
     }
     val currentBranch = branches.firstOrNull { it.current }?.name ?: stringResource(R.string.git_no_checked_out_branch)
-    // 无当前分支即 detached HEAD（HEAD 卡片只展示参考信息，此时显示提示而非分支名）。
+    // No current branch means a detached HEAD (the HEAD card only shows reference information; in that case show a hint rather than a branch name).
     val hasCurrentBranch = branches.any { it.current }
     val localBranches = branches.filter { !it.remote }
     val remoteBranches = branches.filter { it.remote }
@@ -633,7 +633,7 @@ private fun RefSectionHeader(
 }
 
 /**
- * 分支行副标题：当前分支标记 + 跟踪关系 + 同步数量。
+ * Branch row subtitle: current-branch marker + tracking relationship + sync counts.
  */
 @Composable
 private fun branchSubtitle(
@@ -665,7 +665,7 @@ private fun branchSubtitle(
 }
 
 /**
- * 分支/标签行可执行的操作项，用于长按弹出的操作菜单。
+ * Action items a branch/tag row can perform, used by the long-press action menu.
  */
 private sealed class RefAction(
     @param:StringRes val labelRes: Int,
@@ -817,7 +817,7 @@ private fun RefActionSheet(
 }
 
 /**
- * 分支树节点：中间段为虚拟文件夹（branch 可能为空），叶子段承载 [GitBranch]。
+ * Branch tree node: intermediate segments are virtual folders (branch may be null), leaf segments carry a [GitBranch].
  */
 private data class BranchNode(
     val segment: String,
@@ -827,7 +827,7 @@ private data class BranchNode(
 )
 
 /**
- * 按 `/` 切分分支名构建层级树。同层按段名字典序排序。
+ * Build a hierarchical tree by splitting branch names on `/`. Siblings are sorted lexicographically by segment name.
  */
 private fun buildBranchTree(branches: List<GitBranch>): List<BranchNode> {
     val root = BranchNode("", "", null)
@@ -858,7 +858,7 @@ private fun sortBranchTree(node: BranchNode) {
 }
 
 /**
- * 递归向 [ColumnScope] 注入分支树节点。文件夹节点可折叠，行间用 [SettingsDivider] 分隔。
+ * Recursively add branch tree nodes into a [ColumnScope]. Folder nodes are collapsible, and rows are separated by [SettingsDivider].
  */
 @Composable
 private fun ColumnScope.renderBranchTree(

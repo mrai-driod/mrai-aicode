@@ -6,19 +6,19 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** SSH 登录密钥（私钥）条目：连接时用于认证登录。 */
+/** SSH login key (private key) entry: used to authenticate at connection time. */
 data class SshLoginKey(
     val id: String,
     val name: String,
-    /** 私钥文件绝对路径（应用私有目录内）。 */
+    /** Absolute path of the private key file (inside the app's private directory). */
     val path: String,
-    /** 公钥指纹（SHA256:...）；加密密钥无法解析时为 null。 */
+    /** Public key fingerprint (SHA256:...); null when an encrypted key cannot be parsed. */
     val fingerprint: String?,
-    /** 私钥口令（加密私钥才需要）；未加密时为 null。 */
+    /** Private key passphrase (only needed for encrypted private keys); null when unencrypted. */
     val passphrase: String? = null
 )
 
-/** SSH 登录密钥（私钥）的持久化存储，私钥文件本身存放在应用私有目录。 */
+/** Persistent storage for SSH login keys (private keys); the private key files themselves live in the app's private directory. */
 interface SshLoginKeyStore {
     fun entries(): List<SshLoginKey>
     fun add(key: SshLoginKey)
@@ -27,7 +27,7 @@ interface SshLoginKeyStore {
 
 private const val PREFS_NAME = "ssh_login_keys"
 
-/** 基于应用私有 SharedPreferences 的实现。 */
+/** Implementation backed by the app's private SharedPreferences. */
 @Singleton
 class SharedPrefsSshLoginKeyStore @Inject constructor(
     @ApplicationContext context: Context

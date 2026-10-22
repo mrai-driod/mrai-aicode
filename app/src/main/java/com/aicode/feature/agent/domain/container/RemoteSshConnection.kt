@@ -28,12 +28,14 @@ import javax.inject.Singleton
 private const val TAG = "RemoteSshConnection"
 
 /**
- * 共享的 SSH 连接管理器：持有两条独立的 sshj [SSHClient]——exec 通道供 [RemoteSshEngine] 执行命令，
- * SFTP 通道供 [RemoteSftpFileAccess] 读写文件。两者隔离，SFTP 的 Buffer 溢出不会拖垮命令通道。
+ * Shared SSH connection manager: holds two independent sshj [SSHClient]s - an exec channel for [RemoteSshEngine]
+ * to run commands, and an SFTP channel for [RemoteSftpFileAccess] to read and write files. The two are isolated,
+ * so an SFTP buffer overflow cannot take down the command channel.
  *
- * 连接配置（host/port/username/auth）由调用方在 [connect] 时传入。连接断开后下次 [connect]
- * 重新建立；SFTP 通道按需惰性建立（见 [sftp]）。exec 侧操作串行化（[mutex]），SFTP 侧由
- * [RemoteSftpFileAccess] 串行化（sshj 的 SFTPClient 非线程安全）。
+ * The connection configuration (host/port/username/auth) is passed in by the caller at [connect] time. After a
+ * disconnect, the next [connect] re-establishes it; the SFTP channel is created lazily on demand (see [sftp]).
+ * Operations on the exec side are serialized ([mutex]); the SFTP side is serialized by
+ * [RemoteSftpFileAccess] (sshj's SFTPClient is not thread-safe).
  */
 @Singleton
 class RemoteSshConnection @Inject constructor(
@@ -47,9 +49,10 @@ class RemoteSshConnection @Inject constructor(
     private var sshClient: SSHClient? = null
 
     /**
-     * 独立的 SFTP 通道：与 exec 各用一条 SSH transport。sshj 的 SFTP 有间歇性 Buffer 溢出
-     * （hierynomus/sshj#461），共用 transport 时崩溃会一并拖垮 Bash/终端；分开后只影响文件通道，
-     * 崩溃由 [invalidateSftp] + 下次 [sftp] 重建兜底。
+     * Independent SFTP channel: it and exec each use their own SSH transport. sshj's SFTP has an intermittent buffer
+     * overflow (hierynomus/sshj#461); sharing a transport means a crash also takes down Bash/the terminal, while
+     * keeping them separate limits the impact to the file channel, and a crash is covered by
+     * [invalidateSftp] plus a rebuild on the next [sftp].
      */
     @Volatile
     private var sftpSshClient: SSHClient? = null
@@ -61,19 +64,19 @@ class RemoteSshConnection @Inject constructor(
     private val sftpLock = Mutex()
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    /** 连接状态流，供 UI 显示指示器、工作区初始化等待连接就绪。 */
+    /** Connection state flow, for the UI indicator and for workspace initialization waiting until the connection is ready. */
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    /** 重连成功后回调，供工作区重新加载。由 [startSupervisor] 注册。 */
+    /** Callback after a successful reconnect, so the workspace can reload. Registered by [startSupervisor]. */
     private var onReconnected: (suspend () -> Unit)? = null
     private var supervisorJob: Job? = null
 
-    /** 远程服务器上的真实 home 路径（连接成功后查 $HOME 缓存），供文件工具展开 ~。 */
+    /** The real home path on the remote server (looked up from $HOME and cached after a successful connection), for file tools to expand ~. */
     @Volatile
     var remoteHome: String? = null
         private set
 
-    /** 当前连接配置快照，供重连与路径映射使用。 */
+    /** Snapshot of the current connection configuration, used for reconnects and path mapping. */
     @Volatile
     var config: RemoteConnectionConfig? = null
         private set
@@ -87,7 +90,7 @@ class RemoteSshConnection @Inject constructor(
             withContext(Dispatchers.IO) {
                 val client = newSshClient(config)
                 sshClient = client
-                // 查远程真实 home（root 是 /root，普通用户是 /home/xxx），供文件工具展开 ~
+                // Look up the real remote home (root is /root, a regular user is /home/xxx), for file tools to expand ~
                 runCatching {
                     val s = client.startSession()
                     val cmd = s.exec("echo \$HOME")
@@ -95,12 +98,12 @@ class RemoteSshConnection @Inject constructor(
                         .readText().trim().ifEmpty { null }
                     s.close()
                 }
-                // 注册 transport 断开监听：连接断开时即时推状态，不等 supervisor 轮询
+                // Register a transport disconnect listener: push the state immediately on disconnect instead of waiting for the supervisor to poll
                 client.transport.setDisconnectListener { reason, info ->
-                    FileLogger.w(TAG, "SSH 连接断开: $reason, $info")
+                    FileLogger.w(TAG, "SSH connection disconnected: $reason, $info")
                     _connectionState.value = ConnectionState.DISCONNECTED
                 }
-                FileLogger.i(TAG, "SSH 已连接 ${config.host}:${config.port} as ${config.username}")
+                FileLogger.i(TAG, "SSH connected to ${config.host}:${config.port} as ${config.username}")
             }
             _connectionState.value = ConnectionState.CONNECTED
         } catch (e: Exception) {
@@ -114,9 +117,9 @@ class RemoteSshConnection @Inject constructor(
     }
 
     fun savedHostKeys(): Map<String, String> = hostKeyStore.entries()
-    /** 无参 connect：用上次保存的 config 重连。 */
+    /** No-arg connect: reconnects using the last saved config. */
     suspend fun connect() {
-        val cfg = config ?: throw IllegalStateException("未配置 SSH 连接")
+        val cfg = config ?: throw IllegalStateException("SSH connection not configured")
         connect(cfg)
     }
 
@@ -131,7 +134,7 @@ class RemoteSshConnection @Inject constructor(
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
-    /** 关闭并清空独立 SFTP 通道；下次 [sftp] 会按当前 config 重建。 */
+    /** Closes and clears the independent SFTP channel; the next [sftp] rebuilds it from the current config. */
     private fun closeSftpInternal() {
         runCatching { sftpClient?.close() }
         runCatching { sftpSshClient?.disconnect() }
@@ -139,7 +142,7 @@ class RemoteSshConnection @Inject constructor(
         sftpSshClient = null
     }
 
-    /** 建立一条 SSH transport 并完成认证与保活（exec 与 SFTP 各建一条）。 */
+    /** Creates one SSH transport and completes authentication and keep-alive (exec and SFTP each create one). */
     private fun newSshClient(config: RemoteConnectionConfig): SSHClient = SSHClient().apply {
         addHostKeyVerifier(hostKeyVerifier)
         connect(config.host, config.port)
@@ -151,7 +154,7 @@ class RemoteSshConnection @Inject constructor(
                 authPublickey(config.username, loadKeys(pem, null, passwordFinder))
             }
         }
-        // 启用 SSH 心跳保活，防止空闲超时断连
+        // Enable the SSH heartbeat keep-alive to prevent idle timeout disconnects
         runCatching {
             connection.keepAlive?.let {
                 it.setKeepAliveInterval(30)
@@ -163,38 +166,38 @@ class RemoteSshConnection @Inject constructor(
     fun isConnected(): Boolean =
         sshClient?.isConnected == true && sshClient?.isAuthenticated == true
 
-    /** 开一个 exec session 执行命令。调用方负责关闭返回的 Command。 */
+    /** Opens an exec session to run a command. The caller is responsible for closing the returned Command. */
     fun startExecSession(command: String): Session.Command {
-        val client = sshClient ?: throw IllegalStateException("SSH 未连接")
+        val client = sshClient ?: throw IllegalStateException("SSH not connected")
         val session = client.startSession()
         val cmd = session.exec(command)
-        // 立即给远端进程的 stdin 送 EOF：所有调用方只读输出。不关的话，远端按「stdin 是否可读」
-        // 决定行为的程序（无路径参数的 rg 等）会把 channel 当待读输入，一直等到命令超时。
+        // Send EOF to the remote process's stdin immediately: every caller only reads output. Without closing it,
+        // remote programs that decide their behaviour by whether stdin is readable (such as rg with no path argument) treat the channel as input to be read and wait until the command times out.
         runCatching { cmd.outputStream.close() }
         return cmd
     }
 
     /**
-     * 开 exec 会话但**保留 stdin 可写**，供大内容经 stdin 传输（避免命令行参数超过远端 ARG_MAX）。
-     * 调用方负责写入并关闭 [Session.Command.outputStream]、读取输出、关闭 session。
+     * Opens an exec session but **keeps stdin writable**, so large content can be transferred via stdin (avoiding command-line arguments exceeding the remote ARG_MAX).
+     * The caller is responsible for writing to and closing [Session.Command.outputStream], reading the output, and closing the session.
      */
     fun startExecSessionWithStdin(command: String): Session.Command {
-        val client = sshClient ?: throw IllegalStateException("SSH 未连接")
+        val client = sshClient ?: throw IllegalStateException("SSH not connected")
         return client.startSession().exec(command)
     }
 
-    /** 开一个新的 Session，供调用方分配 PTY 并启动 shell。调用方负责关闭 Session。 */
+    /** Opens a new Session, for the caller to allocate a PTY and start a shell. The caller is responsible for closing the Session. */
     fun startShellSession(): Session {
-        val client = sshClient ?: throw IllegalStateException("SSH 未连接")
+        val client = sshClient ?: throw IllegalStateException("SSH not connected")
         return client.startSession()
     }
 
     /**
-     * 获取独立的 SFTP client（惰性建立第二条 SSH 连接，与 exec 隔离）。调用方不应关闭它——
-     * 由 [disconnect] 统一管理。连接失效（未连接/未认证）时丢弃重建，覆盖 SFTP 通道崩溃后的自愈。
+     * Gets the independent SFTP client (lazily creates a second SSH connection, isolated from exec). Callers must not close it:
+     * it is managed centrally by [disconnect]. When the connection is invalid (not connected / not authenticated) it is discarded and rebuilt, which covers self-healing after an SFTP channel crash.
      */
     suspend fun sftp(): SFTPClient = sftpLock.withLock {
-        val cfg = config ?: throw IllegalStateException("SSH 未配置")
+        val cfg = config ?: throw IllegalStateException("SSH not configured")
         sftpClient
             ?.takeIf { sftpSshClient?.isConnected == true && sftpSshClient?.isAuthenticated == true }
             ?.let { return@withLock it }
@@ -206,30 +209,31 @@ class RemoteSshConnection @Inject constructor(
         sftp
     }
 
-    /** 丢弃当前 SFTP 通道（通道异常后调用），下次 [sftp] 会重建。 */
+    /** Discards the current SFTP channel (called after a channel error); the next [sftp] rebuilds it. */
     suspend fun invalidateSftp() = sftpLock.withLock { closeSftpInternal() }
 
-    /** 若已配置但未连接，立即尝试重连一次。返回是否最终连通。供 App 回到前台时主动触发。 */
+    /** If configured but not connected, tries to reconnect once immediately. Returns whether it is connected in the end. Triggered proactively when the App returns to the foreground. */
     suspend fun tryReconnectIfDisconnected(): Boolean {
         val cfg = config ?: return false
         if (isConnected()) return true
         _connectionState.value = ConnectionState.CONNECTING
         return runCatching { connect(cfg) }
             .onSuccess {
-                FileLogger.i(TAG, "SSH 重连成功（前台触发）")
+                FileLogger.i(TAG, "SSH reconnected successfully (foreground trigger)")
                 runCatching { onReconnected?.invoke() }
             }
             .onFailure {
-                FileLogger.w(TAG, "SSH 重连失败（前台触发）", it)
+                FileLogger.w(TAG, "SSH reconnect failed (foreground trigger)", it)
                 _connectionState.value = ConnectionState.FAILED
             }
             .isSuccess
     }
 
     /**
-     * 启动连接监督协程：远程模式下定期探活，连接断开则自动重连（指数退避），
-     * 重连成功后触发 [onReconnected] 回调（供工作区重新加载）并维护 [connectionState]。
-     * 幂等：重复调用不会起多个 supervisor。仅在远程模式下生效。 */
+     * Starts the connection supervisor coroutine: in remote mode it periodically probes liveness, automatically
+     * reconnects when the connection drops (with exponential backoff), fires the [onReconnected] callback after a
+     * successful reconnect (so the workspace can reload), and maintains [connectionState].
+     * Idempotent: repeated calls do not start multiple supervisors. Only takes effect in remote mode. */
     fun startSupervisor(scope: CoroutineScope, onReconnected: suspend () -> Unit) {
         this.onReconnected = onReconnected
         if (supervisorJob?.isActive == true) return
@@ -240,12 +244,12 @@ class RemoteSshConnection @Inject constructor(
                 delay(backoffMs)
                 val cfg = config ?: continue
                 if (isConnected()) {
-                    backoffMs = 15000 // 连接正常，拉长探活间隔（仅兜底，断开有 DisconnectListener 即时通知）
+                    backoffMs = 15000 // Connection is healthy; lengthen the probe interval (fallback only, disconnects are reported immediately by the DisconnectListener)
                     continue
                 }
-                // 连接已断，尝试重连
+                // Connection is down; try to reconnect
                 tryReconnectIfDisconnected()
-                // 重连失败后指数退避
+                // Exponential backoff after a failed reconnect
                 if (!isConnected()) {
                     delay(backoffMs)
                     backoffMs = (backoffMs * 2).coerceAtMost(maxBackoffMs)
@@ -257,11 +261,13 @@ class RemoteSshConnection @Inject constructor(
     }
 
     /**
-     * 更新 ~/workspace 符号链接指向当前选中工作区的远程路径，让 AI 用 ~/workspace/... 路径时
-     * Bash 命令（pwd 等）能直接访问到正确的工作区目录。应在工作区选中/初始化后调用。
+     * Points the ~/workspace symlink at the remote path of the currently selected workspace, so that when the AI
+     * uses ~/workspace/... paths, Bash commands (pwd, etc.) can directly reach the correct workspace directory.
+     * Should be called after a workspace is selected/initialized.
      *
-     * `~/workspace` 已是真实目录时跳过（工作区根被配成了 `~/workspace` 的情况）：此时 `ln` 会把
-     * 链接建到该目录**内部**，形成自引用死循环，破坏整个工作区；跳过时命令链路会回退到真实路径。
+     * Skipped when `~/workspace` is already a real directory (the case where the workspace root was configured as
+     * `~/workspace`): in that case `ln` would create the link **inside** that directory, forming a self-referential
+     * loop and breaking the whole workspace; when skipped, the command path falls back to the real path.
      */
     suspend fun updateWorkspaceSymlink(workspacePath: String) {
         val client = sshClient ?: return
@@ -277,18 +283,19 @@ class RemoteSshConnection @Inject constructor(
                 val out = java.io.BufferedReader(java.io.InputStreamReader(cmd.inputStream)).readText().trim()
                 session.close()
                 if (out == "skip") {
-                    FileLogger.w(TAG, "~/workspace 已是真实目录，跳过符号链接（工作区根可能配成了 ~/workspace）")
+                    FileLogger.w(TAG, "~/workspace is already a real directory, skipping the symlink (the workspace root may be configured as ~/workspace)")
                 }
-            }.onFailure { FileLogger.w(TAG, "更新 workspace 符号链接失败: $ws", it) }
+            }.onFailure { FileLogger.w(TAG, "Failed to update the workspace symlink: $ws", it) }
         }
     }
 
     /**
-     * 把内置文档同步到远程 ~/.aicode/docs/，让远程模式下 AI 也能像本地模式一样
-     * 查阅 ~/.aicode/docs/ 下的设置说明文档。每次连接/重连后全量覆盖，使 App 升级后
-     * 远程文档随之更新。docs 是纯文本，用 exec + printf 写入即可，无需 SFTP。
+     * Syncs the built-in documentation to the remote ~/.aicode/docs/, so in remote mode the AI can consult the
+     * settings documentation under ~/.aicode/docs/ just as in local mode. Fully overwritten after every
+     * connect/reconnect, so the remote docs update along with App upgrades. The docs are plain text and can be
+     * written with exec + printf, with no need for SFTP.
      *
-     * @param docs 相对 docs/ 的路径（可含子目录，如 guide/terminal.md）→ 文件内容。
+     * @param docs path relative to docs/ (may contain subdirectories, such as guide/terminal.md) -> file content.
      */
     suspend fun uploadDocs(docs: Map<String, String>) {
         if (docs.isEmpty()) return
@@ -297,7 +304,7 @@ class RemoteSshConnection @Inject constructor(
         val destDir = home.trimEnd('/') + "/.aicode/docs"
         withContext(Dispatchers.IO) {
             runCatching {
-                // 先建全部子目录并清掉旧 .md：版本间调整文档分类会改变路径，只覆盖不清理会让旧文件残留
+                // First create all subdirectories and delete the old .md files: re-categorizing docs between versions changes paths, and overwriting without cleaning would leave stale files behind
                 val subDirs = docs.keys.mapNotNull { key ->
                     key.substringBeforeLast('/', "").takeIf { it.isNotEmpty() }
                 }.distinct()
@@ -312,16 +319,16 @@ class RemoteSshConnection @Inject constructor(
                     session.exec("printf %s '$escaped' > '$dest'").join()
                     session.close()
                 }
-                FileLogger.i(TAG, "已同步 ${docs.size} 个文档到远程 $destDir")
-            }.onFailure { FileLogger.w(TAG, "同步文档到远程失败", it) }
+                FileLogger.i(TAG, "Synced ${docs.size} documents to remote $destDir")
+            }.onFailure { FileLogger.w(TAG, "Failed to sync documents to remote", it) }
         }
     }
 
     /**
-     * 释放 App 内置资源（子代理定义、面板示例脚本等）到远程 `~/.aicode/<subdir>/`。
-     * 仅补齐服务器上缺失的文件、**不覆盖已存在**（保留用户修改），脚本赋可执行位。
-     * 与 [uploadDocs] 一样在连接/重连后调用——远程模式下全局 agents/scripts 以远端为准，
-     * 内置默认需在远端存在才能「开箱即用」。二进制安全（base64 传输）。
+     * Extracts App built-in resources (sub-agent definitions, panel example scripts, etc.) to the remote `~/.aicode/<subdir>/`.
+     * Only fills in files missing on the server and **does not overwrite existing ones** (preserving user edits); scripts are given the executable bit.
+     * Called after connect/reconnect, like [uploadDocs]: in remote mode the global agents/scripts are authoritative on the remote side,
+     * and the built-in defaults need to exist remotely to work "out of the box". Binary-safe (base64 transfer).
      */
     suspend fun uploadBuiltinFiles(
         destSubdir: String,
@@ -345,21 +352,21 @@ class RemoteSshConnection @Inject constructor(
                     session.exec("if [ ! -e '$dest' ]; then printf %s '$b64' | base64 -d > '$dest';$chmod fi").join()
                     session.close()
                 }
-                FileLogger.i(TAG, "已释放 ${files.size} 个内置文件到远程 $destDir")
-            }.onFailure { FileLogger.w(TAG, "释放内置文件到远程失败: $destSubdir", it) }
+                FileLogger.i(TAG, "Extracted ${files.size} built-in files to remote $destDir")
+            }.onFailure { FileLogger.w(TAG, "Failed to extract built-in files to remote: $destSubdir", it) }
         }
     }
 
     /**
-     * 把 App 的 git 凭据注入远程服务器（仅当用户开启「自动注入」时调用）：
-     * 写 `~/.aicode/git-credentials`（store 格式）+ `~/.aicode/gitconfig` + `~/.aicode/gitconfig.credential`。
+     * Injects the App's git credentials into the remote server (only called when the user has enabled "auto-inject"):
+     * writes `~/.aicode/git-credentials` (store format) + `~/.aicode/gitconfig` + `~/.aicode/gitconfig.credential`.
      *
-     * 生效机制：[RemoteSshEngine] 执行命令时注入 `GIT_CONFIG_GLOBAL=$HOME/.aicode/gitconfig`，其中
-     * `[include] path=~/.gitconfig` 保留服务器用户自己的全局配置（署名等），`[includeIf "gitdir:<工作区根>/"]`
-     * 限定只有工作区根目录下的仓库才加载 store helper——不影响用户在服务器上手动 git，也不影响其它目录的仓库。
+     * How it takes effect: [RemoteSshEngine] injects `GIT_CONFIG_GLOBAL=$HOME/.aicode/gitconfig` when running commands, in which
+     * `[include] path=~/.gitconfig` preserves the server user's own global config (name/signature, etc.), and `[includeIf "gitdir:<workspace root>/"]`
+     * scopes the store helper to repositories under the workspace root only, so it affects neither the user running git manually on the server nor repositories in other directories.
      *
-     * @param credentials 要注入的凭据列表（每 host 一条）。
-     * @param workspaceRoot 远程工作区根路径（AI 的 ~/workspace 映射目录），限定注入范围。
+     * @param credentials the credentials to inject (one per host).
+     * @param workspaceRoot the remote workspace root path (the directory the AI's ~/workspace maps to), scoping the injection.
      */
     suspend fun uploadGitCredentialConfig(credentials: List<GitCredential>, workspaceRoot: String) {
         val client = sshClient ?: return
@@ -377,8 +384,8 @@ class RemoteSshConnection @Inject constructor(
                 }.let { if (it.isNotEmpty()) "$it\n" else "" }
                 writeRemoteFile(client, "$aicodeDir/git-credentials", encodeCreds(creds))
 
-                // 上传 credential helper 脚本（本地由 ContainerInstaller 提取），配置为唯一 helper；
-                // 服务器上没有 App，用 AICODE_CRED_NO_PROMPT 让未命中时直接空退出而非等待弹窗。
+                // Upload the credential helper script (extracted locally by ContainerInstaller) and configure it as the only helper;
+                // there is no App on the server, so AICODE_CRED_NO_PROMPT makes a miss exit empty immediately instead of waiting for a prompt dialog.
                 containerInstaller.extractCredentialHelper()
                 val helperScript = java.io.File(containerInstaller.aicodeDir, "git-credential-aicode").readText()
                 writeRemoteFile(client, "$aicodeDir/git-credential-aicode", helperScript)
@@ -399,14 +406,14 @@ class RemoteSshConnection @Inject constructor(
                     append("    helper = !AICODE_CRED_NO_PROMPT=1 $aicodeDir/git-credential-aicode\n")
                 }
                 writeRemoteFile(client, "$aicodeDir/gitconfig.credential", credentialConfig)
-                FileLogger.i(TAG, "已注入 git 凭据到远程 $aicodeDir（限定 $wsRoot/）")
-            }.onFailure { FileLogger.w(TAG, "注入 git 凭据到远程失败", it) }
+                FileLogger.i(TAG, "Injected git credentials to remote $aicodeDir (scoped to $wsRoot/)")
+            }.onFailure { FileLogger.w(TAG, "Failed to inject git credentials to remote", it) }
         }
     }
 
     /**
-     * 撤销远程注入：删除 App 管理的三个配置/凭据文件。
-     * `GIT_CONFIG_GLOBAL` 指向不存在的文件时 git 静默跳过，注入即失效，服务器用户配置不受影响。
+     * Revokes the remote injection: deletes the three App-managed config/credential files.
+     * When `GIT_CONFIG_GLOBAL` points at a non-existent file git silently skips it, so the injection stops taking effect and the server user's own config is unaffected.
      */
     suspend fun removeGitCredentialConfig() {
         val client = sshClient ?: return
@@ -417,15 +424,15 @@ class RemoteSshConnection @Inject constructor(
                 val session = client.startSession()
                 session.exec("rm -f '$aicodeDir/gitconfig' '$aicodeDir/gitconfig.credential' '$aicodeDir/git-credentials' '$aicodeDir/git-credential-aicode' 2>/dev/null; echo done").join()
                 session.close()
-                FileLogger.i(TAG, "已撤销远程 git 凭据注入")
-            }.onFailure { FileLogger.w(TAG, "撤销远程 git 凭据注入失败", it) }
+                FileLogger.i(TAG, "Revoked the remote git credential injection")
+            }.onFailure { FileLogger.w(TAG, "Failed to revoke the remote git credential injection", it) }
         }
     }
 
-    /** exec + printf 写一个文本文件到远程（content 为原文，内部转义单引号/反斜杠）。 */
+    /** Writes a text file to the remote side via exec + printf (content is the raw text; single quotes/backslashes are escaped internally). */
     private suspend fun writeRemoteFile(client: SSHClient, dest: String, content: String) {
         if (content.isEmpty()) {
-            // 空内容直接 truncate，避免 printf %s '' 的引号歧义
+            // Empty content truncates directly, avoiding the quoting ambiguity of printf %s ''
             val session = client.startSession()
             session.exec("printf '' > '$dest'").join()
             session.close()
@@ -439,12 +446,12 @@ class RemoteSshConnection @Inject constructor(
 
     private fun enc(part: String): String = java.net.URLEncoder.encode(part, "UTF-8")
 
-    /** 与 app 侧一致的编码：base64 后整体反转（属混淆，非加密）。 */
+    /** Encoding consistent with the app side: base64, then reversed as a whole (this is obfuscation, not encryption). */
     private fun encodeCreds(plain: String): String =
         android.util.Base64.encodeToString(plain.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP).reversed()
 }
 
-/** 远程 SSH 连接状态，供 UI 指示器与工作区初始化时序判断。 */
+/** Remote SSH connection state, for the UI indicator and for workspace initialization timing decisions. */
 enum class ConnectionState {
     DISCONNECTED,
     CONNECTING,
@@ -452,36 +459,36 @@ enum class ConnectionState {
     FAILED
 }
 
-/** 把 SSH 连接异常翻译成友好提示，供工具层回显给 AI/用户。 */
+/** Translates an SSH connection exception into a friendly message, for the tool layer to echo to the AI/user. */
 fun friendlySshError(e: Throwable): String {
     val msg = e.message.orEmpty()
     return when {
         e is KeyDecryptionFailedException ->
-            "SSH 认证失败：私钥口令不正确或私钥格式不受支持（$msg）"
+            "SSH authentication failed: the private key passphrase is incorrect or the private key format is not supported ($msg)"
         e is UserAuthException ->
-            "SSH 认证失败：用户名、密码或密钥未被服务器接受（$msg）"
+            "SSH authentication failed: the username, password, or key was not accepted by the server ($msg)"
         "ECONNREFUSED" in msg || "Connection refused" in msg ->
-            "无法连接到 SSH 服务器（连接被拒绝），请确认远程服务器已启动且端口正确"
+            "Cannot connect to the SSH server (connection refused); please make sure the remote server is running and the port is correct"
         "UnknownHost" in msg || "unknown host" in msg ->
-            "无法连接到 SSH 服务器（未知主机），请检查主机地址"
+            "Cannot connect to the SSH server (unknown host); please check the host address"
         "Auth fail" in msg || "authentication" in msg ->
-            "SSH 认证失败，请检查用户名和密码"
+            "SSH authentication failed; please check the username and password"
         "Network is unreachable" in msg ->
-            "网络不可达，请检查网络连接"
+            "Network is unreachable; please check the network connection"
         "SocketTimeout" in msg || "timed out" in msg ->
-            "连接 SSH 服务器超时，请检查网络或服务器状态"
-        "SSH 未连接" in msg ->
-            "SSH 未连接，请等待连接恢复或在设置中检查配置"
-        else -> "SSH 连接失败: ${e.message ?: "未知错误"}"
+            "Connecting to the SSH server timed out; please check the network or server status"
+        "SSH not connected" in msg ->
+            "SSH is not connected; please wait for the connection to recover or check the configuration in Settings"
+        else -> "SSH connection failed: ${e.message ?: "unknown error"}"
     }
 }
 
-/** 远程 SSH 连接配置。 */
+/** Remote SSH connection configuration. */
 data class RemoteConnectionConfig(
     val host: String,
     val port: Int = 22,
     val username: String,
     val auth: RemoteAuth,
-    /** 远程服务器上的工作区根路径（AI 的 ~/workspace 映射到此路径）。 */
+    /** Workspace root path on the remote server (the AI's ~/workspace maps to this path). */
     val remoteWorkspacePath: String
 )

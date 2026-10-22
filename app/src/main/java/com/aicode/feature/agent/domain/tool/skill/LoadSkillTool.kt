@@ -14,15 +14,15 @@ import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 
 /**
- * 让 AI 按需加载一个技能的完整指令正文。
+ * Lets the AI load a skill's full instruction body on demand.
  *
- * 系统提示里只注入了各 skill 的 name+description 清单（受预算限制可能省略部分）；AI 判断某个 skill 适用时，调用本工具拿到
- * SKILL.md 正文（可能含「先 apk add python3，再 python ~/.aicode/skills/<name>/x.py」之类的执行步骤），
- * 随后用 read_file/execute_command 等工具按正文行事。skill 目录在当前执行环境为 `~/.aicode/skills/<name>/`。
+ * The system prompt only injects each skill's name+description list (the budget may omit some); when the AI judges a skill applicable, it calls this tool to get
+ * the SKILL.md body (which may contain execution steps such as "first apk add python3, then python ~/.aicode/skills/<name>/x.py"),
+ * and then acts on the body with tools such as read_file/execute_command. The skill directory in the current execution environment is `~/.aicode/skills/<name>/`.
  *
- * 描述措辞对标 Codex/Claude Code 的硬性要求（本机实测：清单里 118 个对口技能，239 次工具调用中
- * loadSkill 为 0——软措辞「适用时使用」等于没有约束）：
- * 必须先加载再行动、宣布用了哪个及原因、跳过明显适配的要说理由。
+ * The description wording follows the hard requirements of Codex/Claude Code (measured locally: 118 matching skills in the list, and in 239 tool calls
+ * loadSkill was 0 -- soft wording such as "use when applicable" is equivalent to no constraint at all):
+ * it must load before acting, announce which skill it used and why, and give a reason when skipping an obviously applicable one.
  */
 class LoadSkillTool @Inject constructor(
     private val skillRepository: SkillRepository
@@ -57,14 +57,14 @@ class LoadSkillTool @Inject constructor(
         val instructions = skillRepository.loadInstructions(skillName)
         if (instructions == null) {
             val available = skillRepository.listSkills().joinToString(", ") { it.name }
-            FileLogger.w(TAG, "load_skill 未找到: $skillName，可用: $available")
+            FileLogger.w(TAG, "load_skill not found: $skillName, available: $available")
             return ToolResult.Error(
                 "Skill \"$skillName\" not found. Available skills: ${available.ifEmpty { "(none)" }}",
                 "SKILL_NOT_FOUND"
             )
         }
 
-        FileLogger.d(TAG, "load_skill 加载成功: $skillName (${instructions.length} 字符)")
+        FileLogger.d(TAG, "load_skill loaded successfully: $skillName (${instructions.length} chars)")
         return ToolResult.Success(JsonPrimitive(instructions))
     }
 }

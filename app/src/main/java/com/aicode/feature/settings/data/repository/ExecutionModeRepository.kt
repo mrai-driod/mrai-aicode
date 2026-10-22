@@ -16,23 +16,23 @@ private val Context.executionModeDataStore by preferencesDataStore(
     corruptionHandler = preferencesCorruptionHandler
 )
 
-/** 执行环境模式。 */
+/** Execution environment mode. */
 enum class ExecutionMode {
-    /** 本地 PRoot 容器（原有行为）。 */
+    /** Local PRoot container (original behavior). */
     LOCAL_PROOT,
-    /** 远程 SSH 服务器。 */
+    /** Remote SSH server. */
     REMOTE_SSH,
-    /** 真机 ROOT：命令经 `su` 直接在本机以 root 身份执行（需要设备已 ROOT）。 */
+    /** Real-device ROOT: commands are executed directly on this device as root via `su` (requires the device to be rooted). */
     DEVICE_ROOT
 }
 
 /**
- * 持久化当前执行模式（本地 PRoot / 远程 SSH）。
+ * Persists the current execution mode (local PRoot / remote SSH).
  *
- * 远程连接参数不再在此持久化，改由
- * [com.aicode.feature.agent.domain.container.ActiveRemoteConnectionResolver] 按当前激活容器 profile 实时解析。
- * 切换模式时由 DI 层据此注入对应的 [com.aicode.feature.agent.domain.container.CommandEngine]
- * 与 [com.aicode.feature.workspace.domain.FileAccessProvider] 实现。
+ * Remote connection parameters are no longer persisted here; instead, they are
+ * resolved in real time by [com.aicode.feature.agent.domain.container.ActiveRemoteConnectionResolver] based on the currently active container profile.
+ * When the mode is switched, the DI layer uses this to inject the corresponding [com.aicode.feature.agent.domain.container.CommandEngine]
+ * and [com.aicode.feature.workspace.domain.FileAccessProvider] implementations.
  */
 @Singleton
 class ExecutionModeRepository @Inject constructor(
@@ -42,7 +42,7 @@ class ExecutionModeRepository @Inject constructor(
         val MODE_KEY = stringPreferencesKey("execution_mode")
     }
 
-    /** 当前执行模式；无值时默认本地 PRoot。 */
+    /** Current execution mode; defaults to local PRoot when unset. */
     val executionModeFlow: Flow<ExecutionMode> = context.executionModeDataStore.data.map { prefs ->
         prefs[MODE_KEY]?.let {
             runCatching { ExecutionMode.valueOf(it) }.getOrNull()
@@ -55,9 +55,9 @@ class ExecutionModeRepository @Inject constructor(
 }
 
 /**
- * 归一化远程工作区根路径。旧版把默认值硬编码为 `/home/<用户名>/workspace`（对 home 不在
- * `/home/<用户名>` 的用户，如 root 的 `/root`，是错的）；`~/workspace` 则是符号链接占用的路径，
- * 不能当工作区根（会与链接相撞形成自引用）。这两类残留值与空值一律改回默认值。
+ * Normalizes the remote workspace root path. Older versions hard-coded the default as `/home/<username>/workspace` (which is wrong for users whose home is not
+ * `/home/<username>`, such as root, whose home is `/root`); `~/workspace` is the path taken by a symbolic link,
+ * so it cannot be used as the workspace root (it would collide with the link and create a self-reference). Both of these leftover values and empty values are always reset to the default.
  */
 internal fun normalizeRemoteWorkspacePath(stored: String?, username: String): String {
     val v = stored?.trim().orEmpty()
@@ -69,7 +69,7 @@ internal fun normalizeRemoteWorkspacePath(stored: String?, username: String): St
 }
 
 /**
- * 远程工作区根目录的默认值。**不能用 `~/workspace`**——那是「当前工作区」符号链接占用的路径，
- * 同名会让根目录与链接相撞。
+ * Default for the remote workspace root directory. **Cannot use `~/workspace`** -- that is the path taken by the "current workspace" symbolic link;
+ * using the same name would make the root directory collide with the link.
  */
 internal const val DEFAULT_REMOTE_WORKSPACE_ROOT = "~/.aicode/workspaces"

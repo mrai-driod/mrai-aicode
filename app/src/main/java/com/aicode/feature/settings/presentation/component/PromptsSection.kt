@@ -61,18 +61,18 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
- * 编辑目标：区分「新建」与「编辑既有编号」。
+ * Edit target: distinguishes "create new" from "edit an existing number".
  *
- * - [number] = null：新建一条编号片段
- * - 非 null：编辑该编号最终生效的片段
+ * - [number] = null: create a new numbered fragment
+ * - Non-null: edit the fragment that ultimately takes effect for that number
  */
 internal data class PromptEditTarget(val number: Int? = null)
 
 /**
- * 提示词页：顶部是「完全禁用内置提示词」开关与帮助入口，下面是按编号列出的生效片段。
+ * Prompts page: at the top are the "completely disable built-in prompts" switch and the help entry, and below are the effective fragments listed by number.
  *
- * 每行一张卡片（图标 + 编号·名称 + 摘要 + 来源徽章），长按行内容可拖拽调整顺序，
- * 点击进入详情预览（右上角再进编辑），来源可写时左滑删除。
+ * Each row is a card (icon + number·name + summary + source badge); long-pressing the row content allows dragging to adjust the order,
+ * tapping opens the detail preview (then edit from the top-right corner), and when the source is writable, swiping left deletes it.
  */
 @Composable
 internal fun PromptsSection(
@@ -117,8 +117,8 @@ internal fun PromptsSection(
 }
 
 /**
- * 片段列表。拖拽时只更新本地顺序（不落盘），松手才把最终顺序交给 [onReorder] 持久化，
- * 避免拖动过程中反复写盘 + 重读导致列表抽搐。
+ * Fragment list. While dragging, only the local order is updated (nothing is written to disk); only on release is the final order handed to [onReorder] for persistence,
+ * avoiding repeated disk writes + re-reads during dragging that would make the list jitter.
  */
 @Composable
 private fun PromptList(
@@ -186,7 +186,7 @@ private fun PromptList(
                             },
                             onDragStopped = {
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                // 立即重编号（槽化），与落盘后的编号一致，避免 key 变化引起列表跳动
+                                // Renumber immediately (slotted), consistent with the numbering after writing to disk, to avoid list jumping caused by key changes
                                 val numbers = localFragments.map { it.number }.sorted()
                                 val renumbered = localFragments.mapIndexed { index, item ->
                                     item.copy(number = numbers[index])
@@ -203,7 +203,7 @@ private fun PromptList(
 }
 
 /**
- * 右上角「+」弹层：两项入口（添加片段 / 帮助）。
+ * The "+" pop-up in the top-right corner: two entries (add fragment / help).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -239,7 +239,7 @@ internal fun PromptsAddSheet(
     }
 }
 
-/** 单条片段行：图标 + 编号·名称 + 摘要 + 来源徽章 + 箭头；长按内容区拖拽排序，左滑删除。 */
+/** A single fragment row: icon + number·name + summary + source badge + arrow; long-press the content area to drag and reorder, swipe left to delete. */
 @Composable
 private fun PromptRow(
     fragment: PromptFragment,
@@ -312,7 +312,7 @@ private fun PromptRow(
     SwipeToDeleteRow(onDelete = onDelete, onClick = onClick, deleteEnabled = deleteEnabled) { row() }
 }
 
-/** 来源徽章：一眼看出该编号的内容来自哪一层。 */
+/** Source badge: shows at a glance which layer the content for that number comes from. */
 @Composable
 private fun SourceBadge(source: PromptFragmentSource) {
     val color = when (source) {

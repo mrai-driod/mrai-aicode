@@ -115,7 +115,7 @@ class FtpServerManager @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            FileLogger.e(TAG, "获取本机 IP 失败: ${e.message}", e)
+            FileLogger.e(TAG, "Failed to get local IP: ${e.message}", e)
         }
         return "127.0.0.1"
     }
@@ -193,7 +193,7 @@ class FtpServerManager @Inject constructor(
             authorities.add(WritePermission())
             authorities.add(ConcurrentLoginPermission(20, 20))
 
-            // 正常用户
+            // Regular user
             if (_username.value.isNotBlank()) {
                 val user = BaseUser()
                 user.name = _username.value
@@ -203,7 +203,7 @@ class FtpServerManager @Inject constructor(
                 userManager.save(user)
             }
 
-            // 匿名用户
+            // Anonymous user
             if (_isAnonymous.value) {
                 val anonUser = BaseUser()
                 anonUser.name = "anonymous"
@@ -218,11 +218,11 @@ class FtpServerManager @Inject constructor(
             ftpServer = server
             _isRunning.value = true
             updateServerUrl()
-            FileLogger.i(TAG, "内置 FTP 服务端已启动: ${_serverUrl.value}, 共享目录: $defaultSharedPath")
+            FileLogger.i(TAG, "Built-in FTP server started: ${_serverUrl.value}, shared directory: $defaultSharedPath")
             return true
         } catch (e: Exception) {
-            FileLogger.e(TAG, "启动内置 FTP 服务端失败: ${e.message}", e)
-            _errorMessage.value = e.message ?: "启动失败，可能端口被占用"
+            FileLogger.e(TAG, "Failed to start built-in FTP server: ${e.message}", e)
+            _errorMessage.value = e.message ?: "Startup failed, the port may already be in use"
             _isRunning.value = false
             return false
         }
@@ -233,9 +233,9 @@ class FtpServerManager @Inject constructor(
             ftpServer?.stop()
             ftpServer = null
             _isRunning.value = false
-            FileLogger.i(TAG, "内置 FTP 服务端已停止")
+            FileLogger.i(TAG, "Built-in FTP server stopped")
         } catch (e: Exception) {
-            FileLogger.e(TAG, "停止内置 FTP 服务端出错: ${e.message}", e)
+            FileLogger.e(TAG, "Error stopping built-in FTP server: ${e.message}", e)
         }
     }
 }

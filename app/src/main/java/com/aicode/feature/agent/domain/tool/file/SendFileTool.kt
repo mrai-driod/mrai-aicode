@@ -23,12 +23,12 @@ import java.net.URLConnection
 import javax.inject.Inject
 
 /**
- * 把工作区文件以「文件行」形式发送到聊天区展示（一行一个文件：缩略图/类型图标 + 文件名 + 大小·路径），
- * 点击用系统对应 app 打开，图片则在应用内全屏预览。
+ * Sends workspace files to the chat area as "file rows" (one file per row: thumbnail/type icon + file name + size and path),
+ * Clicking opens them with the corresponding system app; images are previewed full-screen in the app.
  *
- * 原子语义：所有文件必须全部存在且合法，任一失败则整体失败（不渲染任何文件行），
- * 错误信息逐条列出失败项，AI 可修正 paths 后重新调用。
- * 文件数据（内容/base64）不会进入模型上下文，模型只收到文件元数据文本。
+ * Atomic semantics: all files must exist and be valid; any failure fails the whole call (no file rows are rendered),
+ * the error message lists each failed item, and the AI can fix paths and call again.
+ * File data (content/base64) does not enter the model context; the model only receives file metadata text.
  */
 class SendFileTool @Inject constructor(
     private val fileAccess: FileAccessProvider,
@@ -37,9 +37,9 @@ class SendFileTool @Inject constructor(
     override val name = "sendFile"
 
     /**
-     * 单个文件大小上限可在偏好设置调整（默认 100MB）。工具定义（[description] / [parameters]）由模型侧
-     * 读取、且为非挂起属性，故用 [cachedMaxFileSizeMb] 缓存最近一次设置值；实际校验以 [execute] 内挂起
-     * 读取的权威值为准。
+     * The maximum size of a single file can be adjusted in preferences (100MB by default). The tool definition ([description] / [parameters]) is read by the model
+     * side and is a non-suspending property, so [cachedMaxFileSizeMb] caches the most recent setting value; the actual validation uses the authoritative value
+     * read suspendingly inside [execute].
      */
     private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -93,7 +93,7 @@ class SendFileTool @Inject constructor(
                 return ToolResult.Error("The number of names (${names.size}) does not match the number of paths (${paths.size})", "ARGS_MISMATCH")
             }
 
-            // 原子校验：全部通过才成功，任一失败整体失败并列出所有失败项。
+            // Atomic validation: it only succeeds if everything passes; any failure fails the whole call and lists all failed items.
             val maxSizeMb = generalSettingsRepository.sendFileMaxSizeMb()
             val maxSizeBytes = maxSizeMb * 1024L * 1024L
             val failures = mutableListOf<String>()
@@ -108,13 +108,13 @@ class SendFileTool @Inject constructor(
                 }
             }
             if (failures.isNotEmpty()) {
-                FileLogger.w(TAG, "sendFile 原子校验失败: ${failures.joinToString("；")}")
+                FileLogger.w(TAG, "sendFile atomic validation failed: ${failures.joinToString("; ")}")
                 return ToolResult.Error(failures.joinToString("; "), "INVALID_FILE")
             }
 
             val files = paths.mapIndexed { index, path ->
                 val rawName = path.substringAfterLast('/').ifBlank { path }
-                // 显示名允许自定义；MIME 类型必须按原始文件名推断，自定义名缺后缀/加前缀都不影响类型识别。
+                // The display name may be customised; the MIME type must be inferred from the original file name, and a custom name missing a suffix / having a prefix does not affect type identification.
                 val displayName = names.getOrNull(index)?.takeIf { it.isNotBlank() } ?: rawName
                 JsonObject(
                     mapOf(
@@ -128,7 +128,7 @@ class SendFileTool @Inject constructor(
                 )
             }
 
-            FileLogger.i(TAG, "sendFile 成功: ${paths.size} 个文件 ${paths.joinToString(", ") { fileAccess.toDisplayPath(it) }}")
+            FileLogger.i(TAG, "sendFile succeeded: ${paths.size} files ${paths.joinToString(", ") { fileAccess.toDisplayPath(it) }}")
             ToolResult.Success(
                 JsonObject(
                     mapOf(
@@ -150,7 +150,7 @@ class SendFileTool @Inject constructor(
                 )
             )
         } catch (e: Exception) {
-            FileLogger.e(TAG, "sendFile 异常", e)
+            FileLogger.e(TAG, "sendFile error", e)
             ToolResult.Error(e.message ?: "Failed to send file", "SEND_FILE_ERROR")
         }
     }
@@ -174,7 +174,7 @@ class SendFileTool @Inject constructor(
     private companion object {
         const val TAG = "SendFileTool"
         const val MAX_FILES = 10
-        /** 设置未就绪前的回退值，与偏好设置里的默认值一致。 */
+        /** Fallback value used before the settings are ready; matches the default in preferences. */
         const val DEFAULT_MAX_FILE_SIZE_MB = 100
     }
 }

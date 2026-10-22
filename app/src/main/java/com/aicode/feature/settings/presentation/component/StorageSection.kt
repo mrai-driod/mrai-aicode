@@ -58,11 +58,11 @@ import com.aicode.feature.settings.domain.model.formatStorageSize
 import com.aicode.feature.settings.presentation.StorageUiState
 import com.aicode.feature.settings.presentation.StorageViewModel
 
-/** 分类色点缩进宽度：色点 10dp + 与标题的间距，明细行据此与标题左对齐。 */
+/** Category color-dot indent width: color dot 10dp + spacing to the title; detail rows use this to left-align with the title. */
 private val DetailIndent = 10.dp + Spacing.md
 private val SelectionWidth = 48.dp
 
-/** 连接 [StorageViewModel] 与 [StorageSection]：state 收集下沉到这里，统计逐项到达时只重组本页。 */
+/** Connects [StorageViewModel] and [StorageSection]: state collection is sunk here, so when statistics arrive item by item only this page recomposes. */
 @Composable
 internal fun StorageSectionHost(viewModel: StorageViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -75,9 +75,9 @@ internal fun StorageSectionHost(viewModel: StorageViewModel) {
 }
 
 /**
- * 存储空间页：总览、分类明细与选中项清理。
+ * Storage page: overview, per-category details, and cleanup of selected items.
  *
- * 统计逐项到达（大目录慢），未算出的分类先占位显示「—」，不阻塞已算出的部分。
+ * Statistics arrive item by item (large directories are slow); categories not yet computed show a placeholder "-", without blocking the parts already computed.
  */
 @Composable
 internal fun StorageSection(
@@ -255,7 +255,7 @@ private fun OverviewCard(state: StorageUiState) {
     }
 }
 
-/** 各分类占比条：整条宽度代表 App 总占用，按分类颜色分段。 */
+/** Per-category proportion bar: the full bar width represents the App's total usage, segmented by category color. */
 @Composable
 private fun StackedBar(entries: Map<StorageCategory, StorageEntry>) {
     val total = entries.values.sumOf { it.bytes }
@@ -404,7 +404,7 @@ private fun DetailRow(
     }
 }
 
-/** 分组下方的灰色小字说明。 */
+/** Small gray explanatory text below a group. */
 @Composable
 private fun FootNote(text: String) {
     Text(

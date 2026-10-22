@@ -10,15 +10,15 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
- * 仓库远程数据拉取通用组件：
- * 专门从本仓库（或分支/Tag）拉取 JSON/文本静态数据（如供应商预设、模型列表等）。
+ * Generic component for fetching remote repository data:
+ * Fetches JSON/text static data specifically from this repository (or a branch/Tag) (such as provider presets, model lists, etc.).
  *
- * 节点调度与高可用策略：
- * 1. 优先使用 Fastly CDN / jsDelivr 等公共加速节点（国内直连访问速度快、免翻墙）；
- * 2. 依次降级到其他 CDN 镜像；
- * 3. 最终回退直连 GitHub raw 源站兜底；
- * 4. 内置本地磁盘持久化缓存（TTL）与轻量 ETag / If-None-Match 条件请求（防无脑重复下载）；
- * 5. 网络全挂时优雅回退本地已有磁盘缓存或内置 assets。
+ * Node scheduling and high-availability strategy:
+ * 1. Prefer public acceleration nodes such as the Fastly CDN / jsDelivr (fast direct access in China, no proxy needed);
+ * 2. Degrade in order to other CDN mirrors;
+ * 3. Finally fall back to a direct connection to the GitHub raw origin;
+ * 4. Built-in persistent local disk cache (TTL) and lightweight ETag / If-None-Match conditional requests (avoids mindless repeat downloads);
+ * 5. When the network is completely down, gracefully fall back to existing local disk cache or bundled assets.
  */
 class RepoDataFetcher(
     private val context: Context,
@@ -30,22 +30,22 @@ class RepoDataFetcher(
 ) {
 
     /**
-     * 单个数据文件的拉取结果
+     * Fetch result for a single data file
      */
     sealed class FetchResult {
-        /** 从网络拉取成功或 304 命中有效缓存 */
+        /** Fetched successfully from the network, or a 304 hit a valid cache */
         data class Success(val content: String, val fromCache: Boolean) : FetchResult()
-        /** 网络请求失败但成功读取本地磁盘缓存 */
+        /** Network request failed but the local disk cache was read successfully */
         data class FallbackDiskCache(val content: String, val error: Throwable) : FetchResult()
-        /** 彻底失败（无本地缓存可用） */
+        /** Complete failure (no local cache available) */
         data class Failure(val error: Throwable) : FetchResult()
     }
 
     /**
-     * 获取数据：若本地缓存未过期直接使用；若已过期则按节点优先级测活并拉取，支持 304 与磁盘兜底。
+     * Fetches data: if the local cache has not expired it is used directly; if expired, nodes are probed and fetched in priority order, supporting 304 and disk fallback.
      *
-     * @param pathInRepo 仓库相对路径，如 "data/providers.json"
-     * @param maxAgeMs 缓存有效期（毫秒），不传则取构造方法设定的 [defaultMaxAgeMs]；传 0L 则跳过本地有效期检查强制网络对账
+     * @param pathInRepo Path relative to the repository, such as "data/providers.json"
+     * @param maxAgeMs Cache lifetime (milliseconds); if not passed it uses [defaultMaxAgeMs] set by the constructor; passing 0L skips the local freshness check and forces a network reconciliation
      */
     suspend fun fetch(
         pathInRepo: String,
@@ -59,7 +59,7 @@ class RepoDataFetcher(
         val cachedContent = if (cacheFile.isFile) runCatching { cacheFile.readText(Charsets.UTF_8) }.getOrNull() else null
         val isCacheFresh = cachedContent != null && (now - cacheFile.lastModified() < maxAgeMs)
 
-        // 1. 本地缓存仍在有效期内，直接返回
+        // 1. Local cache is still fresh, return it directly
         if (isCacheFresh) {
             return@withContext FetchResult.Success(cachedContent!!, fromCache = true)
         }
@@ -69,7 +69,7 @@ class RepoDataFetcher(
 
         var lastError: Throwable? = null
 
-        // 2. 依次遍历候选节点
+        // 2. Iterate the candidate nodes in order
         for (url in candidateUrls) {
             try {
                 val reqBuilder = Request.Builder()
@@ -83,7 +83,7 @@ class RepoDataFetcher(
 
                 client.newCall(reqBuilder.build()).execute().use { response ->
                     when {
-                        // 304 未修改：原缓存依旧有效，更新文件修改时间后直接返回
+                        // 304 not modified: the original cache is still valid, update the file modification time and return directly
                         response.code == 304 && cachedContent != null -> {
                             cacheFile.setLastModified(now)
                             return@withContext FetchResult.Success(cachedContent, fromCache = true)
@@ -92,7 +92,7 @@ class RepoDataFetcher(
                         response.isSuccessful -> {
                             val body = response.body?.string().orEmpty()
                             if (body.isNotBlank()) {
-                                // 写入磁盘缓存
+                                // Write to the disk cache
                                 runCatching {
                                     cacheFile.parentFile?.mkdirs()
                                     cacheFile.writeText(body, Charsets.UTF_8)
@@ -109,49 +109,49 @@ class RepoDataFetcher(
 
                         else -> {
                             val errCode = response.code
-                            FileLogger.d(TAG, "节点请求失败 url=$url code=$errCode")
+                            FileLogger.d(TAG, "Node request failed url=$url code=$errCode")
                         }
                     }
                 }
             } catch (e: Throwable) {
                 lastError = e
-                FileLogger.d(TAG, "节点连接异常 url=$url: ${e.message}")
+                FileLogger.d(TAG, "Node connection error url=$url: ${e.message}")
             }
         }
 
-        // 3. 所有节点均不可用时：如果磁盘上有旧缓存，降级使用旧缓存
+        // 3. When all nodes are unavailable: if there is an old cache on disk, degrade to using the old cache
         if (cachedContent != null) {
-            FileLogger.w(TAG, "所有网络节点拉取失败，降级使用磁盘旧缓存: $cleanPath", lastError)
+            FileLogger.w(TAG, "All network nodes failed to fetch, degrading to old disk cache: $cleanPath", lastError)
             return@withContext FetchResult.FallbackDiskCache(
                 cachedContent,
                 lastError ?: IllegalStateException("All remote endpoints failed")
             )
         }
 
-        // 4. 彻底失败
+        // 4. Complete failure
         FetchResult.Failure(lastError ?: IllegalStateException("Failed to fetch $cleanPath from all sources"))
     }
 
     /**
-     * 生成候选节点 URL 列表：
-     * 1. jsDelivr (Fastly CDN 加速)
-     * 2. jsDelivr (通用 CDN)
-     * 3. raw.githubusercontent.com (GitHub 官方直连兜底)
+     * Builds the candidate node URL list:
+     * 1. jsDelivr (Fastly CDN accelerated)
+     * 2. jsDelivr (general CDN)
+     * 3. raw.githubusercontent.com (official GitHub direct fallback)
      */
     fun buildCandidateUrls(path: String): List<String> = listOf(
-        // Fastly 加速的 jsDelivr 节点
+        // Fastly-accelerated jsDelivr node
         "https://fastly.jsdelivr.net/gh/$owner/$repo@$branch/$path",
-        // 通用 CDN 镜像
+        // General CDN mirror
         "https://cdn.jsdelivr.net/gh/$owner/$repo@$branch/$path",
-        // jsDelivr GCore 节点
+        // jsDelivr GCore node
         "https://gcore.jsdelivr.net/gh/$owner/$repo@$branch/$path",
-        // GitHub 源站兜底
+        // GitHub origin fallback
         "https://raw.githubusercontent.com/$owner/$repo/$branch/$path"
     )
 
     /**
-     * 同步读取磁盘缓存（不发网络）：存在则返回文本，否则 null。
-     * 供「纯只读链路」复用统一缓存目录，避免调用方硬编码缓存路径。
+     * Synchronously reads the disk cache (no network): returns the text if present, otherwise null.
+     * For "pure read-only paths" to reuse the unified cache directory, avoiding callers hardcoding cache paths.
      */
     fun readLocalCache(pathInRepo: String): String? {
         val file = getCacheFile(pathInRepo.trim().removePrefix("/"))
@@ -188,7 +188,7 @@ class RepoDataFetcher(
         const val DEFAULT_REPO = "mrai-aicode"
         const val DEFAULT_BRANCH = "main"
 
-        /** 默认缓存 12 小时 */
+        /** Default cache 12 hours */
         const val DEFAULT_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000L
 
         val DEFAULT_CLIENT: OkHttpClient by lazy {

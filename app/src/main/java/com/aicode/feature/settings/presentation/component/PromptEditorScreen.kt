@@ -37,10 +37,10 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.ArrowLeft
 
 /**
- * 提示词片段新建/编辑页：自带顶栏（返回 + 右上角保存），与 [SubAgentEditorScreen] 一致，
- * 不能嵌进设置页的 Scaffold。
+ * Prompt fragment create/edit page: has its own top bar (back + save in the top right), matching [SubAgentEditorScreen],
+ * and cannot be embedded in the settings page's Scaffold.
  *
- * 编号即身份，决定片段在系统提示词里的位置；可改。作用域选项目或全局，决定覆盖写到哪一层。
+ * The number is the identity and decides the fragment's position in the system prompt; it can be changed. The scope choice, project or global, decides which layer the override is written to.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -7,25 +7,25 @@ import com.aicode.feature.workspace.domain.FileAccessProvider
 import org.yaml.snakeyaml.Yaml
 
 /**
- * 解析单个子代理定义文件（`agents/<name>.md`）：YAML frontmatter 为配置，正文为 agent 提示词。
- * 与 [com.aicode.feature.agent.domain.skill.SkillParser] 同一套 frontmatter 约定。
+ * Parses a single subagent definition file (`agents/<name>.md`): the YAML frontmatter is the configuration and the body is the agent prompt.
+ * Uses the same frontmatter conventions as [com.aicode.feature.agent.domain.skill.SkillParser].
  */
 object AgentDefinitionParser {
     private const val TAG = "AgentDefinitionParser"
     private const val MAX_DESC_CHARS = 500
 
-    /** 正文为空视为非法定义（agent 必须有提示词），返回 null。定义文件经 [provider] 以容器路径读取。 */
+    /** An empty body is treated as an invalid definition (an agent must have a prompt) and returns null. The definition file is read via [provider] by container path. */
     fun parse(provider: FileAccessProvider, filePath: String): AgentDefinition? {
         val text = runCatching { provider.readFile(filePath) }.getOrElse {
-            FileLogger.w(TAG, "读取子代理定义失败: $filePath", it)
+            FileLogger.w(TAG, "Failed to read subagent definition: $filePath", it)
             return null
         }
         return parseText(text, filePath)
     }
 
     /**
-     * 从原始 Markdown 文本解析定义（不依赖磁盘），供 [com.aicode.feature.workspace.domain.FileAccessProvider.readFiles]
-     * 批量读取后统一解析——真机 ROOT 通道下逐个 [parse] 等于每个定义文件一次 `su` 子进程。
+     * Parses a definition from raw Markdown text (not depending on disk), for unified parsing after batch reading via [com.aicode.feature.workspace.domain.FileAccessProvider.readFiles]
+     * -- on a real device's ROOT channel, calling [parse] one by one would mean one `su` subprocess per definition file.
      */
     fun parseText(text: String, filePath: String): AgentDefinition? {
         val (frontmatter, body) = splitAndParseFrontmatter(text)
@@ -53,7 +53,7 @@ object AgentDefinitionParser {
         )
     }
 
-    /** 同时接受 YAML 列表与逗号分隔字符串两种写法。 */
+    /** Accepts both a YAML list and a comma-separated string. */
     internal fun stringList(raw: Any?): List<String> = when (raw) {
         null -> emptyList()
         is List<*> -> raw.mapNotNull { it?.toString()?.trim() }.filter { it.isNotEmpty() }
@@ -61,7 +61,7 @@ object AgentDefinitionParser {
         else -> emptyList()
     }
 
-    /** 模式取值：忽略大小写与连字符/下划线差异，非法值回退 null（继承父会话）。 */
+    /** Mode value: ignores case and hyphen/underscore differences; an invalid value falls back to null (inherit from the parent session). */
     internal fun parseMode(raw: Any?): AgentMode? {
         val token = raw?.toString()?.trim()?.uppercase()
             ?.replace("-", "")?.replace("_", "")
@@ -69,7 +69,7 @@ object AgentDefinitionParser {
         return AgentMode.entries.firstOrNull { it.name == token }
     }
 
-    /** 缺省或全部取值非法时回退默认注入项，避免定义写错就丢掉全部上下文。 */
+    /** When absent or when every value is invalid, falls back to the default injections, so a typo in a definition does not lose all context. */
     internal fun parseInject(raw: Any?): Set<InjectPart> {
         val tokens = stringList(raw)
         if (tokens.isEmpty()) return AgentDefinition.DEFAULT_INJECT
@@ -91,7 +91,7 @@ object AgentDefinitionParser {
         val map = try {
             Yaml().load<Map<String, Any>>(block) ?: emptyMap()
         } catch (e: Exception) {
-            FileLogger.w(TAG, "解析子代理定义 YAML 失败", e)
+            FileLogger.w(TAG, "Failed to parse subagent definition YAML", e)
             emptyMap()
         }
         return map to rest
@@ -100,10 +100,10 @@ object AgentDefinitionParser {
     private val VALID_EFFORTS = ReasoningEffort.entries.map { it.apiValue }.toSet()
 
     /**
-     * 把设置页表单写回定义文件文本（frontmatter + 正文），与 [parse] 成对。
+     * Writes a settings-page form back to definition file text (frontmatter + body), paired with [parse].
      *
-     * `name` 总是写出来并与文件名保持一致，避免出现「文件名一个名、frontmatter 另一个名」。
-     * 工具名是标识符，直接进方括号列表；其余文本字段一律加引号，免得描述里的冒号或 # 把 YAML 弄坏。
+     * `name` is always written out and kept consistent with the file name, avoiding "one name in the file name, another in the frontmatter".
+     * Tool names are identifiers and go directly into a bracketed list; all other text fields are always quoted, so a colon or # in a description does not break the YAML.
      */
     fun serialize(
         name: String,
@@ -126,7 +126,7 @@ object AgentDefinitionParser {
         mode?.let { appendLine("mode: ${it.name.lowercase()}") }
         if (allowedTools.isNotEmpty()) appendLine("tools: [${allowedTools.joinToString(", ")}]")
         if (disallowedTools.isNotEmpty()) appendLine("disallowedTools: [${disallowedTools.joinToString(", ")}]")
-        // 空集必须显式写 [none]：省略会被解成默认注入项，恰好与用户「什么都不注入」的选择相反。
+        // An empty set must be written explicitly as [none]: omitting it would be parsed as the default injections, exactly the opposite of the user's "inject nothing" choice.
         val injectTokens = if (inject.isEmpty()) {
             "none"
         } else {
@@ -137,7 +137,7 @@ object AgentDefinitionParser {
         appendLine(prompt.trim())
     }
 
-    /** frontmatter 字符串值：双引号包裹，转义反斜杠与引号，换行压成空格保证单行。 */
+    /** A frontmatter string value: wrapped in double quotes, backslashes and quotes escaped, newlines collapsed to spaces to guarantee a single line. */
     private fun quote(value: String): String {
         val escaped = value.replace("\\", "\\\\")
             .replace("\"", "\\\"")

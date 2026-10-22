@@ -4,21 +4,21 @@ import java.io.Closeable
 import java.io.Reader
 
 /**
- * 单行输出上限（字符）。`BufferedReader.readLine()` 遇到超长单行（命令把二进制/大文件 dump 到
- * stdout，如 `cat` 可执行文件、`base64` 大文件）会把整行拼进内存，设备上直接 OOM。
- * 超过上限即截断、丢弃该行余下内容，保证内存有界。
+ * Maximum single-line output (characters). When `BufferedReader.readLine()` encounters a very long single line (a command dumping a binary/large file to
+ * stdout, such as `cat` on an executable or `base64` on a large file) it loads the whole line into memory and OOMs directly on the device.
+ * Exceeding the limit truncates and discards the rest of the line, keeping memory bounded.
  */
 internal const val MAX_STREAM_LINE_CHARS = 64 * 1024
 
-/** 超长单行被截断后追加的提示行。 */
-internal const val LINE_TRUNCATED_NOTE = "[该行输出过长，已截断]"
+/** Note line appended after a very long line is truncated. */
+internal const val LINE_TRUNCATED_NOTE = "[Line output too long, truncated]"
 
-/** 一行输出；[truncated] 为 true 表示该行超过 [MAX_STREAM_LINE_CHARS] 被截断。 */
+/** One line of output; [truncated] is true if the line exceeded [MAX_STREAM_LINE_CHARS] and was truncated. */
 internal class StreamLine(val text: String, val truncated: Boolean)
 
 /**
- * 逐行读取 [reader]，分行语义与 [java.io.BufferedReader.readLine] 一致（`\n` / `\r` / `\r\n`），
- * 但单行长度封顶 [maxChars]：达到上限后不再累积、继续消费该行余下内容并丢弃，避免超长单行 OOM。
+ * Reads [reader] line by line, with line-splitting semantics matching [java.io.BufferedReader.readLine] (`\n` / `\r` / `\r\n`),
+ * but caps a single line at [maxChars]: after reaching the cap it stops accumulating, continues consuming and discarding the rest of the line, avoiding OOM from a very long line.
  */
 internal class BoundedLineReader(
     private val reader: Reader,
@@ -63,9 +63,9 @@ internal class BoundedLineReader(
 }
 
 /**
- * 惰性逐行读取：每次只物化当前一行（单行封顶 [MAX_STREAM_LINE_CHARS]），读到哪算哪，整文件不进内存。
+ * Lazy line-by-line reading: only materialises the current line each time (single-line cap [MAX_STREAM_LINE_CHARS]), reads as far as consumed, and never loads the whole file into memory.
  *
- * 每次迭代都会调用 [open] 重新打开 reader，因此序列可重复迭代；一次迭代被完整消费或抛错时自动关闭。
+ * Each iteration calls [open] to reopen the reader, so the sequence can be iterated repeatedly; it closes automatically when an iteration is fully consumed or throws.
  */
 internal fun boundedLines(open: () -> Reader): Sequence<String> = sequence {
     BoundedLineReader(open()).use { reader ->

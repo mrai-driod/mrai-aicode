@@ -122,7 +122,7 @@ import com.aicode.R
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    /** 用于冷启动时在前台恢复常驻保活通知（App.onCreate 的启动可能被后台 FGS 限制挡掉）。 */
+    /** Used on cold start to restore the persistent keepalive notification in the foreground (startup in App.onCreate may be blocked by background FGS restrictions). */
     @Inject
     lateinit var keepaliveSettings: KeepaliveSettingsRepository
 
@@ -132,39 +132,39 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var backgroundSettings: BackgroundSettingsRepository
 
-    /** 屏幕常亮开关：只在 App 前台约束屏幕，切后台由系统自动失效。 */
+    /** Keep-screen-on toggle: only constrains the screen while the App is in the foreground; automatically released by the system when backgrounded. */
     @Inject
     lateinit var screenOnSettings: ScreenOnSettingsRepository
 
-    /** 语言偏好：attachBaseContext 时同步读取以应用 locale，变化时 recreate。 */
+    /** Language preference: read synchronously in attachBaseContext to apply the locale, recreate on change. */
     @Inject
     lateinit var languageSettings: com.aicode.feature.settings.data.repository.LanguageSettingsRepository
 
-    /** App 回到前台时，远程模式下若 SSH 断了触发重连。 */
+    /** When the App returns to the foreground, in remote mode trigger a reconnect if SSH is disconnected. */
     @Inject
     lateinit var remoteSshConnection: com.aicode.feature.agent.domain.container.RemoteSshConnection
 
     @Inject
     lateinit var executionModeHolder: com.aicode.feature.settings.data.repository.ExecutionModeHolder
 
-    /** 三端（UI/AI Bash/交互终端）git 缺凭据统一弹窗桥：在 AIEditorApp 启动后监听 helper 的文件 IPC 请求。 */
+    /** Unified dialog bridge for missing git credentials across all three surfaces (UI/AI Bash/interactive terminal): listens for the helper's file IPC requests after AIEditorApp starts. */
     @Inject
     lateinit var credentialRequestBridge: com.aicode.feature.credentials.data.CredentialRequestBridge
 
-    /** 首次启动引导的进度持久化。 */
+    /** Persistence for first-launch onboarding progress. */
     @Inject
     lateinit var onboardingRepository: com.aicode.feature.onboarding.data.OnboardingRepository
 
     @Inject
     lateinit var browserManager: com.aicode.feature.agent.domain.tool.browser.BrowserManager
 
-    /** 性能采样器：性能面板手动开启后按路由归属模块，做长期占用分析。 */
+    /** Performance sampler: after being manually enabled in the performance panel, attributes by route module for long-term usage analysis. */
     @Inject
     lateinit var perfMonitor: com.aicode.core.perf.PerfMonitor
 
     override fun attachBaseContext(newBase: android.content.Context) {
-        // 在 Activity 创建前同步应用用户选择的语言，确保冷启动也生效。
-        // Hilt 尚未注入，直接从 SharedPreferences 同步读取。
+        // Synchronously apply the user-selected language before Activity creation, ensuring it also takes effect on cold start.
+        // Hilt is not yet injected, so read synchronously directly from SharedPreferences.
         val tag = newBase.getSharedPreferences("language_prefs_sync", android.content.Context.MODE_PRIVATE)
             .getString("language_tag", null)
         val context = if (tag.isNullOrBlank()) {
@@ -177,16 +177,16 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(context)
     }
 
-    @Suppress("DEPRECATION") // 全局更新 application resources locale，createConfigurationContext 无法替代
+    @Suppress("DEPRECATION") // Globally update application resources locale, createConfigurationContext cannot substitute for this
     override fun onCreate(savedInstanceState: Bundle?) {
-        // 从冷启动闪屏主题恢复为应用主主题
+        // Restore from the cold-start splash theme to the app's main theme
         setTheme(R.style.Theme_AICode)
-        // 绘制到系统状态栏/导航栏之下，让应用背景与系统栏融为一体（消除割裂的色块）。
+        // Draw under the system status bar/navigation bar so the app background blends with the system bars (eliminating disjoint color blocks).
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        // 离屏 WebView 隐藏宿主：延迟到首帧后挂载，避免 onCreate 期间的布局遍历叠加到首屏卡顿。
-        // WebView 在首次打开浏览器页时才真正创建，hiddenHost 仅为其提供 onAttachedToWindow 环境，晚 200ms 无影响。
+        // Offscreen WebView hidden host: mount after the first frame to avoid layout traversals during onCreate compounding first-screen jank.
+        // The WebView is only truly created when the browser page is first opened; hiddenHost merely provides it an onAttachedToWindow environment, so a 200ms delay has no impact.
         lifecycleScope.launch {
             kotlinx.coroutines.delay(200)
             val hiddenHost = android.widget.FrameLayout(this@MainActivity).apply {
@@ -197,14 +197,14 @@ class MainActivity : ComponentActivity() {
             findViewById<android.view.ViewGroup>(android.R.id.content)?.addView(hiddenHost)
             browserManager.attachHiddenHost(hiddenHost)
         }
-        // 监听语言偏好变化，更新 Application/Activity locale 后重建。
+        // Listen for language preference changes, update the Application/Activity locale, then recreate.
         lifecycleScope.launch {
             languageSettings.languageFlow.drop(1).distinctUntilChanged().collect { tag ->
-                // 同步更新 Application context 的 Configuration，确保非 Activity 来源的
-                // Resources（如 ViewModel 中 context.getString）也能拿到正确 locale。
+                // Synchronously update the Application context Configuration, ensuring non-Activity sources
+                // Resources (such as context.getString in a ViewModel) also get the correct locale.
                 val app = applicationContext
                 if (tag.isNullOrBlank()) {
-                    // 跟随系统：重置为系统默认 Configuration
+                    // Follow system: reset to the system default Configuration
                     val sysConfig = android.content.res.Configuration(resources.configuration)
                     sysConfig.setLocale(java.util.Locale.getDefault())
                     app.resources.updateConfiguration(sysConfig, app.resources.displayMetrics)
@@ -216,7 +216,7 @@ class MainActivity : ComponentActivity() {
                 recreate()
             }
         }
-        // 屏幕常亮：窗口标志只在 Activity 可见时约束屏幕，退到后台系统自动放开，无需手动释放。
+        // Keep screen on: the window flag only constrains the screen while the Activity is visible; the system automatically releases it in the background, no manual release needed.
         lifecycleScope.launch {
             screenOnSettings.enabledFlow.collect { enabled ->
                 if (enabled) {
@@ -226,29 +226,29 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        // API 30+：全局切到 ADJUST_NOTHING，由 rememberImeBottomInset() 接管键盘内边距。
-        // 必须在 Activity 级别统一设置，不能在每个 composable 里各自 save/restore——
-        // NavHost 过渡动画期间新旧页面共存，旧页面 dispose 恢复 softInputMode 会触发窗口重布局导致白屏。
+        // API 30+: globally switch to ADJUST_NOTHING, with rememberImeBottomInset() taking over keyboard insets.
+        // Must be set uniformly at the Activity level, not saved/restored separately in each composable --
+        // During NavHost transition animations old and new pages coexist; the old page's dispose restoring softInputMode would trigger a window relayout causing a white screen.
         if (Build.VERSION.SDK_INT >= 30) {
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
         }
         setContent {
-            // ── 延迟首帧加载 ──
-            // 冷启动时 JIT 要编译 AIChatPanel（1916 行）、ChatInputBar 等巨型 Composable，
-            // 编译分配 ~39MB → 触发 GC 风暴 → 主线程被阻塞 150-950ms（实测 11 帧全卡）。
-            // 先渲染与闪屏同色的轻量 Surface（零 JIT 开销），让 JIT 在后台线程编译完热路径后再切到重内容。
+            // -- Delayed first-frame loading --
+            // On cold start, JIT must compile huge Composables such as AIChatPanel (1916 lines) and ChatInputBar,
+            // compilation allocates ~39MB -> triggers a GC storm -> main thread blocked for 150-950ms (measured: all 11 frames janked).
+            // First render a lightweight Surface in the same color as the splash (zero JIT overhead), letting JIT compile the hot path on a background thread before switching to heavy content.
             var contentReady by remember { androidx.compose.runtime.mutableStateOf(false) }
             LaunchedEffect(Unit) {
-                // 等第一帧渲染完（splash 已可见），再给 JIT ~200ms 在后台线程编译热路径 Composable。
-                // 实测冷启动 JIT 编译 AIChatPanel+ChatInputBar 分配 ~39MB、耗时 ~500ms；
-                // 200ms 足够 JIT 编译完大部分热方法，切换到重内容时不再触发主线程 GC 风暴。
+                // Wait for the first frame to finish rendering (splash already visible), then give JIT ~200ms on a background thread to compile hot-path Composables.
+                // Measured: cold-start JIT compilation of AIChatPanel+ChatInputBar allocates ~39MB and takes ~500ms;
+                // 200ms is enough for JIT to compile most hot methods, so switching to heavy content no longer triggers a main-thread GC storm.
                 androidx.compose.runtime.withFrameNanos { }
                 kotlinx.coroutines.delay(200)
                 contentReady = true
             }
 
             if (!contentReady) {
-                // 轻量首帧：与 Theme.AICode.Splash 的 windowBackground 同色，视觉无缝衔接。
+                // Lightweight first frame: same color as Theme.AICode.Splash windowBackground, for a visually seamless transition.
                 androidx.compose.material3.Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = androidx.compose.ui.graphics.Color(0xFFF9FAFA)
@@ -283,8 +283,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // 全局自定义背景图：叠加在所有页面内容之上（水印效果），透明度可调。
-                    // 不拦截触摸事件；弹窗（Dialog 独立窗口）不受层级影响。
+                    // Global custom background image: overlaid on top of all page content (watermark effect), with adjustable opacity.
+                    // Does not intercept touch events; dialogs (separate Dialog windows) are unaffected by layering.
                     val bgPath by backgroundSettings.imagePathFlow.collectAsStateWithLifecycle(initialValue = null)
                     val bgAlpha by backgroundSettings.alphaFlow.collectAsStateWithLifecycle(initialValue = BackgroundSettingsRepository.DEFAULT_ALPHA)
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -292,7 +292,7 @@ class MainActivity : ComponentActivity() {
                             onboardingRepository = onboardingRepository,
                             perfMonitor = perfMonitor
                         )
-                        // 全局凭据弹窗：覆盖所有页面，命令行 git 缺凭据在任意页面都能弹。
+                        // Global credential dialog: covers all pages, so missing command-line git credentials can prompt on any page.
                         com.aicode.feature.credentials.presentation.component.GlobalCredentialDialogHost(
                             bridge = credentialRequestBridge
                         )
@@ -318,7 +318,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-                        // beta 包全局水印，置于最上层，不拦截触摸。
+                        // Beta build global watermark, placed on the top layer, does not intercept touches.
                         BetaWatermark()
                     }
                 }
@@ -326,7 +326,7 @@ class MainActivity : ComponentActivity() {
             } // else (contentReady)
         }
 
-        // 此时处于前台，启动前台服务一定被允许：若用户曾开启常驻保活，补上通知。
+        // At this point we are in the foreground, so starting a foreground service is always allowed: if the user previously enabled persistent keepalive, restore the notification.
         lifecycleScope.launch {
             if (keepaliveSettings.isEnabled()) {
                 TerminalKeepaliveService.enablePersistent(this@MainActivity)
@@ -336,7 +336,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 远程模式回到前台时，若 SSH 断了立即触发重连，不等 supervisor 轮询
+        // When returning to the foreground in remote mode, if SSH is disconnected trigger a reconnect immediately without waiting for supervisor polling
         if (executionModeHolder.currentMode() == com.aicode.feature.settings.data.repository.ExecutionMode.REMOTE_SSH) {
             lifecycleScope.launch {
                 runCatching { remoteSshConnection.tryReconnectIfDisconnected() }
@@ -351,26 +351,26 @@ class MainActivity : ComponentActivity() {
 
 }
 
-/** 大屏右栏默认占宽比，以及拖拽分栏的上下限——两边都至少留 30% 宽度。 */
+/** Default width ratio for the large-screen right pane, and the upper/lower limits for drag-split -- both sides keep at least 30% width. */
 private const val DEFAULT_PANE_SPLIT = 0.5f
 private const val MIN_PANE_SPLIT = 0.3f
 private const val MAX_PANE_SPLIT = 0.7f
 
 /**
- * 根导航容器。
+ * Root navigation container.
  *
- * [ModalNavigationDrawer] 放在 [NavHost] **外面**，使 Drawer 的生命周期独立于页面切换。
+ * [ModalNavigationDrawer] is placed **outside** [NavHost], so the Drawer's lifecycle is independent of page switching.
  *
- * 页面过渡统一走 [pageEnter] / [pageExit]。
+ * Page transitions uniformly go through [pageEnter] / [pageExit].
  *
- * **注意**：终端页承载的是原生 TerminalView，历史上启用过渡曾导致「退出终端后立即点侧边栏白屏」——
- * 当时过渡期间新旧页面共存，旧页 dispose 把 softInputMode 切回 adjustResize 触发窗口重布局，
- * 与 Drawer 打开动画叠加后渲染管线中断。该路径已由 onCreate 统一设置 softInputMode 与
- * `rememberImeBottomInset` 的空 onDispose 兜住；若白屏复现，先把终端路由的过渡降级为 None 排除嫌疑。
+ * **Note**: the terminal page hosts a native TerminalView; historically enabling transitions caused 'white screen when tapping the sidebar immediately after exiting the terminal' --
+ * at that time old and new pages coexisted during the transition, and the old page's dispose switched softInputMode back to adjustResize, triggering a window relayout,
+ * which combined with the Drawer open animation interrupted the rendering pipeline. That path is now guarded by onCreate uniformly setting softInputMode and
+ * an empty onDispose in `rememberImeBottomInset`; if the white screen recurs, first downgrade the terminal route's transition to None to rule it out.
  *
- * ViewModel 提升到这一层创建，以便 Drawer 内容和 AIChatPanel 共享同一实例。
+ * ViewModels are hoisted to this level so Drawer content and AIChatPanel share the same instance.
  */
-/** 导航路由 → 性能面板模块名。editor 路由带 query 参数，用前缀匹配。 */
+/** Navigation route -> performance panel module name. The editor route carries query parameters, so use prefix matching. */
 private fun perfModuleOf(route: String?): String = when {
     route == null -> "other"
     route == "chat" -> "chat"
@@ -391,23 +391,23 @@ fun AppNavigation(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // 用于判断当前路由：仅在聊天页允许 Drawer 手势。
+    // Used to determine the current route: Drawer gestures are only allowed on the chat page.
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
 
-    // 记录当前路由到全局，崩溃报告用它定位崩溃页面。
+    // Record the current route globally; crash reports use it to locate the crashing page.
     LaunchedEffect(currentRoute) {
         AIEditorApp.currentRoute = currentRoute
-        // 性能采样按路由归属模块，供性能面板做模块级占用分析。
+        // Performance sampling is attributed to a module by route, for module-level usage analysis in the performance panel.
         perfMonitor.setModule(perfModuleOf(currentRoute))
     }
 
-    // Activity 级别的 ViewModel——Drawer 和 AIChatPanel 共享同一个实例。
+    // Activity-level ViewModels -- Drawer and AIChatPanel share the same instance.
     val agentViewModel: AIAgentViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val workspaceViewModel: WorkspaceViewModel = hiltViewModel()
 
-    // ── 首次启动引导 ──
+    // -- First-launch onboarding --
     val onboardingStateHolder = remember { OnboardingStateHolder() }
     val onboardingUiState by onboardingStateHolder.state.collectAsStateWithLifecycle()
     val onboardingRegistry = remember { OnboardingTargetRegistry() }
@@ -421,26 +421,26 @@ fun AppNavigation(
             scope = onboardingScope
         )
     }
-    // 启动判断：IN_PROGRESS 则激活引导。
+    // Startup check: if IN_PROGRESS, activate onboarding.
     LaunchedEffect(Unit) {
         val status = onboardingRepository.status()
         onboardingCoordinator.initialize(status ?: OnboardingStatus.IN_PROGRESS)
     }
 
-    // 自动检查更新：进入主页时异步检测（开关开启且每天最多一次，失败静默）
+    // Auto update check: asynchronously check when entering the home page (when the toggle is on and at most once per day, silent on failure)
     LaunchedEffect(Unit) {
         settingsViewModel.checkUpdate(manual = false)
     }
 
-    // 侧边栏打开时，系统返回键先收起侧边栏。
+    // When the sidebar is open, the system back key closes the sidebar first.
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch { drawerState.close() }
     }
 
-    // 侧边栏需要的数据。
+    // Data needed by the sidebar.
     val currentWorkspace by workspaceViewModel.current.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(currentWorkspace) {
-        // 远程模式连接未就绪时 currentWorkspace 为 null，不触发 setWorkspace，避免空路径点燃 session 加载
+        // In remote mode when the connection is not ready currentWorkspace is null; do not trigger setWorkspace, to avoid an empty path igniting session loading
         val path = currentWorkspace?.path ?: return@LaunchedEffect
         agentViewModel.setWorkspace(path)
     }
@@ -459,7 +459,7 @@ fun AppNavigation(
     val chatSearchQuery by agentViewModel.chatSearchQuery.collectAsStateWithLifecycle()
     val chatSearchState by agentViewModel.chatSearchState.collectAsStateWithLifecycle()
 
-    // ── 导出会话：SAF 保存文件 ──
+    // -- Export session: SAF save file --
     var pendingExportSessionId by remember { mutableStateOf<String?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val sessionExportLauncher = rememberLauncherForActivityResult(
@@ -487,28 +487,28 @@ fun AppNavigation(
         }
     }
 
-    // ── 大屏（平板横屏及以上）布局 ──
+    // -- Large-screen (tablet landscape and above) layout --
     val expanded = isExpandedWidth()
-    // 常驻侧栏只在聊天页开：终端 / 编辑器 / 设置都是全屏页，被侧栏挤窄反而难用。
-    // 常驻侧栏只看窗口宽度：它只在聊天页展开，切到其他页会滑回去（见下方 sidebarWidth）。
+    // The persistent sidebar is only open on the chat page: terminal / editor / settings are all full-screen pages, and being squeezed by the sidebar makes them harder to use.
+    // The persistent sidebar only depends on window width: it only expands on the chat page and slides back on other pages (see sidebarWidth below).
     val permanentDrawer = expanded
 
-    // 侧栏出现时刷一次文件列表：本地模式兼顾 inotify 漏事件，远程模式无 inotify 则完全靠它。
-    // 不能直接盯 drawerState.isOpen：大屏常驻侧栏不走 ModalNavigationDrawer，drawerState 永远是 Closed，
-    // 那样大屏远程模式下文件树只能靠手动刷新按钮。改取「侧栏可见」：窄窗看抽屉开没开，
-    // 大屏看是否停在聊天页（侧栏只在聊天页展开）。
+    // Refresh the file list once when the sidebar appears: local mode covers missed inotify events, remote mode has no inotify and relies entirely on this.
+    // Cannot directly watch drawerState.isOpen: the large-screen persistent sidebar does not go through ModalNavigationDrawer, so drawerState is always Closed,
+    // which would leave the file tree in large-screen remote mode dependent only on the manual refresh button. Instead use 'sidebar visible': on narrow windows check whether the drawer is open,
+    // on large screens check whether we are on the chat page (the sidebar only expands on the chat page).
     val sidebarVisible = if (permanentDrawer) currentRoute == "chat" else drawerState.isOpen
     LaunchedEffect(sidebarVisible) {
         if (sidebarVisible) agentViewModel.refreshBrowse()
     }
 
-    // 右栏工作台：大屏下编辑器 / 终端 / Git 与聊天并排，窄窗仍走全屏路由。
+    // Right-pane workbench: on large screens editor / terminal / Git sit side-by-side with chat; on narrow windows they still use full-screen routes.
     var paneKind by rememberSaveable { mutableStateOf(WorkbenchPaneKind.NONE) }
     var paneEditorPath by rememberSaveable { mutableStateOf("") }
     var paneEditorLine by rememberSaveable { mutableIntStateOf(0) }
     var paneSplit by rememberSaveable { mutableFloatStateOf(DEFAULT_PANE_SPLIT) }
 
-    // 右栏打开时返回键先收起它。限定聊天页：其他页面右栏不渲染，不能在那里吞掉返回事件。
+    // When the right pane is open, the back key closes it first. Limited to the chat page: the right pane is not rendered on other pages, so back events must not be swallowed there.
     BackHandler(
         enabled = expanded && currentRoute == "chat" &&
             paneKind != WorkbenchPaneKind.NONE && !drawerState.isOpen
@@ -516,13 +516,13 @@ fun AppNavigation(
         paneKind = WorkbenchPaneKind.NONE
     }
 
-    // 打开文件：大屏进右栏，窄窗跳全屏编辑器页。
+    // Open file: on large screens go to the right pane, on narrow windows jump to the full-screen editor page.
     val openFile: (String, Int, Boolean) -> Unit = { filePath, line, fromDrawer ->
         if (expanded) {
             paneEditorPath = filePath
             paneEditorLine = line
             paneKind = WorkbenchPaneKind.EDITOR
-            // 常驻侧栏不需要关；平板竖屏等仍用 modal 抽屉的情况下选完文件要收起。
+            // The persistent sidebar does not need to close; in cases still using a modal drawer (e.g. tablet portrait), close it after selecting a file.
             if (!permanentDrawer) scope.launch { drawerState.close() }
         } else {
             scope.launch { drawerState.close() }
@@ -532,7 +532,7 @@ fun AppNavigation(
         }
     }
 
-    // 文件树里点文件：图片进内置全屏查看器、APK 走系统安装器，其余仍进编辑器。
+    // Tapping a file in the file tree: images go to the built-in full-screen viewer, APKs go to the system installer, everything else still goes to the editor.
     val drawerImageViewerState = rememberImageViewerState()
     val drawerDecodeSpec = rememberViewerDecodeSpec()
     val drawerImageLoad = remember(agentViewModel.fileAccess, drawerDecodeSpec) {
@@ -563,7 +563,7 @@ fun AppNavigation(
         }
     }
 
-    // 终端 / Git：大屏在右栏内开合切换，窄窗跳全屏页。
+    // Terminal / Git: on large screens toggle within the right pane, on narrow windows jump to the full-screen page.
     val openWorkbench: (WorkbenchPaneKind) -> Unit = { target ->
         if (expanded) {
             paneKind = if (paneKind == target) WorkbenchPaneKind.NONE else target
@@ -578,7 +578,7 @@ fun AppNavigation(
         }
     }
 
-    // 侧栏内容：modal 抽屉与大屏常驻栏共用同一份，不在两处重复几十行参数。
+    // Sidebar content: the modal drawer and the large-screen persistent bar share the same content, avoiding duplicating dozens of lines of parameters in two places.
     val drawerBody: @Composable () -> Unit = {
         ChatDrawerContent(
             sessions = sessions,
@@ -659,12 +659,12 @@ fun AppNavigation(
         )
     }
 
-    // 页面主体（NavHost）：大屏放进 Row 的右侧，窄窗放进 modal 抽屉容器里。
+    // Page body (NavHost): on large screens placed on the right side of a Row, on narrow windows placed inside the modal drawer container.
     val navBody: @Composable () -> Unit = {
         NavHost(
             navController = navController,
             startDestination = "chat",
-            // 过渡期间退场页会向左移出自身区域，大屏下不夹住会画到左侧常驻会话侧栏上。
+            // During transitions the exiting page moves left out of its own area; on large screens without clipping it would draw over the persistent session sidebar on the left.
             modifier = Modifier.fillMaxSize().clipToBounds(),
             enterTransition = { pageEnter(forward = true) },
             exitTransition = { pageExit(forward = true) },
@@ -672,8 +672,8 @@ fun AppNavigation(
             popExitTransition = { pageExit(forward = false) }
         ) {
             composable("chat") {
-                // 聊天区内覆盖 LocalUriHandler：Markdown 链接点击默认经此 handler 派发。
-                // 文件路径类链接（无 scheme 或 file://）拦下来跳编辑器，其余（http/https 等）仍走系统浏览器。
+                // Override LocalUriHandler inside the chat area: Markdown link clicks are dispatched through this handler by default.
+                // File-path links (no scheme or file://) are intercepted to jump to the editor; the rest (http/https, etc.) still go to the system browser.
                 val defaultUriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                 val fileUriHandler = remember(defaultUriHandler, expanded) {
                     FileAwareUriHandler(defaultUriHandler) { filePath, line ->
@@ -681,7 +681,7 @@ fun AppNavigation(
                     }
                 }
                 val paneOpen = expanded && paneKind != WorkbenchPaneKind.NONE
-                // 拖动把手时要把位移像素换算成分栏比例，所以记下容器实测宽度。
+                // When dragging the handle, displacement pixels must be converted to a split ratio, so record the container's measured width.
                 var rowWidthPx by remember { mutableIntStateOf(0) }
                 Row(
                     modifier = Modifier
@@ -739,19 +739,19 @@ fun AppNavigation(
                 }
             }
             composable("settings") {
-                // 复用 Activity 级 settingsViewModel（MainActivity 顶部已创建并 init），
-                // 避免进入设置页时再建一个 NavBackStackEntry 级实例、重复跑 init 与 9 路 flow 订阅，
-                // 这是侧边栏点设置「卡一下」的主因。
+                // Reuse the Activity-level settingsViewModel (already created and initialized at the top of MainActivity),
+                // avoiding creating another NavBackStackEntry-level instance when entering the settings page and re-running init and 9 flow subscriptions,
+                // which is the main cause of the hitch when tapping Settings in the sidebar.
                 SettingsScreen(
                     viewModel = settingsViewModel,
                     onNavigateBack = {
                         navController.popBackStack()
-                        // 大屏返回聊天页后侧栏本就常驻，不再弹 modal 抽屉。
+                        // After returning to the chat page on large screens the sidebar is already persistent, so do not pop up the modal drawer again.
                         if (!expanded) scope.launch { drawerState.open() }
                     },
                     onStopAllAndCloseTerminal = { agentViewModel.stopAllAndCloseTerminal() },
                     onRerunOnboarding = {
-                        // 从设置页「重新运行引导」：清状态回 in_progress、激活引导并回聊天页。
+                        // From the settings page 'rerun onboarding': clear state back to in_progress, activate onboarding and return to the chat page.
                         scope.launch {
                             onboardingRepository.resetToInProgress()
                             onboardingCoordinator.resetAndStart()
@@ -779,7 +779,7 @@ fun AppNavigation(
                 TerminalScreen(
                     viewModel = terminalViewModel,
                     onNavigateBack = {
-                        // 退场期间仍可能收到点击，不能弹出已经成为当前页的聊天首页。
+                        // Clicks may still be received during exit; must not pop the chat home page that has already become the current page.
                         if (navController.currentBackStackEntry === entry) {
                             navController.popBackStack()
                         }
@@ -826,8 +826,8 @@ fun AppNavigation(
                     }
                 )
             ) { entry ->
-                // 从侧边栏文件页进入时返回要重新弹出抽屉（否则看完一个文件就得重新拉开抽屉进目录）；
-                // 从聊天区链接进入时返回应回到聊天，不弹抽屉。
+                // When entered from the sidebar file page, going back should reopen the drawer (otherwise after viewing one file you would have to reopen the drawer to get back to the directory);
+                // when entered from a chat-area link, going back should return to chat without opening the drawer.
                 val openDrawerOnBack = entry.arguments?.getBoolean("drawer") ?: false
                 CodeEditorScreen(
                     path = entry.arguments?.getString("path").orEmpty(),
@@ -846,20 +846,20 @@ fun AppNavigation(
         LocalImageViewer provides drawerImageViewerState
     ) {
     Box(modifier = Modifier.fillMaxSize()) {
-    // 文件树里点开的图片走这个查看器；聊天面板自带一个，两层互不影响。
+    // Images opened from the file tree use this viewer; the chat panel has its own, and the two layers do not affect each other.
     ImageViewerHost(state = drawerImageViewerState, load = drawerImageLoad)
     if (expanded) {
-        // 大屏不套 ModalNavigationDrawer：侧栏常驻在左，抽屉那套 scrim / 手势 / 锚点在这里完全用不上。
-        // 侧栏只在聊天页展开：设置页自己就是「菜单 + 详情」两栏，外面再套一层会话侧栏就成了三栏。
-        // 宽度走补间而不是直接增删，否则右侧区域宽度突变，切页时会明显闪一下；
-        // 时长与页面过渡取同一个值，两段动画同时收尾。
+        // Large screens do not wrap in ModalNavigationDrawer: the sidebar is persistent on the left, and the drawer's scrim / gestures / anchors are entirely unused here.
+        // The sidebar only expands on the chat page: the settings page itself is already two columns ('menu + detail'), and adding a session sidebar outside would make three columns.
+        // Width is animated with a tween rather than added/removed directly, otherwise the right area's width would jump abruptly and flicker noticeably when switching pages;
+        // the duration uses the same value as the page transition, so both animations finish together.
         val sidebarWidth by animateDpAsState(
             targetValue = if (currentRoute == "chat") drawerWidth() else 0.dp,
             animationSpec = tween(durationMillis = PAGE_MOTION_MS),
             label = "sidebar-width"
         )
-        // 侧栏完全收起后整棵子树离开组合，要拿 SaveableStateHolder 接住内部状态，
-        // 否则每次从设置页回来 tab 都跳回「会话」、文件树滚动位置也丢。
+        // After the sidebar is fully collapsed the whole subtree leaves composition, so use SaveableStateHolder to hold its internal state,
+        // otherwise every return from the settings page would jump the tab back to 'Sessions' and lose the file tree scroll position.
         val sidebarStateHolder = rememberSaveableStateHolder()
         Row(modifier = Modifier.fillMaxSize()) {
             if (sidebarWidth > 0.dp) {
@@ -869,7 +869,7 @@ fun AppNavigation(
                         .fillMaxHeight()
                         .clipToBounds()
                 ) {
-                    // 内容按完整宽度渲染再裁剪：收起过程中不去重排侧栏内部布局。
+                    // Content is rendered at full width and then clipped: the sidebar's internal layout is not reflowed during collapse.
                     Box(
                         modifier = Modifier
                             .width(drawerWidth())
@@ -889,7 +889,7 @@ fun AppNavigation(
     } else {
         ModalNavigationDrawer(
             drawerState = drawerState,
-            // 仅在聊天页启用手势滑出；其他页面禁止（但已打开时始终可关闭）。
+            // Only enable swipe-out gestures on the chat page; disabled on other pages (but can always be closed when already open).
             gesturesEnabled = currentRoute == "chat" || drawerState.isOpen,
             drawerContent = {
                 ModalDrawerSheet(
@@ -906,7 +906,7 @@ fun AppNavigation(
         }
     }
 
-    // 检查更新弹窗（全局宿主：自动检测与关于页手动检查共用，覆盖所有页面）
+    // Update check dialog (global host: shared by auto detection and manual check on the About page, covering all pages)
     val updateCheckState by settingsViewModel.updateCheckState.collectAsStateWithLifecycle()
     if (updateCheckState != UpdateCheckUiState.Idle) {
         val version = remember {
@@ -925,7 +925,7 @@ fun AppNavigation(
         )
     }
 
-    // 首次启动引导覆层（覆盖所有路由之上，全程常驻顶层，页面切换平滑过渡绝不闪烁）。
+    // First-launch onboarding overlay (covers all routes, resident on the top layer throughout, smooth transitions on page switches with no flicker).
     if (onboardingUiState.active) {
         OnboardingOverlay(
             stateHolder = onboardingStateHolder,
@@ -1031,16 +1031,16 @@ fun AppNavigation(
     }
 }
 
-/** 侧边栏文件页写操作失败提示（新建 / 重命名 / 删除共用）。 */
+/** Failure toast for sidebar file page write operations (shared by create / rename / delete). */
 private fun toastFileOpFailed(context: android.content.Context, messageRes: Int) {
     Toast.makeText(context, context.getString(messageRes), Toast.LENGTH_SHORT).show()
 }
 
 /**
- * 聊天区 Markdown 链接处理：把「容器文件路径」链接拦下来交给 [onOpenFile] 打开编辑器，
- * 其余（http/https/mailto 等网址）委托给系统默认 [delegate]（浏览器）。
+ * Chat-area Markdown link handling: intercepts 'container file path' links and hands them to [onOpenFile] to open the editor,
+ * all other URLs (http/https/mailto, etc.) are delegated to the system default [delegate] (browser).
  *
- * 约定：AI 用 `[显示文本](路径)` 输出可点击路径，路径可带 `:行号` 后缀（如 `~/workspace/a.kt:42`）。
+ * Convention: the AI outputs clickable paths as `[display text](path)`; the path may carry a `:line` suffix (e.g. `~/workspace/a.kt:42`).
  */
 private class FileAwareUriHandler(
     private val delegate: androidx.compose.ui.platform.UriHandler,
@@ -1057,13 +1057,13 @@ private class FileAwareUriHandler(
     }
 }
 
-/** 带 `//` 的层级式 scheme：`http://`、`https://`、`file://`、`content://` 等。 */
+/** Hierarchical schemes with `//`: `http://`, `https://`, `file://`, `content://`, etc. */
 private val HIERARCHICAL_SCHEME = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*)://")
 
 /**
- * 不带 `//` 的网址型 scheme 只能白名单枚举：scheme 语法允许 `.`，因此工作区根目录下的
- * 文件链接 `notes.md:12` 与 `mailto:x` 在语法上无从区分，按「有冒号即网址」判定会让
- * 这类链接被丢给浏览器而点不开。
+ * Opaque URL schemes without `//` can only be allowlisted: scheme syntax allows `.`, so under the workspace root
+ * a file link `notes.md:12` and `mailto:x` are syntactically indistinguishable; judging by 'has a colon means URL' would cause
+ * such links to be handed to the browser and become unopenable.
  */
 private val OPAQUE_URL_SCHEME = Regex(
     "^(mailto|tel|sms|smsto|geo|data|market|intent|about|javascript):",
@@ -1072,26 +1072,26 @@ private val OPAQUE_URL_SCHEME = Regex(
 
 private val TRAILING_LINE = Regex("^(.*):(\\d+)$")
 
-/** 文件树里点击即在内置查看器预览的图片格式（与 sendFile 的图片判定一致）。 */
+/** Image formats that preview in the built-in viewer when tapped in the file tree (consistent with sendFile's image detection). */
 private val PREVIEWABLE_IMAGE_EXTS = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
 
-/** 文件树里点击即调系统安装器的安装包格式。 */
+/** Package formats that invoke the system installer when tapped in the file tree. */
 private val INSTALLABLE_APK_EXTS = setOf("apk", "apks", "xapk")
 
 private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
 
-/** 聊天区链接目标 → 归一化后的文件路径；判定为网址（非 `file` scheme）时返回 null。 */
+/** Chat-area link target -> normalized file path; returns null when judged to be a URL (non-`file` scheme). */
 internal fun asChatFilePath(uri: String): String? {
     val hierarchical = HIERARCHICAL_SCHEME.find(uri)?.groupValues?.get(1)?.lowercase()
     return when {
         hierarchical == "file" -> android.net.Uri.decode(uri.removePrefix("file://"))
-        hierarchical != null -> null // http/https/content 等交给系统
-        OPAQUE_URL_SCHEME.containsMatchIn(uri) -> null // mailto/tel 等
-        else -> uri // 容器绝对路径或相对工作区路径，含 `notes.md:12` 这种纯文件名
+        hierarchical != null -> null // http/https/content, etc. handed to the system
+        OPAQUE_URL_SCHEME.containsMatchIn(uri) -> null // mailto/tel, etc.
+        else -> uri // Container absolute path or workspace-relative path, including plain filenames like `notes.md:12`
     }
 }
 
-/** 拆出可选的 `:行号` 后缀；无则行号为 0。 */
+/** Split out the optional `:line` suffix; line is 0 when absent. */
 internal fun splitPathAndLine(path: String): Pair<String, Int> {
     val cleaned = path.substringBefore('#').trim()
     val m = TRAILING_LINE.find(cleaned) ?: return cleaned to 0

@@ -126,9 +126,9 @@ internal fun StatusTab(
     var showAbortMergeConfirm by remember { mutableStateOf(false) }
     var pendingDropStash by remember { mutableStateOf<String?>(null) }
     var showClearStashConfirm by remember { mutableStateOf(false) }
-    // 长按文件行弹出的操作菜单；null 表示未打开。
+    // Action menu popped up by long-pressing a file row; null means not open.
     var actionSheet by remember { mutableStateOf<FileMenu?>(null) }
-    // 回退与删除都会丢数据，先经确认弹窗再执行。
+    // Revert and delete both lose data, so they go through a confirmation dialog before executing.
     var pendingRevert by remember { mutableStateOf<RevertTarget?>(null) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
 
@@ -192,9 +192,9 @@ internal fun StatusTab(
         )
     )
 
-    // 状态页可能包含上千个文件行：外层必须是懒加载列表，否则首帧会一次性组合全部行把主线程卡死。
-    // 分组卡片外观靠逐行拼接实现（见 [FileGroupRow]），未跟踪目录的子文件展平进主列表——
-    // LazyColumn 内嵌纵向 LazyColumn 会因无限高约束直接抛异常。
+    // The status page may contain thousands of file rows: the outer container must be a lazy list, otherwise the first frame would compose all rows at once and freeze the main thread.
+    // The grouped-card appearance is achieved by stitching rows together (see [FileGroupRow]); children of untracked directories are flattened into the main list —
+    // nesting a vertical LazyColumn inside a LazyColumn throws an exception directly due to infinite-height constraints.
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = listState,
@@ -202,7 +202,7 @@ internal fun StatusTab(
     ) {
         item(key = "overview") { StatusOverview(status = s, clean = clean) }
 
-        // 主操作：提交。有已暂存改动且已配置署名才可用。
+        // Primary action: commit. Only available when there are staged changes and an identity is configured.
         val commitEnabled = !busy && (s?.staged?.isNotEmpty() == true) && hasIdentity
         item(key = "commit") {
             Column(modifier = Modifier.padding(top = Spacing.md)) {
@@ -231,7 +231,7 @@ internal fun StatusTab(
                     )
                 }
                 if (!hasIdentity) {
-                    // 禁用原因提示：用户不知道按钮为什么不可点时给出指引
+                    // Disabled-reason hint: guidance for when the user does not know why the button cannot be tapped
                     Text(
                         text = stringResource(R.string.git_commit_needs_identity),
                         style = MaterialTheme.typography.bodySmall,
@@ -243,7 +243,7 @@ internal fun StatusTab(
             }
         }
 
-        // 次级操作：暂存全部 / 储藏 / 拉取 / 推送。
+        // Secondary actions: stage all / stash / pull / push.
         item(key = "actions") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = Spacing.md),
@@ -297,7 +297,7 @@ internal fun StatusTab(
                 }
             }
         } else {
-            // 存在冲突时高亮提示并列出冲突文件
+            // When conflicts exist, highlight a hint and list the conflicting files
             if (ss.conflicted.isNotEmpty()) {
                 item(key = "conflicted-header") {
                     GroupHeaderWithAction(
@@ -401,7 +401,7 @@ internal fun StatusTab(
                 }
             }
             if (ss.untracked.isNotEmpty()) {
-                // 未跟踪项展平：目录行 + 展开后的子文件行，整组共用一张卡片（按首/中/末行取圆角）。
+                // Flattened untracked items: directory rows + expanded child file rows; the whole group shares one card (rounded corners taken by first/middle/last row).
                 val untrackedItems = buildList {
                     ss.untracked.forEach { path ->
                         if (path.endsWith("/")) {
@@ -695,7 +695,7 @@ private fun StatusOverview(status: GitStatus?, clean: Boolean) {
     }
 }
 
-/** 领先/落后远程的同步状态胶囊。 */
+/** Sync status pill for ahead/behind the remote. */
 @Composable
 private fun SyncPill(ahead: Int, behind: Int) {
     Surface(
@@ -718,7 +718,7 @@ private fun SyncPill(ahead: Int, behind: Int) {
     }
 }
 
-/** 分组小标题 + 右侧操作（已暂存组的「全部取消暂存」）。 */
+/** Group subheading + right-side action ("Unstage all" for the staged group). */
 @Composable
 private fun GroupHeaderWithAction(
     title: String,
@@ -750,9 +750,9 @@ private fun GroupHeaderWithAction(
 }
 
 /**
- * 懒加载列表中的分组行：把多行拼成一张卡片——首/末行保留圆角、中间行直角，非首行顶部补分隔线。
- * 观感与 [com.aicode.feature.settings.presentation.component.SettingsGroup] 一致，但每行是独立
- * LazyColumn item，组内上千行时也只组合可见部分。
+ * A group row in the lazy list: stitches multiple rows into one card — the first/last rows keep rounded corners, middle rows are square, and non-first rows get a divider on top.
+ * The look matches [com.aicode.feature.settings.presentation.component.SettingsGroup], but each row is an independent
+ * LazyColumn item, so even with thousands of rows in a group only the visible part is composed.
  */
 @Composable
 private fun FileGroupRow(
@@ -778,7 +778,7 @@ private fun FileGroupRow(
     }
 }
 
-/** 分组内文件行：状态徽标 + 文件名/目录 + 行尾暂存操作；点击看差异，长按开操作菜单。 */
+/** File row within a group: status badge + file name/directory + stage action at the row end; tap to view the diff, long-press to open the action menu. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileRow(
@@ -840,7 +840,7 @@ private fun FileRow(
     }
 }
 
-/** 次级操作按钮：柔和背景微卡片按钮，12dp 圆角。 */
+/** Secondary action button: a soft-background micro-card button, 12dp rounded corners. */
 @Composable
 private fun ActionButton(
     label: String,
@@ -886,8 +886,8 @@ private fun ActionButton(
 }
 
 /**
- * 未跟踪目录行（`git status` 把新目录折叠成 `dir/` 一行）：点击展开/收起其中的未跟踪文件，
- * 长按开操作菜单，行尾「+」暂存整个目录。[childCount] 为 null 表示尚未展开，此时箭头左侧不显示数量。
+ * An untracked directory row (`git status` folds a new directory into a single `dir/` line): tap to expand/collapse the untracked files within it,
+ * long-press to open the action menu, and the "+" at the row end stages the whole directory. [childCount] is null when not yet expanded, in which case no count is shown to the left of the arrow.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -948,23 +948,23 @@ private fun UntrackedDirRow(
     }
 }
 
-/** 状态页未跟踪分组的展平项：目录行，或（展开目录后的）子文件行。[indent] 控制子文件缩进。 */
+/** A flattened item of the untracked group on the status page: a directory row, or (after expanding a directory) a child file row. [indent] controls the child file indentation. */
 private sealed interface UntrackedItem {
     val path: String
     data class Dir(override val path: String) : UntrackedItem
     data class Child(override val path: String, val indent: Boolean) : UntrackedItem
 }
 
-/** 长按文件行弹出的菜单：标题路径 + 可执行的操作项。 */
+/** Menu popped up by long-pressing a file row: title path + the executable action items. */
 private data class FileMenu(val path: String, val actions: List<FileAction>)
 
 /**
- * 待确认的回退目标。[staged] 为 true 表示连已暂存内容一起还原到上次提交；
- * [deleted] 只影响文案——文件已被删时这个操作实际是把它取回而非丢改动。
+ * The revert target awaiting confirmation. [staged] true means staged content is also restored to the last commit;
+ * [deleted] only affects the copy — when the file has already been deleted, this operation actually recovers it rather than discarding changes.
  */
 private data class RevertTarget(val path: String, val staged: Boolean, val deleted: Boolean)
 
-/** 文件行可执行的操作项，用于长按弹出的操作菜单。 */
+/** Action items a file row can execute, used by the long-press action menu. */
 private sealed class FileAction(
     @param:StringRes val labelRes: Int,
     val icon: ImageVector,

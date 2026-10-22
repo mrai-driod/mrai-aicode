@@ -74,7 +74,7 @@ import compose.icons.feathericons.Eye
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.Folder
 
-/** 弹窗内统一输入框：使用全局 AppTextField 组件。 */
+/** Unified input field inside dialogs: uses the global AppTextField component. */
 @Composable
 private fun SheetOutlinedTextField(
     value: String,
@@ -102,7 +102,7 @@ private fun SheetOutlinedTextField(
     )
 }
 
-/** 弹窗顶部居中标题：与容器镜像弹窗一致的结构。 */
+/** Centered title at the top of a dialog: same structure as the container image dialogs. */
 @Composable
 private fun SheetTitle(text: String) {
     Row(
@@ -126,7 +126,7 @@ private fun SheetTitle(text: String) {
     }
 }
 
-/** 紧凑分段选择器：样式与 MCP 编辑弹窗的分段控件一致（无额外外边距）。 */
+/** Compact segmented selector: same style as the segmented control in the MCP editor dialog (no extra outer margins). */
 @Composable
 private fun CompactSegments(
     selected: Int,
@@ -167,7 +167,7 @@ private fun CompactSegments(
     }
 }
 
-/** 弹窗底部固定保存按钮：全宽 44dp + Check 图标 + 加粗文字，样式与 MCP 编辑弹窗一致。 */
+/** Fixed save button at the bottom of a dialog: full width, 44dp + Check icon + bold text, same style as the MCP editor dialog. */
 @Composable
 private fun SheetSaveButton(
     text: String,
@@ -260,7 +260,7 @@ fun AddRemoteConnectionDialog(
                 },
                 onSelect = { index ->
                     val newProtocol = if (index == 0) RemoteProtocol.SFTP else RemoteProtocol.FTP
-                    // 端口仅在「空白或等于上一协议默认值」时跟随新协议默认值，用户自定义端口切换后保留
+                    // The port only follows the new protocol's default when it is blank or equal to the previous protocol's default; a user-customized port is kept after switching
                     val oldDefaultPort = when (protocol) {
                         RemoteProtocol.SFTP -> "22"
                         RemoteProtocol.FTP -> "21"
@@ -308,7 +308,7 @@ fun AddRemoteConnectionDialog(
                     SheetOutlinedTextField(value = port, onValueChange = { port = it.filter { char -> char.isDigit() }.take(5) }, label = { Text(stringResource(R.string.remote_port)) }, modifier = Modifier.fillMaxWidth())
                     SheetOutlinedTextField(value = username, onValueChange = { username = it }, label = { Text(stringResource(R.string.common_username)) }, modifier = Modifier.fillMaxWidth())
 
-                    // 仅 SFTP 支持密钥认证；FTP 只有密码
+                    // Only SFTP supports key authentication; FTP is password-only
                     if (protocol == RemoteProtocol.SFTP) {
                         CompactSegments(
                             selected = authMethod,
@@ -404,7 +404,7 @@ fun AddRemoteConnectionDialog(
                 }
             )
 
-            // 主机密钥确认：独立弹窗，覆盖在编辑弹窗之上（首次连接/指纹变化时由测试连通性触发）
+            // Host key confirmation: a separate dialog on top of the editor dialog (triggered by the connectivity test on first connection / fingerprint change)
             pendingHostKey?.let { pending ->
                 AlertDialog(
                     onDismissRequest = onRejectHostKey,
@@ -427,7 +427,7 @@ fun AddRemoteConnectionDialog(
                         TextButton(
                             onClick = {
                                 onConfirmHostKey()
-                                // 确认后立即重测：指纹已保存，此次应直接连通
+                                // Retest immediately after confirmation: the fingerprint is saved, so this attempt should connect directly
                                 isTesting = true
                                 onTestConnection(host, port, username, currentAuth, protocol) { success, msg ->
                                     isTesting = false

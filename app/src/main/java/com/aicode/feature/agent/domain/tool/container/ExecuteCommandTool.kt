@@ -28,11 +28,11 @@ import javax.inject.Inject
 /**
  * Tool that allows the AI agent to execute commands inside the Linux container.
  *
- * 命令在当前选中工作区目录下执行，使 AI 的 shell 操作（npm install、git 等）
- * 与文件工具作用于同一目录。
+ * Commands execute in the currently selected workspace directory, so the AI's shell operations (npm install, git, etc.)
+ * act on the same directory as the file tools.
  *
- * 同时实现 [StreamingAgentTool]：优先逐行流式输出，让聊天里能实时看到命令执行过程；
- * [execute] 作为非流式兜底保留，最终聚合结果两者一致（喂回模型不变）。
+ * Also implements [StreamingAgentTool]: it prefers line-by-line streaming output, so command execution can be watched live in the chat;
+ * [execute] is kept as the non-streaming fallback, and the final aggregated result is the same in both (what is fed back to the model does not change).
  */
 class ExecuteCommandTool @Inject constructor(
     private val delegatingEngine: DelegatingCommandEngine,
@@ -41,10 +41,10 @@ class ExecuteCommandTool @Inject constructor(
     private companion object {
         const val TAG = "ExecuteCommandTool"
 
-        /** 默认超时（秒），与 [LinuxContainerEngine.DEFAULT_TIMEOUT_MS] 对齐。 */
+        /** Default timeout (seconds), aligned with [LinuxContainerEngine.DEFAULT_TIMEOUT_MS]. */
         const val DEFAULT_TIMEOUT_SECONDS = 120L
 
-        /** 超时上限（秒），与 [LinuxContainerEngine.MAX_TIMEOUT_MS] 对齐。 */
+        /** Timeout upper limit (seconds), aligned with [LinuxContainerEngine.MAX_TIMEOUT_MS]. */
         const val MAX_TIMEOUT_SECONDS = 1_800L
     }
 
@@ -80,7 +80,7 @@ class ExecuteCommandTool @Inject constructor(
         )
     )
 
-    /** 解析 env 参数为执行环境；缺省或非法值回退 AUTO（跟随用户首选项）。 */
+    /** Parses the env parameter into an execution environment; a missing or invalid value falls back to AUTO (following the user's preference). */
     private fun resolveEnv(args: Map<String, JsonElement>): DelegatingCommandEngine.TargetEnv {
         val raw = args["env"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase() ?: return DelegatingCommandEngine.TargetEnv.AUTO
         return when (raw) {
@@ -91,7 +91,7 @@ class ExecuteCommandTool @Inject constructor(
         }
     }
 
-    /** 解析 timeout（秒）参数并钳到合法范围，返回毫秒；缺省用默认值。 */
+    /** Parses the timeout parameter (seconds) and clamps it to the valid range, returning milliseconds; uses the default when missing. */
     private fun resolveTimeoutMs(args: Map<String, JsonElement>): Long {
         val seconds = args["timeout"]?.jsonPrimitive?.longOrNull ?: DEFAULT_TIMEOUT_SECONDS
         return seconds.coerceIn(1L, MAX_TIMEOUT_SECONDS) * 1000L
@@ -120,12 +120,12 @@ class ExecuteCommandTool @Inject constructor(
 
         return try {
             val env = resolveEnv(args)
-            // 所有环境都传宿主绝对路径作为工作区：容器引擎内部用 -b 把它 bind 成容器内 /root/workspace。
-            // 不能在此先 toContainerPath()——它返回字面量 ~/workspace，proot 在宿主上解析不到该路径，
-            // 导致绑定失败、容器内 /root/workspace 变成空占位（常驻终端走宿主绝对路径故正常）。
+            // All environments pass the host absolute path as the workspace: the container engine internally uses -b to bind it as /root/workspace inside the container.
+            // Do not call toContainerPath() here first -- it returns the literal ~/workspace, which proot cannot resolve on the host,
+            // causing the bind to fail and /root/workspace inside the container to become an empty placeholder (the resident terminal uses the host absolute path, so it works normally).
             val workdir = workspaceRepository.currentPath()
             val engine = delegatingEngine.engineFor(env)
-            // 显式选择环境时先做就绪检查：容器未装/未初始化时给 AI 明确原因，而不是让命令莫名失败。
+            // When an environment is explicitly selected, do a readiness check first: if the container is not installed/initialized, give the AI a clear reason instead of letting the command fail inexplicably.
             if (env != DelegatingCommandEngine.TargetEnv.AUTO) {
                 engine.notReadyHint()?.let { hint ->
                     return ToolResult.Error("Execution environment not ready (${env.name}): $hint")
@@ -134,20 +134,20 @@ class ExecuteCommandTool @Inject constructor(
             val timeoutMs = resolveTimeoutMs(args)
             FileLogger.d(TAG, "execute_command (env=${env.name}, timeout=${timeoutMs}ms): $command")
             val output = engine.runCommandSync(command, workdir, timeoutMs)
-            FileLogger.v(TAG, "execute_command 完成，输出 ${output.length} 字符")
+            FileLogger.v(TAG, "execute_command done, output ${output.length} chars")
             ToolResult.Success(JsonPrimitive(output))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FileLogger.e(TAG, "execute_command 失败: $command", e)
+            FileLogger.e(TAG, "execute_command failed: $command", e)
             ToolResult.Error("Failed to execute command: ${e.message}")
         }
     }
 
     /**
-     * 流式执行：逐行 emit [ToolStreamEvent.Progress]，命令结束 emit [ToolStreamEvent.Completed]，
-     * 其最终结果与 [execute] 等价（同样经 [BoundedOutput] 限幅：超大输出仅保留开头+结尾），
-     * 保证喂回模型的内容一致且不会撑爆上下文。
+     * Streaming execution: emits [ToolStreamEvent.Progress] line by line, and emits [ToolStreamEvent.Completed] when the command ends;
+     * its final result is equivalent to [execute] (also capped by [BoundedOutput]: oversized output keeps only the beginning + end),
+     * guaranteeing that what is fed back to the model is consistent and will not blow up the context.
      */
     override fun executeStream(
         args: Map<String, JsonElement>,
@@ -159,11 +159,11 @@ class ExecuteCommandTool @Inject constructor(
             return@flow
         }
 
-        // 限幅累积：喂回模型的最终结果只保留开头+结尾，避免超大输出撑爆上下文。
+        // Capped accumulation: the final result fed back to the model keeps only the beginning + end, avoiding oversized output blowing up the context.
         val accumulated = BoundedOutput()
         try {
             val env = resolveEnv(args)
-            // 同 execute：所有环境传宿主绝对路径，容器引擎内部 -b 映射为 /root/workspace。
+            // Same as execute: all environments pass the host absolute path; the container engine internally maps it with -b to /root/workspace.
             val workdir = workspaceRepository.currentPath()
             val engine = delegatingEngine.engineFor(env)
             if (env != DelegatingCommandEngine.TargetEnv.AUTO) {
@@ -173,7 +173,7 @@ class ExecuteCommandTool @Inject constructor(
                 }
             }
             val timeoutMs = resolveTimeoutMs(args)
-            FileLogger.d(TAG, "execute_command(流式, env=${env.name}, timeout=${timeoutMs}ms): $command")
+            FileLogger.d(TAG, "execute_command (streaming, env=${env.name}, timeout=${timeoutMs}ms): $command")
             engine.runCommandStream(command, workdir, timeoutMs).collect { event ->
                 when (event) {
                     is CommandEvent.Line -> {
@@ -181,17 +181,17 @@ class ExecuteCommandTool @Inject constructor(
                         accumulated.append("\n")
                         emit(ToolStreamEvent.Progress(event.text))
                     }
-                    is CommandEvent.Exit -> { /* 结束在流完成后统一聚合 */ }
+                    is CommandEvent.Exit -> { /* Aggregation happens centrally once the stream completes */ }
                 }
             }
-            FileLogger.v(TAG, "execute_command(流式) 完成，输出 ${accumulated.totalChars} 字符")
+            FileLogger.v(TAG, "execute_command (streaming) done, output ${accumulated.totalChars} chars")
             emit(ToolStreamEvent.Completed(ToolResult.Success(JsonPrimitive(accumulated.build()))))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // 兜底：底层 flow 异常终止时，已逐行 emit 给用户的 Progress 仍应作为最终结果保留，
-            // 而不是被这里抛出的空 Error 覆盖掉（否则模型只看到“执行失败”，之前展示的输出全丢）。
-            FileLogger.e(TAG, "execute_command(流式) 异常(已保留此前输出 ${accumulated.totalChars} 字符): $command", e)
+            // Fallback: when the underlying flow terminates with an error, the Progress already emitted line by line to the user should still be kept as the final result,
+            // rather than being overwritten by the empty Error thrown here (otherwise the model only sees "execution failed" and all the output shown before is lost).
+            FileLogger.e(TAG, "execute_command (streaming) error (keeping the ${accumulated.totalChars} chars of output so far): $command", e)
             val saved = accumulated.build()
             val result = if (saved.isNotEmpty()) {
                 ToolResult.Success(JsonPrimitive(saved))

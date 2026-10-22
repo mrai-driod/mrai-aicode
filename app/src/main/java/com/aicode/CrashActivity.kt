@@ -63,8 +63,8 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 全屏崩溃错误页：全局未捕获异常处理器捕获崩溃后拉起本页面，
- * 独立子进程运行，展示崩溃详情并支持一键复制反馈。
+ * Full-screen crash error page: launched by the global uncaught-exception handler after it captures a crash,
+ * runs in a separate child process, shows the crash details and supports one-tap copying for feedback.
  */
 class CrashActivity : ComponentActivity() {
 
@@ -100,7 +100,7 @@ class CrashActivity : ComponentActivity() {
                         Toast.makeText(this, R.string.crash_copied, Toast.LENGTH_SHORT).show()
                     },
                     onRestart = {
-                        // 用户主动点击重启：清除崩溃标记与计数，允许主进程尝试冷启动
+                        // The user actively taps restart: clears the crash flag and count, allowing the main process to attempt a cold start
                         AIEditorApp.resetCrashState(applicationContext)
                         startActivity(
                             Intent(this, MainActivity::class.java).apply {
@@ -130,7 +130,7 @@ class CrashActivity : ComponentActivity() {
         }
     }.getOrDefault("unknown")
 
-    /** 组装可复制的崩溃报告：页面、模式、版本、设备、时间、线程、内存、堆栈、日志位置。 */
+    /** Assembles the copyable crash report: screen, mode, version, device, time, thread, memory, stack trace, log location. */
     private fun buildReport(
         threadName: String,
         stack: String,
@@ -303,7 +303,7 @@ private fun CrashScreen(
                 .padding(bottom = Spacing.xl),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            // 顶部提示条：温和提示异常已被安全隔离
+            // Top banner: gently indicates the exception has been safely isolated
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
@@ -339,7 +339,7 @@ private fun CrashScreen(
                 }
             }
 
-            // 环境与运行状态卡片
+            // Environment and runtime state card
             CrashSectionHeader(text = stringResource(R.string.crash_section_environment))
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -387,7 +387,7 @@ private fun CrashScreen(
                 }
             }
 
-            // 异常调用栈卡片
+            // Exception stack trace card
             CrashSectionHeader(text = stringResource(R.string.crash_section_stack))
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -417,7 +417,7 @@ private fun CrashScreen(
                 }
             }
 
-            // 日志文件提示
+            // Log file hint
             Text(
                 text = stringResource(R.string.crash_log_hint, logDir),
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),

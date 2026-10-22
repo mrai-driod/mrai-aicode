@@ -8,7 +8,7 @@ import androidx.room.Query
 import com.aicode.feature.agent.data.local.entity.LlmCallRecordEntity
 import kotlinx.coroutines.flow.Flow
 
-/** 按天（本地时区）聚合的单日调用统计，供趋势图使用。day 为本地时区下的 epoch 天序号。 */
+/** Per-day call statistics aggregated by day (local time zone), for the trend chart. day is the epoch day number in the local time zone. */
 data class DayCallStats(
     val day: Long,
     val inputTokens: Long,
@@ -21,7 +21,7 @@ data class DayCallStats(
     val retryCount: Long = 0
 )
 
-/** 按渠道（provider）聚合的调用统计，供渠道排行使用。 */
+/** Call statistics aggregated by channel (provider), for the channel ranking. */
 data class ProviderCallStats(
     val providerId: String?,
     val providerName: String?,
@@ -33,14 +33,14 @@ data class ProviderCallStats(
     val retryCount: Long = 0
 )
 
-/** 按模型聚合的调用统计，供模型排行使用。 */
+/** Call statistics aggregated by model, for the model ranking. */
 data class ModelCallStats(
     val model: String?,
     val calls: Int,
     val inputTokens: Long,
     val outputTokens: Long,
     val cachedInputTokens: Long,
-    /** 写入缓存的 token 数之和（Anthropic cache_creation），按单独单价计入费用估算。 */
+    /** Sum of the tokens written to the cache (Anthropic cache_creation), counted at a separate unit price in cost estimates. */
     val cacheCreationTokens: Long,
     val avgTtfbMillis: Double?,
     val avgDurationMillis: Double?,
@@ -49,9 +49,9 @@ data class ModelCallStats(
 )
 
 /**
- * 按「渠道 + 模型」聚合的用量，专供周期总费用估算。
- * 单价由渠道（自定义元数据以「提供商ID:模型名」为键）与模型共同决定，
- * 只按模型聚合会丢掉渠道维度、算不到自定义单价。
+ * Usage aggregated by "channel + model", specifically for estimating the total cost for a period.
+ * The unit price is determined jointly by the channel (custom metadata is keyed by "provider ID:model name") and the model;
+ * aggregating by model alone would lose the channel dimension and could not account for custom unit prices.
  */
 data class ModelProviderCostStats(
     val providerId: String?,
@@ -62,7 +62,7 @@ data class ModelProviderCostStats(
     val cacheCreationTokens: Long
 )
 
-/** 当前周期的整体汇总，供概览卡片使用。 */
+/** Overall summary for the current period, for the overview card. */
 data class CallSummary(
     val calls: Int,
     val inputTokens: Long,
@@ -75,7 +75,7 @@ data class CallSummary(
     val retryCount: Long = 0
 )
 
-/** 调用明细分页记录：单次调用 + 渠道名（LEFT JOIN ai_providers 取，渠道被删除后仍显示）。 */
+/** Paged call-detail record: a single call + channel name (taken via LEFT JOIN ai_providers; still shown after the channel is deleted). */
 data class RecentCallRecord(
     @Embedded val record: LlmCallRecordEntity,
     val providerName: String?
@@ -91,8 +91,8 @@ interface LlmCallRecordDao {
     suspend fun deleteAll()
 
     /**
-     * 按天聚合（本地时区：把 createdAt 平移 [tzOffsetMillis] 后再按 86400000 取整切天）。
-     * [tzOffsetMillis] 由调用方按当前系统时区提供（TimeZone.getDefault().getOffset(now)）。
+     * Aggregates by day (local time zone: shifts createdAt by [tzOffsetMillis], then rounds down to whole days by 86400000).
+     * [tzOffsetMillis] is provided by the caller from the current system time zone (TimeZone.getDefault().getOffset(now)).
      */
     @Query(
         """
@@ -120,7 +120,7 @@ interface LlmCallRecordDao {
         model: String? = null
     ): Flow<List<DayCallStats>>
 
-    /** 按小时聚合（本地时区），「今天」周期用小时粒度展示趋势。 */
+    /** Aggregates by hour (local time zone); the "today" period shows the trend at hourly granularity. */
     @Query(
         """
         SELECT (createdAt + :tzOffsetMillis) / 3600000 AS day,
@@ -147,7 +147,7 @@ interface LlmCallRecordDao {
         model: String? = null
     ): Flow<List<DayCallStats>>
 
-    /** 按渠道聚合，LEFT JOIN ai_providers 取渠道名（渠道被删除后记录仍显示）。 */
+    /** Aggregates by channel, taking the channel name via LEFT JOIN ai_providers (records still show after the channel is deleted). */
     @Query(
         """
         SELECT r.providerId AS providerId,
@@ -173,7 +173,7 @@ interface LlmCallRecordDao {
         model: String? = null
     ): Flow<List<ProviderCallStats>>
 
-    /** 按模型聚合，按总消耗倒序。 */
+    /** Aggregates by model, in descending order of total consumption. */
     @Query(
         """
         SELECT model AS model,
@@ -200,7 +200,7 @@ interface LlmCallRecordDao {
         model: String? = null
     ): Flow<List<ModelCallStats>>
 
-    /** 按「渠道 + 模型」聚合 token 用量，供周期总费用估算（费用必须带渠道才算得到自定义单价）。 */
+    /** Aggregates token usage by "channel + model", for estimating the total cost for a period (cost needs the channel to account for custom unit prices). */
     @Query(
         """
         SELECT providerId AS providerId,
@@ -222,7 +222,7 @@ interface LlmCallRecordDao {
         model: String? = null
     ): Flow<List<ModelProviderCostStats>>
 
-    /** 周期整体汇总（无 GROUP BY，恒返回一行）。 */
+    /** Overall summary for the period (no GROUP BY, always returns one row). */
     @Query(
         """
         SELECT COUNT(*) AS calls,
@@ -246,7 +246,7 @@ interface LlmCallRecordDao {
         model: String? = null
     ): Flow<CallSummary>
 
-    /** 当前周期调用总数，供分页显示总页数。 */
+    /** Total number of calls in the current period, for showing the total page count in pagination. */
     @Query(
         """
         SELECT COUNT(*) FROM llm_call_records
@@ -261,7 +261,7 @@ interface LlmCallRecordDao {
         model: String? = null
     ): Flow<Int>
 
-    /** 调用明细分页（倒序，[offset] 起取 [limit] 条），LEFT JOIN 渠道名。 */
+    /** Paged call details (descending, taking [limit] rows starting at [offset]), with the channel name via LEFT JOIN. */
     @Query(
         """
         SELECT r.*, p.name AS providerName

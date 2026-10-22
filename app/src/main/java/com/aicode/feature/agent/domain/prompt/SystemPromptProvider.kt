@@ -22,15 +22,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 按模块组装系统提示词：稳定基线放最前（享受 KV Cache），仅日期为低频变化。
- * 多数 Source 维护内容缓存，避免重复读取与格式化；静态基线片段除外，每次读盘以保证编辑即时生效。
+ * Assembles the system prompt by module: the stable baseline goes first (to benefit from KV Cache); only the date changes infrequently.
+ * Most Sources maintain a content cache to avoid repeated reading and formatting; static baseline fragments are the exception and are read from disk every time so edits take effect immediately.
  *
- * 片段分两类：
- * - 静态基线：`prompts/` 顶层 `<NN>-<名称>.md`，可被 `prompts.custom/` 按数字身份覆盖或新增；
- * - 按需叶子：`prompts/agent/` 下的无数字片段（模式提醒、子代理基线、压缩/标题提示词），按精确同名覆盖。
+ * Fragments come in two kinds:
+ * - Static baseline: top-level `<NN>-<name>.md` under `prompts/`, which `prompts.custom/` can override or add by numeric identity;
+ * - On-demand leaves: unnumbered fragments under `prompts/agent/` (mode reminders, sub-agent baseline, compaction/title prompts), overridden by exact same name.
  *
- * `prompts.custom/` 存在 [PromptFragmentResolver.DISABLE_BUILTIN_FILE] 时，主代理提示词只由自定义数字片段组成，
- * 不再注入任何内置来源；此时用 `{{AICODE_*}}` 变量按需取回动态内容。
+ * When [PromptFragmentResolver.DISABLE_BUILTIN_FILE] exists in `prompts.custom/`, the main agent prompt consists only of custom numbered fragments,
+ * and no built-in source is injected; dynamic content is then retrieved on demand via `{{AICODE_*}}` variables.
  */
 @Singleton
 class SystemPromptProvider @Inject constructor(
@@ -42,33 +42,33 @@ class SystemPromptProvider @Inject constructor(
     private val agentDefinitionRepository: AgentDefinitionRepository,
     private val executionModeHolder: ExecutionModeHolder
 ) {
-    // 抽象独立的 Source
+    // Abstract, independent Source
     interface PromptSource {
         fun build(ctx: AgentContext): String?
     }
 
     private inner class StaticRuleSource : PromptSource {
-        // 每次都重新读盘：未编辑时字符串一致，KV Cache 照常命中；编辑后立即生效，无需重启。
-        // 技能/记忆等运行期内容由末尾的 99-runtime-context.md 片段用 {{AICODE_*}} 变量承载。
+        // Re-reads from disk every time: when unedited the string is identical and the KV Cache still hits; after an edit it takes effect immediately, with no restart.
+        // Runtime content such as skills/memory is carried by the trailing 99-runtime-context.md fragment via {{AICODE_*}} variables.
         override fun build(ctx: AgentContext): String = promptFragmentCatalog.renderStatic(ctx.projectRoot)
     }
 
     private inner class ActiveSkillsSource : PromptSource {
-        // 清单被预算降级时只记一次日志：build() 每轮 LLM 调用都会走到，逐次打会刷屏。
+        // Log only once when the list is budget-degraded: build() runs on every LLM call, so logging each time would flood the log.
         @Volatile private var degradationLogged = false
 
-        // 会话级缓存：同一 (sessionId, projectRoot) 内只扫一次磁盘，保持 system prompt 稳定以命中 KV 缓存；
-        // 新开会话 / 切换工作区 / 重启 App 时缓存自然失效重建。扫描失败返回空列表且不缓存，下轮重试。
+        // Session-level cache: within the same (sessionId, projectRoot), scan the disk only once, keeping the system prompt stable to hit the KV cache;
+        // the cache naturally expires and rebuilds on a new session / workspace switch / app restart. A failed scan returns an empty list and is not cached, so the next round retries.
         private val cachedListsByKey = ConcurrentHashMap<SourceCacheKey, List<Skill>>()
 
-        /** 启用技能列表快照：系统提示清单与每轮相关技能提醒共用，避免重复扫盘。 */
+        /** Snapshot of the enabled-skills list: shared by the system-prompt list and the per-turn relevant-skill reminders, avoiding repeated disk scans. */
         fun skills(ctx: AgentContext): List<Skill> {
             val key = SourceCacheKey(ctx.sessionId, ctx.projectRoot)
             cachedListsByKey[key]?.let { return it }
             val skills = try {
                 skillRepository.listSkills()
             } catch (e: Exception) {
-                FileLogger.w(TAG, "扫描技能失败: ${e.message}", e)
+                FileLogger.w(TAG, "Failed to scan skills: ${e.message}", e)
                 return emptyList()
             }
             cachedListsByKey[key] = skills
@@ -91,19 +91,19 @@ class SystemPromptProvider @Inject constructor(
 
         private fun logDegradationOnce(skills: List<Skill>, formatted: String) {
             if (degradationLogged) return
-            // 行数没少（每个技能都带描述列出来了）说明没触发降级，不打扰日志。
+            // If the line count did not drop (every skill is listed with a description), no degradation was triggered; do not disturb the log.
             if (formatted.lines().size >= skills.size) return
             degradationLogged = true
             val fullChars = skills.sumOf { it.name.length + it.description.length + 4 }
             FileLogger.i(
                 TAG,
-                "技能清单受预算降级: ${skills.size} 个技能，完整清单约 $fullChars 字符，" +
-                    "实际注入 ${formatted.length} 字符（预算 ${SkillListFormatter.DEFAULT_CHAR_BUDGET}）"
+                "Skill list budget-degraded: ${skills.size} skills, the full list is about $fullChars characters, " +
+                    "actually injecting ${formatted.length} characters (budget ${SkillListFormatter.DEFAULT_CHAR_BUDGET})"
             )
         }
     }
 
-    /** 子代理专用精简基线：只保留工具用法、路径约定与安全边界，不含模式切换、结尾总结等主代理专属规则。 */
+    /** Streamlined baseline for sub-agents only: keeps only tool usage, path conventions and safety boundaries, without main-agent-only rules such as mode switching and closing summaries. */
     private inner class SubAgentBaseSource : PromptSource {
         @Volatile private var cached: String? = null
 
@@ -115,8 +115,8 @@ class SystemPromptProvider @Inject constructor(
     }
 
     /**
-     * 可用子代理清单（仅注入主代理）：让 AI 知道有哪些自定义 agent 可派发。
-     * 会话级缓存，避免每轮扫盘导致 system prompt 抖动打断 KV 缓存。
+     * List of available sub-agents (injected into the main agent only): lets the AI know which custom agents it can dispatch.
+     * Session-level cache, avoiding per-turn disk scans that would jitter the system prompt and break the KV cache.
      */
     private inner class SubAgentListSource : PromptSource {
         private val cachedByKey = ConcurrentHashMap<SourceCacheKey, String>()
@@ -128,7 +128,7 @@ class SystemPromptProvider @Inject constructor(
             val entries = try {
                 agentDefinitionRepository.listEnabled()
             } catch (e: Exception) {
-                FileLogger.w(TAG, "扫描子代理定义失败: ${e.message}", e)
+                FileLogger.w(TAG, "Failed to scan sub-agent definitions: ${e.message}", e)
                 return null
             }
             if (entries.isEmpty()) {
@@ -166,7 +166,7 @@ class SystemPromptProvider @Inject constructor(
             }
             
             val currentMod = file.first.lastModified()
-            // 如果文件未修改且路径一致，直接返回快照基线，避免重复读取与格式化
+            // If the file is unmodified and the path matches, return the snapshot baseline directly, avoiding repeated reading and formatting
             if (ctx.projectRoot == lastProjectRoot && currentMod == lastModified && cached != null) {
                 return cached
             }
@@ -200,12 +200,12 @@ class SystemPromptProvider @Inject constructor(
             }
     }
 
-    /** 记忆清单拆分为全局/项目两组纯列表，供 `{{AICODE_MEMORY_GLOBAL}}` / `{{AICODE_MEMORY_PROJECT}}` 变量使用。 */
+    /** The memory list is split into two plain lists, global/project, for use by the `{{AICODE_MEMORY_GLOBAL}}` / `{{AICODE_MEMORY_PROJECT}}` variables. */
     private data class MemoryLists(val global: String?, val project: String?)
 
     private inner class MemoryListSource {
-        // 会话级缓存：同一 (sessionId, projectRoot) 内只读一次盘，保持 system prompt 稳定以命中 KV 缓存；
-        // 新开会话 / 切换工作区 / 重启 App 时缓存自然失效重建。空组用 null 字段表示。
+        // Session-level cache: within the same (sessionId, projectRoot), read the disk only once, keeping the system prompt stable to hit the KV cache;
+        // The cache naturally expires and rebuilds on a new session / workspace switch / app restart. An empty group is represented by a null field.
         private val cachedByKey = ConcurrentHashMap<SourceCacheKey, MemoryLists>()
 
         fun build(ctx: AgentContext): MemoryLists {
@@ -231,7 +231,7 @@ class SystemPromptProvider @Inject constructor(
         }
     }
 
-    /** 会话级缓存 key：同一会话同一工作区共享一份快照，避免每轮重扫磁盘导致 system prompt 变化。 */
+    /** Session-level cache key: the same session in the same workspace shares one snapshot, avoiding per-turn disk rescans that would change the system prompt. */
     private data class SourceCacheKey(val sessionId: String?, val projectRoot: String)
 
     private val staticRuleSource = StaticRuleSource()
@@ -247,7 +247,7 @@ class SystemPromptProvider @Inject constructor(
     private val customDir: File
         get() = File(containerInstaller.aicodeDir, "prompts.custom")
 
-    /** 自定义目录顶层数字片段（数字身份 → 文件），进程内只扫一次（重启 App 才刷新）。 */
+    /** Top-level numbered fragments of the custom directory (numeric identity -> file), scanned only once per process (refreshed only on app restart). */
     private val customFragmentsByNumber: Map<Int, File> by lazy {
         PromptFragmentResolver.numberedFragments(customDir).toMap()
     }
@@ -259,7 +259,7 @@ class SystemPromptProvider @Inject constructor(
             return buildCustomOnly(agentContext)
         }
 
-        // 1. 获取各个 Source 的基线快照。
+        // 1. Get the baseline snapshot of each Source.
         val rawStatic = staticRuleSource.build(agentContext)
         val skillsContent = activeSkillsSource.build(agentContext)
         val subAgentsContent = subAgentListSource.build(agentContext)
@@ -268,7 +268,7 @@ class SystemPromptProvider @Inject constructor(
         val workspaceContent = workspaceSource.build(agentContext)
         val environmentContent = environmentSource.build(agentContext)
 
-        // 2. 变量就地展开：`{{AICODE_*}}` 替换为纯数据；未写变量的片段原样保留。
+        // 2. Expand variables in place: `{{AICODE_*}}` is replaced with plain data; fragments that do not use a variable are left as-is.
         val staticContent = renderVariables(
             rawStatic,
             skillsContent,
@@ -281,18 +281,18 @@ class SystemPromptProvider @Inject constructor(
             currentDate()
         )
 
-        // 4. 压缩空清单展开留下的多余空行；稳定基线在前、动态内容集中在末尾片段，均利于 KV Cache。
+        // 4. Collapse the extra blank lines left by empty-list expansion; the stable baseline first and dynamic content concentrated in the trailing fragments both favour the KV Cache.
         return collapseBlankLines(staticContent)
     }
 
     /**
-     * 每轮「相关技能」提醒（对标 Claude Code 的 "Skills relevant to your task:"）。
+     * Per-turn "relevant skills" reminder (mirroring Claude Code's "Skills relevant to your task:").
      *
-     * 系统提示里的技能清单按会话只注入一次，模型跑几轮工具后就淡忘了；在本轮请求发出前，
-     * 按用户最新输入把最相关的几个技能连描述再推到他眼前，是提高 `loadSkill` 调用率的关键一招。
-     * 命中时返回一小段文本，由调用方追加到本轮最新 user 消息末尾——不落库、不改系统提示，
-     * 系统提示与历史消息逐字节不变，provider 前缀缓存照常命中（KV Cache 友好）。
-     * 未命中 / 无技能返回 null。
+     * The skills list in the system prompt is injected only once per session, and the model forgets it after a few tool rounds; before this turn's request is sent,
+     * pushing the few most relevant skills, with descriptions, back in front of it based on the user's latest input is a key move for raising the `loadSkill` call rate.
+     * On a hit it returns a short piece of text, which the caller appends to the end of this turn's latest user message -- not persisted, not changing the system prompt,
+     * so the system prompt and history messages stay byte-for-byte unchanged and the provider prefix cache still hits (KV Cache friendly).
+     * Returns null on no hit / no skills.
      */
     fun buildSkillHint(ctx: AgentContext, latestUserText: String): String? {
         if (latestUserText.isBlank()) return null
@@ -302,15 +302,15 @@ class SystemPromptProvider @Inject constructor(
     }
 
     /**
-     * [PromptFragmentResolver.DISABLE_BUILTIN_FILE] 生效时：只输出 `prompts.custom/` 顶层的数字片段，
-     * 不注入任何内置来源；动态内容仅通过 `{{AICODE_*}}` 变量按需取回。
+     * When [PromptFragmentResolver.DISABLE_BUILTIN_FILE] is in effect: outputs only the top-level numbered fragments of `prompts.custom/`,
+     * injects no built-in source; dynamic content is retrieved only on demand via `{{AICODE_*}}` variables.
      */
     private fun buildCustomOnly(ctx: AgentContext): String {
         val content = promptFragmentCatalog.renderCustomOnly(ctx.projectRoot)
         if (content.isEmpty()) {
             FileLogger.w(
                 TAG,
-                "已启用 ${PromptFragmentResolver.DISABLE_BUILTIN_FILE}，但 $customDir 下没有 <两位数字>-<名称>.md 片段，系统提示词为空"
+                "${PromptFragmentResolver.DISABLE_BUILTIN_FILE} is enabled, but there is no <two-digits>-<name>.md fragment under $customDir, so the system prompt is empty"
             )
             return ""
         }
@@ -329,8 +329,8 @@ class SystemPromptProvider @Inject constructor(
     }
 
     /**
-     * 按子代理定义组装提示词：只注入 [AgentDefinition.inject] 列出的片段，再接 agent 自己的提示词。
-     * 不注入可用子代理清单（子代理不能嵌套派发）。定义正文里的 `{{AICODE_*}}` 变量同样会展开。
+     * Assembles the prompt from a sub-agent definition: injects only the fragments listed in [AgentDefinition.inject], followed by the agent's own prompt.
+     * Does not inject the available-sub-agents list (sub-agents cannot dispatch nested sub-agents). `{{AICODE_*}}` variables in the definition body are expanded as well.
      */
     private fun buildForSubAgent(
         definition: AgentDefinition,
@@ -396,7 +396,7 @@ class SystemPromptProvider @Inject constructor(
         )
     }
 
-    /** 把片段里的 `{{AICODE_*}}` 占位符替换为真实内容；未出现的占位符保持原样，不影响 `{{INSTRUCTION}}` 等其它占位符。 */
+    /** Replaces the `{{AICODE_*}}` placeholders in a fragment with real content; placeholders that do not appear are left as-is, and other placeholders such as `{{INSTRUCTION}}` are unaffected. */
     private fun renderVariables(
         text: String,
         skills: String?,
@@ -425,17 +425,17 @@ class SystemPromptProvider @Inject constructor(
     private fun currentDate(): String =
         java.time.ZonedDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
-    /** 把连续 3 个以上换行压成 2 个：变量展开后空清单会留下额外空行。 */
+    /** Collapses 3 or more consecutive newlines into 2: empty lists leave extra blank lines after variable expansion. */
     private fun collapseBlankLines(text: String): String =
         text.trim().replace(Regex("\\n{3,}"), "\n\n")
 
     /**
-     * 按优先级解析单个提示词片段：
-     * - 名字是顶层 `<NN>-*.md`：先按数字身份在 `prompts.custom/` 顶层找覆盖（尾部名称可自由改），
-     * - 其余名字（含 `agent/` 子目录）：按精确同名在 `prompts.custom/<name>` 找覆盖；
-     * 再落到 `prompts/<name>`（本地默认副本），最后 assets（内置兜底）。
+     * Resolves a single prompt fragment by priority:
+     * - If the name is a top-level `<NN>-*.md`: first look for an override at the top level of `prompts.custom/` by numeric identity (the trailing name can be changed freely),
+     * - For other names (including the `agent/` subdirectory): look for an override in `prompts.custom/<name>` by exact same name;
+     * then fall back to `prompts/<name>` (the local default copy), and finally assets (the built-in fallback).
      *
-     * 本地副本由 [ContainerInstaller.extractPrompts] 在启动时全量释放，App 升级后随之更新。
+     * The local copy is fully extracted by [ContainerInstaller.extractPrompts] at startup and updates with app upgrades.
      */
     fun resolvePrompt(name: String): String {
         PromptFragmentResolver.parseNumber(name)
@@ -450,7 +450,7 @@ class SystemPromptProvider @Inject constructor(
         return try {
             file.bufferedReader().use { it.readText() }
         } catch (e: Exception) {
-            FileLogger.w(TAG, "读取提示词失败 ${file.name}: ${e.message}", e)
+            FileLogger.w(TAG, "Failed to read prompt ${file.name}: ${e.message}", e)
             null
         }
     }
@@ -462,12 +462,12 @@ class SystemPromptProvider @Inject constructor(
         const val SUBAGENT_BASE_FILE = "agent/subagent-base.md"
         const val SUBAGENT_CONTEXT_FILE = "agent/subagent-context.md"
         const val MAX_AGENTS_CHARS = 32_000
-        /** 会话级缓存 key 数量上限：超过后整体清空，仅防长期累积；正常会话数远小于此。 */
+        /** Cap on the number of session-level cache keys: when exceeded the whole cache is cleared, purely to guard against long-term accumulation; normal session counts are far below this. */
         const val SOURCE_CACHE_LIMIT = 32
         val LEADING_COMMENT = Regex("(?s)^\\s*<!--.*?-->\\s*")
 
-        /** 内置静态基线：数字身份 → 规范文件名，决定默认拼接顺序。 */
-        // 片段里可用的运行期变量，渲染时替换为真实内容
+        /** Built-in static baseline: numeric identity -> canonical file name, deciding the default concatenation order. */
+        // Runtime variables available in fragments, replaced with real content when rendering
         const val SKILLS_VAR = "{{AICODE_SKILLS}}"
         const val MEMORY_GLOBAL_VAR = "{{AICODE_MEMORY_GLOBAL}}"
         const val MEMORY_PROJECT_VAR = "{{AICODE_MEMORY_PROJECT}}"

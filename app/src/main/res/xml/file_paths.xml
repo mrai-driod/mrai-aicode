@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 供 sendFile 文件卡片点击打开（ACTION_VIEW + FileProvider 授权 URI）使用。
-     files-path 覆盖 filesDir/projects（workspace 根）、filesDir/aicode（~/.aicode）与 rootfs；
-     cache-path 覆盖远程模式 SFTP 下载的临时缓存与无法直接授权的文件的二次拷贝；
-     external-path 覆盖外部本地目录工作区（设备存储上的目录）。 -->
+<!-- Used when a sendFile file card is tapped to open (ACTION_VIEW + FileProvider-granted URI).
+     files-path covers filesDir/projects (workspace root), filesDir/aicode (~/.aicode) and rootfs;
+     cache-path covers the temp cache for SFTP downloads in remote mode and secondary copies of files that cannot be granted directly;
+     external-path covers external local-directory workspaces (directories on device storage). -->
 <paths>
     <files-path name="files" path="." />
     <cache-path name="cache" path="." />

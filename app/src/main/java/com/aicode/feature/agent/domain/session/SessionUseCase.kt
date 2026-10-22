@@ -19,16 +19,16 @@ class SessionUseCase @Inject constructor(
     companion object {
         private const val TAG = "SessionUseCase"
         const val TITLE_MAX = 20
-        /** 工具占位行前缀：标记「执行中、结果未回」的孤儿，UI 与回放据此识别。 */
+        /** Tool placeholder-row prefix: marks an orphan that is "running, result not yet returned"; the UI and replay identify it by this. */
         const val PENDING_TOOL_MARKER = "[running]"
-        /** 历史版本 emoji 前缀；冷启动收尾与回放仍需识别。 */
+        /** Legacy-version emoji prefix; cold-start cleanup and replay still need to recognise it. */
         const val LEGACY_PENDING_TOOL_MARKER = "\u23F3"
-        /** 历史版本停止 emoji 前缀；UI 剥离结果文本时兼容。 */
+        /** Legacy-version stopped emoji prefix; kept for compatibility when the UI strips result text. */
         const val LEGACY_STOPPED_TOOL_MARKER = "\u23F9"
-        const val INTERRUPTED_TOOL_TEXT = "执行被中断（应用已关闭）"
+        const val INTERRUPTED_TOOL_TEXT = "Execution interrupted (app was closed)"
     }
 
-    /** 冷启动收尾：上次进程被杀时若有工具正在执行，其占位行会永久显示「执行中」。 */
+    /** Cold-start cleanup: if a tool was executing when the previous process was killed, its placeholder row would show "running" forever. */
     suspend fun initColdStartCleanup() {
         runCatching {
             val n = listOf(PENDING_TOOL_MARKER, LEGACY_PENDING_TOOL_MARKER).sumOf { marker ->
@@ -38,8 +38,8 @@ class SessionUseCase @Inject constructor(
                     interruptedContent = INTERRUPTED_TOOL_TEXT
                 )
             }
-            if (n > 0) FileLogger.i(TAG, "冷启动收尾 $n 条残留「执行中」工具行为已中断")
-        }.onFailure { FileLogger.e(TAG, "回收残留执行中工具行失败", it) }
+            if (n > 0) FileLogger.i(TAG, "Cold-start cleanup: $n leftover \"running\" tool rows marked as interrupted")
+        }.onFailure { FileLogger.e(TAG, "Failed to reclaim leftover running tool rows", it) }
     }
 
     fun newSessionEntity(
@@ -51,7 +51,7 @@ class SessionUseCase @Inject constructor(
         val now = System.currentTimeMillis()
         return ChatSessionEntity(
             id = UUID.randomUUID().toString(),
-            title = "新会话",
+            title = "New Session",
             workspacePath = workspacePath,
             createdAt = now,
             updatedAt = now,
@@ -63,14 +63,14 @@ class SessionUseCase @Inject constructor(
 
     fun deriveTitle(request: String): String {
         val clean = request.trim().replace(Regex("\\s+"), " ")
-        return if (clean.length <= TITLE_MAX) clean.ifBlank { "新对话" }
+        return if (clean.length <= TITLE_MAX) clean.ifBlank { "New Conversation" }
         else clean.take(TITLE_MAX) + "…"
     }
 
-    /** 删除会话及其全部子代理会话（消息 + 会话记录一并删除）。返回被删除的会话 id 列表。 */
+    /** Deletes a session and all its sub-agent sessions (messages + session records deleted together). Returns the list of deleted session ids. */
     suspend fun deleteSession(id: String): List<String> {
         val deleted = mutableListOf(id)
-        // 递归收集子会话（v1 仅一层，循环即可）
+        // Recursively collect child sessions (v1 has only one level, so a loop suffices)
         chatSessionDao.getSubSessionsByParentOnce(id).forEach { child ->
             agentMessageDao.deleteBySession(child.id)
             chatSessionDao.delete(child.id)
@@ -81,7 +81,7 @@ class SessionUseCase @Inject constructor(
         return deleted
     }
 
-    /** 删除某工作区下的全部会话（含子代理会话）及其消息，返回删除的会话数。 */
+    /** Deletes all sessions under a workspace (including sub-agent sessions) and their messages; returns the number of sessions deleted. */
     suspend fun deleteSessionsByWorkspace(workspacePath: String): Int {
         val sessions = chatSessionDao.getAllSessionsByWorkspaceOnce(workspacePath)
         if (sessions.isEmpty()) return 0
@@ -94,12 +94,12 @@ class SessionUseCase @Inject constructor(
         return chatSessionDao.getRootSessionsByWorkspaceOnce(workspacePath).firstOrNull()
     }
 
-    /** 工作区里最近更新的根会话（忽略置顶），供启动时进入最近会话。 */
+    /** The most recently updated root session in the workspace (ignoring pinned), used to enter the most recent session at startup. */
     suspend fun getMostRecentSessionOfWorkspace(workspacePath: String): ChatSessionEntity? {
         return chatSessionDao.getLatestRootSessionByWorkspace(workspacePath)
     }
 
-    /** 回收工作区下多余的空会话（从未发送过消息），保留 [keepId]；保证列表最多一个空会话。 */
+    /** Reclaims surplus empty sessions (never sent a message) under a workspace, keeping [keepId]; ensures the list holds at most one empty session. */
     suspend fun recycleEmptySessions(workspacePath: String, keepId: String? = null): Int {
         var count = 0
         chatSessionDao.getRootSessionsByWorkspaceOnce(workspacePath).forEach { session ->
@@ -112,14 +112,14 @@ class SessionUseCase @Inject constructor(
     }
 
     /**
-     * 创建子代理会话，继承父会话的 provider/model/reasoningEffort/workspacePath。
-     * @param title 子会话标题（由 task 描述派生）
-     * @param parentId 父会话 id
-     * @param subagentType 子代理类型 id（自定义 agent 名，或默认通用子代理标识）
-     * @param providerId 覆盖 provider；null 表示继承父会话
-     * @param model 覆盖模型；null 表示继承父会话
-     * @param reasoningEffort 覆盖思考强度；null 表示继承父会话
-     * @param mode 覆盖运行模式；null 表示继承父会话
+     * Creates a sub-agent session, inheriting the parent session's provider/model/reasoningEffort/workspacePath.
+     * @param title Child session title (derived from the task description)
+     * @param parentId Parent session id
+     * @param subagentType Sub-agent type id (custom agent name, or the default general sub-agent identifier)
+     * @param providerId Overrides the provider; null means inherit from the parent session
+     * @param model Overrides the model; null means inherit from the parent session
+     * @param reasoningEffort Overrides the reasoning effort; null means inherit from the parent session
+     * @param mode Overrides the run mode; null means inherit from the parent session
      */
     fun newSubSessionEntity(
         title: String,
@@ -138,9 +138,9 @@ class SessionUseCase @Inject constructor(
             workspacePath = parent.workspacePath,
             createdAt = now,
             updatedAt = now,
-            // 默认继承父会话 mode：权限引擎按会话 mode 判定写拦截，默认 BUILD 会让 PLAN
-            // 模式下派出的子代理绕过只读限制，反过来其它模式下派出的子代理又会弹授权窗打扰用户。
-            // 自定义子代理可用定义的 mode 覆盖该默认值。
+            // By default inherits the parent session's mode: the permission engine decides write blocking by session mode, and defaulting to BUILD would let a sub-agent dispatched in PLAN
+            // mode bypass the read-only restriction, while conversely a sub-agent dispatched in another mode would pop up authorisation prompts and disturb the user.
+            // A custom sub-agent can override this default with the mode from its definition.
             mode = mode?.name ?: parent.mode,
             providerId = providerId ?: parent.providerId,
             model = model ?: parent.model,
@@ -174,7 +174,7 @@ class SessionUseCase @Inject constructor(
         val s = chatSessionDao.getById(sessionId) ?: return
         val newMode = runCatching { AgentMode.valueOf(mode) }.getOrNull() ?: return
         val currentMode = runCatching { AgentMode.valueOf(s.mode) }.getOrNull()
-        // 用户手动进入 PLAN 时同样记下进入前的模式，退出 PLAN 时恢复（与 AI 自切保持同一套语义）。
+        // When the user enters PLAN manually, likewise record the mode before entering, and restore it when leaving PLAN (same semantics as AI self-switching).
         val modeBeforePlan = when {
             newMode == AgentMode.PLAN && currentMode != AgentMode.PLAN -> currentMode?.name
             newMode == AgentMode.PLAN -> s.modeBeforePlan

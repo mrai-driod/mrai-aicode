@@ -1,11 +1,11 @@
 package com.aicode.core.db
 
 /**
- * 把 SQL 脚本按语句切分，识别注释与字面量，保证其中的分号不参与切分。
+ * Splits an SQL script into statements, recognising comments and literals so semicolons inside them do not participate in splitting.
  *
- * 旧实现直接 `split(";")`，字符串字面量里出现分号（如 `';base64,'`）会被拦腰截断，
- * 整条迁移失败。状态机覆盖：`--` 行注释、`/* */` 块注释、单引号/双引号/反引号
- * 字面量（含双写转义 `''`）、`[...]` 标识符。块注释按 SQLite 语义不支持嵌套。
+ * The old implementation used `split(";")` directly, so a semicolon inside a string literal (such as `';base64,'`) would be cut in half,
+ * failing the whole migration. The state machine covers: `--` line comments, `/* */` block comments, single-quote/double-quote/backtick
+ * literals (including doubled escapes `''`), and `[...]` identifiers. Block comments do not support nesting, per SQLite semantics.
  */
 object SqlScriptSplitter {
 
@@ -45,7 +45,7 @@ object SqlScriptSplitter {
                     i++
                     while (i < n) {
                         if (script[i] == c) {
-                            // 双写是转义（SQL 的 ''、``、""），继续留在字面量内
+                            // A doubled character is an escape (SQL '', ``, ""), so stay inside the literal
                             current.append(c)
                             i++
                             if (i < n && script[i] == c) {

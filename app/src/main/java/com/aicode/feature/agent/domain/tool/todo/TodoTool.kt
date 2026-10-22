@@ -23,10 +23,10 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * 管理 AI Agent 当前会话的任务清单（待办列表）。
+ * Manages the AI Agent's task list (todo list) for the current session.
  *
- * 工具采用快照式接口：每次传入当前完整 items 列表，工具用它替换会话里的待办清单。
- * AI 不需要查询或记忆 todo_id，也不需要区分创建、更新、删除动作。
+ * The tool uses a snapshot interface: each time the current full items list is passed in, the tool replaces the session's todo list with it.
+ * The AI does not need to query or remember todo_id, nor distinguish create, update and delete actions.
  */
 class TodoTool @Inject constructor(
     private val todoItemDao: TodoItemDao
@@ -44,13 +44,13 @@ class TodoTool @Inject constructor(
     override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.MODIFY_TODO_STATE)
 
-    /** items 数组中单个待办项的 JSON Schema */
+    /** The JSON Schema of a single todo item in the items array */
     private val todoItemSchema: Map<String, Any> = mapOf(
         "type" to "object",
         "properties" to mapOf(
             "subject" to mapOf(
                 "type" to "string",
-                "description" to "Short todo title (imperative sentence, e.g. 「Analyze project structure」)"
+                "description" to "Short todo title (imperative sentence, e.g. 'Analyze project structure')"
             ),
             "description" to mapOf(
                 "type" to "string",
@@ -89,7 +89,7 @@ class TodoTool @Inject constructor(
         return try {
             replaceTodos(args, sessionId)
         } catch (e: Exception) {
-            FileLogger.e(TAG, "todo 工具执行失败: ${e.message}", e)
+            FileLogger.e(TAG, "todo tool execution failed: ${e.message}", e)
             ToolResult.Error("Todo operation failed: ${e.message}")
         }
     }
@@ -127,7 +127,7 @@ class TodoTool @Inject constructor(
         if (entities.isNotEmpty()) {
             todoItemDao.upsertAll(entities)
         }
-        FileLogger.d(TAG, "todo replace: 同步了 ${entities.size} 项待办")
+        FileLogger.d(TAG, "todo replace: synced ${entities.size} todo items")
 
         return listTodos(sessionId)
     }

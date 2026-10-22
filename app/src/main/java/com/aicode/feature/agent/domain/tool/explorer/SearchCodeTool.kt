@@ -19,8 +19,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 
 /**
- * ripgrep 搜索工具：参数原样传给容器内的 ripgrep；支持 `| head [-n N]` 截断输出，
- * 其余管道命令一律拒绝（见 [buildSearchCommand]），容器未就绪则报错。
+ * ripgrep search tool: arguments are passed as-is to ripgrep inside the container; supports truncating output with `| head [-n N]`,
+ * all other pipe commands are rejected (see [buildSearchCommand]); if the container is not ready, it reports an error.
  */
 class SearchCodeTool @Inject constructor(
     private val commandEngine: CommandEngine,
@@ -66,7 +66,7 @@ class SearchCodeTool @Inject constructor(
                 timeoutMs = SEARCH_TIMEOUT_MS
             ) ?: return ToolResult.Error("Container is not ready, cannot run rg", "CONTAINER_NOT_READY")
 
-            // 127 = shell 找不到命令；合并 stderr 后通常也能看到 command not found，双保险
+            // 127 = the shell cannot find the command; after merging stderr you can usually also see command not found -- a double safeguard
             if (isRgMissing(result.output) || result.exitCode == 127) {
                 return ToolResult.Error("rg is not installed in the container", "RG_MISSING")
             }
@@ -85,7 +85,7 @@ class SearchCodeTool @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FileLogger.e(TAG, "search 异常", e)
+            FileLogger.e(TAG, "search error", e)
             ToolResult.Error(e.message ?: "Search failed", "SEARCH_ERROR")
         }
     }

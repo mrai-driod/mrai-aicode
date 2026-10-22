@@ -5,44 +5,44 @@ data class AIProviderConfig(
     val name: String,
     val type: ProviderType,
     val apiKey: String,
-    /** 多 Key 模式开关：开启后从 [apiKeys] 轮换取用，关闭时只用 [apiKey]。 */
+    /** Multi-key mode switch: when enabled, keys are taken in rotation from [apiKeys]; when disabled, only [apiKey] is used. */
     val multiKeyEnabled: Boolean = false,
-    /** 多 Key 模式下的候选 Key（按列表顺序优先，各条自带调度权重）。 */
+    /** Candidate keys in multi-key mode (prioritised in list order, each entry carries its own scheduling weight). */
     val apiKeys: List<ProviderKey> = emptyList(),
-    /** 多 Key 取用策略：顺序（失败才切）或轮询（新会话轮流起步）。 */
+    /** Multi-key selection strategy: sequential (switch only on failure) or round-robin (new sessions start in turn). */
     val keyRotationStrategy: KeyRotationStrategy = KeyRotationStrategy.SEQUENTIAL,
-    /** 已废弃：早期「连续失败达阈值才切」的阈值。现在命中 [keySwitchStatusCodes] 即立即切换，保留仅为兼容旧数据库列。 */
+    /** Deprecated: the early "switch only after consecutive failures reach a threshold" threshold. Now hitting [keySwitchStatusCodes] switches immediately; kept only for compatibility with the old database column. */
     val keyFailoverThreshold: Int = 2,
-    /** 被切走的 Key 冷却多少分钟后重新纳入候选；0 表示不冷却。 */
+    /** How many minutes a switched-away key cools down before it is included as a candidate again; 0 means no cooldown. */
     val keyCooldownMinutes: Int = 5,
-    /** 命中即触发多 Key 自动切换的 HTTP 状态码；留空时回退 [DEFAULT_KEY_SWITCH_STATUS_CODES]。 */
+    /** HTTP status codes that trigger automatic multi-key switching when hit; falls back to [DEFAULT_KEY_SWITCH_STATUS_CODES] when empty. */
     val keySwitchStatusCodes: List<Int> = emptyList(),
     val baseUrl: String,
     val defaultModel: String,
-    /** 该提供商已添加的可用模型列表（拉取或手动添加）。 */
+    /** List of usable models added for this provider (fetched or added manually). */
     val models: List<String> = emptyList(),
-    /** 当前选中使用的模型；为空时回退到 defaultModel。 */
+    /** The currently selected model in use; falls back to defaultModel when empty. */
     val selectedModel: String = defaultModel,
     val isEnabled: Boolean = true,
     val useFullUrl: Boolean = false,
     val useResponseApi: Boolean = false,
-    /** Anthropic 显式缓存断点（cache_control）。仅 ANTHROPIC 类型生效，默认开启。 */
+    /** Anthropic explicit cache breakpoints (cache_control). Only takes effect for the ANTHROPIC type, enabled by default. */
     val anthropicCacheBreakpoints: Boolean = true,
-    /** Chat Completion 路径发送 prompt_cache_key（shard 路由）。仅 OPENAI 类型生效，默认关闭。 */
+    /** Send prompt_cache_key on the Chat Completion path (shard routing). Only takes effect for the OPENAI type, disabled by default. */
     val openaiChatCacheKey: Boolean = false,
-    /** 自定义面板脚本路径（位于 ~/.aicode/scripts/，或绝对路径/自定义命令）。 */
+    /** Custom dashboard script path (located in ~/.aicode/scripts/, or an absolute path / custom command). */
     val dashboardScriptPath: String = "",
-    /** 自定义面板自动刷新间隔（分钟），0 表示仅进入时/手动刷新，支持 1, 3, 5, 10 等。默认 5 分钟。 */
+    /** Custom dashboard auto-refresh interval (minutes); 0 means refresh only on entry / manually; supports 1, 3, 5, 10, etc. Defaults to 5 minutes. */
     val dashboardRefreshInterval: Int = 5,
     /**
-     * 自定义请求头（Header 名 -> 值），完全覆盖该提供商所有请求的同名默认头。
-     * 值支持占位符 `{{SESSION_ID}}`（会话 id）与 `{{API_KEY}}`（本次实际取用的 Key），
-     * 发送请求前由 provider 适配器替换后写出。
+     * Custom request headers (header name -> value), fully overriding the same-named default headers on all requests for this provider.
+     * Values support the placeholders `{{SESSION_ID}}` (session id) and `{{API_KEY}}` (the key actually used for this request),
+     * which the provider adapter replaces before sending the request.
      */
     val customHeaders: Map<String, String> = emptyMap(),
-    /** 提供商列表排序序号，越小越靠前；-1 表示未分配（保存时取 max+1 排到末尾）。 */
+    /** Provider list sort order; smaller comes first; -1 means unassigned (on save, takes max+1 and goes to the end). */
     val sortOrder: Int = -1,
-    /** 单独为该提供商配置代理（关闭时跟随全局代理设置）。 */
+    /** Configure a proxy separately for this provider (when disabled, follows the global proxy settings). */
     val proxyEnabled: Boolean = false,
     val proxyType: ProxyType = ProxyType.HTTP,
     val proxyHost: String = "",
@@ -50,19 +50,19 @@ data class AIProviderConfig(
     val proxyUsername: String = "",
     val proxyPassword: String = "",
     /**
-     * 自定义面板 (DIY) 脚本参数（Key-Value）。
-     * 执行面板脚本时注入为额外环境变量 `AICODE_KEY_<KEY>`，
-     * 值支持引用提供商配置占位符，如 `{{PROVIDER_API_KEY}}`、`{{BASE_URL}}`。
+     * Custom dashboard (DIY) script parameters (key-value).
+     * Injected as extra environment variables `AICODE_KEY_<KEY>` when the dashboard script runs,
+     * values may reference provider configuration placeholders, such as `{{PROVIDER_API_KEY}}`, `{{BASE_URL}}`.
      */
     val scriptParams: Map<String, String> = emptyMap()
 ) {
-    /** 实际生效的模型：优先 selectedModel，其次 defaultModel。 */
+    /** The model actually in effect: selectedModel first, then defaultModel. */
     val effectiveModel: String
         get() = selectedModel.ifBlank { defaultModel }
 
     /**
-     * 实际可用的 Key 列表。多 Key 模式开启且列表非空时用 [apiKeys]，否则退回单 [apiKey]，
-     * 使「开关关闭」与「开着但没填」都能落到既有单 Key 行为上。
+     * The list of keys actually usable. Uses [apiKeys] when multi-key mode is enabled and the list is non-empty, otherwise falls back to the single [apiKey],
+     * so both "switch off" and "on but not filled in" land on the existing single-key behaviour.
      */
     val effectiveApiKeys: List<ProviderKey>
         get() = if (multiKeyEnabled && apiKeys.any { it.value.isNotBlank() }) {
@@ -71,43 +71,43 @@ data class AIProviderConfig(
             listOf(ProviderKey(apiKey)).filter { it.value.isNotBlank() }
         }
 
-    /** 是否已配置至少一个可用 Key。 */
+    /** Whether at least one usable key has been configured. */
     val hasUsableApiKey: Boolean get() = effectiveApiKeys.isNotEmpty()
 
-    /** 实际生效的切换状态码：留空回退默认集合。 */
+    /** The switching status codes actually in effect: falls back to the default set when empty. */
     val effectiveKeySwitchStatusCodes: Set<Int>
         get() = keySwitchStatusCodes.filter { it in 100..599 }.toSet()
             .ifEmpty { DEFAULT_KEY_SWITCH_STATUS_CODES }
 
-    /** 拉取模型列表 / 连通性测试等无会话上下文的请求用第一个可用 Key。 */
+    /** Requests with no session context, such as fetching the model list / connectivity tests, use the first usable key. */
     val firstUsableApiKey: String get() = effectiveApiKeys.firstOrNull()?.value ?: ""
 }
 
 /**
- * 多 Key 模式下的一条候选 Key：值 + 调度权重。
+ * One candidate key in multi-key mode: value + scheduling weight.
  *
- * [weight] 参与轮询调度：越大被分到的新会话越多；≤ 0 表示该 Key 暂不参与调度（保留但不选用）。
+ * [weight] participates in round-robin scheduling: the larger it is, the more new sessions it is assigned; ≤ 0 means this key does not participate in scheduling for now (kept but not selected).
  */
 data class ProviderKey(
     val value: String,
     val weight: Int = DEFAULT_KEY_WEIGHT
 )
 
-/** 调度权重默认值与上限。 */
+/** Scheduling weight default value and maximum. */
 const val DEFAULT_KEY_WEIGHT: Int = 1
 const val MAX_KEY_WEIGHT: Int = 1_000_000
 
-/** 绝不包含空白的字段（API Key / URL / 代理主机）：连中间空白一并去掉。 */
+/** Fields that must never contain whitespace (API key / URL / proxy host): strip whitespace in the middle as well. */
 private fun String.stripAllWhitespace(): String = filterNot { it.isWhitespace() }
 
-/** 允许内部空格的字段（名称 / 模型名 / UA / 路径 / 代理账号）：去换行与制表符，再 trim 首尾。 */
+/** Fields that allow internal spaces (name / model name / UA / path / proxy account): remove line breaks and tabs, then trim both ends. */
 private fun String.stripLineBreaks(): String =
     filterNot { it == '\n' || it == '\r' || it == '\t' }.trim()
 
 /**
- * 清洗手填/粘贴的提供商配置。粘贴 API Key 常带入换行或首尾空格，直接拼进 Authorization
- * 头会被 OkHttp 拒绝（Unexpected char 0x0a in Authorization value）；baseUrl / 代理主机带空白则
- * 拼出非法 URL。写入与读取两侧各清洗一次，已存的脏数据不靠迁移也能恢复可用。
+ * Sanitise a hand-typed/pasted provider configuration. A pasted API key often brings in line breaks or leading/trailing spaces; splicing it directly into the Authorization
+ * header would be rejected by OkHttp (Unexpected char 0x0a in Authorization value); a baseUrl / proxy host containing whitespace would
+ * produce an invalid URL. Sanitise once on both the write and read sides, so already-stored dirty data becomes usable again without a migration.
  */
 fun AIProviderConfig.sanitized(): AIProviderConfig = copy(
     name = name.stripLineBreaks(),
@@ -139,14 +139,14 @@ enum class ProviderType {
     OPENAI, ANTHROPIC, GEMINI
 }
 
-/** 默认触发多 Key 自动切换的 HTTP 状态码：鉴权（401）、计费/额度（402）、权限（403）、限流（429）。 */
+/** HTTP status codes that trigger automatic multi-key switching by default: authentication (401), billing/quota (402), permission (403), rate limiting (429). */
 val DEFAULT_KEY_SWITCH_STATUS_CODES: Set<Int> = setOf(401, 402, 403, 429)
 
 enum class KeyRotationStrategy {
-    /** 顺序：始终用第一个未冷却的 Key，只有连续失败达阈值才前移。 */
+    /** Sequential: always use the first key that is not cooling down; move forward only after consecutive failures reach the threshold. */
     SEQUENTIAL,
 
-    /** 轮询：新会话轮流分配起始 Key；同一会话内仍粘住同一个 Key 以保住服务端 prompt 缓存。 */
+    /** Round-robin: new sessions are assigned a starting key in turn; within the same session it still sticks to the same key to preserve the server-side prompt cache. */
     ROUND_ROBIN
 }
 

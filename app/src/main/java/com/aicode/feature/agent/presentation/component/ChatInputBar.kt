@@ -123,16 +123,16 @@ import compose.icons.feathericons.Square
 import compose.icons.feathericons.Shield
 import kotlinx.coroutines.launch
 
-/** 输入框区域蒙版高度：盖住圆角容器，滚动内容滑入时被渐变遮罩；随键盘（IME）上移。 */
+/** Input-box area mask height: covers the rounded container so scrolling content sliding in is masked by the gradient; moves up with the keyboard (IME). */
 private val INPUT_BAR_MASK_HEIGHT = 110.dp
 
-/** 输入框高度上下限：超过上限后文本在框内滚动，右上角露出「展开」按钮。与 TextField 的 heightIn 一致。 */
+/** Input-box height bounds: past the upper bound the text scrolls inside the box and an "Expand" button appears in the top-right corner. Matches the TextField's heightIn. */
 private val INPUT_FIELD_MIN_HEIGHT = 44.dp
 private val INPUT_FIELD_MAX_HEIGHT = 140.dp
 
 /**
- * M3 无标签 TextField 的默认 contentPadding（上下左右各 16dp）。
- * 文本是否超过输入框高度要先用相同约束实测一遍，反推文本可视区域得靠这个值。
+ * Default contentPadding of an M3 label-less TextField (16dp on all sides).
+ * To tell whether the text exceeds the input-box height it must first be measured with the same constraints; deriving the visible text area relies on this value.
  */
 private val INPUT_FIELD_CONTENT_PADDING = 16.dp
 
@@ -141,7 +141,7 @@ internal fun ChatInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
-    /** 回车键是否直接发送：开启后 IME 回车键变为「发送」，关闭则回车换行（默认）。 */
+    /** Whether the Enter key sends directly: when on, the IME Enter key becomes "Send"; when off, Enter inserts a newline (the default). */
     enterToSend: Boolean = false,
     onStop: () -> Unit,
     isBusy: Boolean,
@@ -176,13 +176,13 @@ internal fun ChatInputBar(
     onRefreshDashboardByButton: () -> Unit = {},
     onDashboardExpandedChange: (Boolean) -> Unit = {},
     todoItems: List<TodoItem> = emptyList(),
-    /** 玻璃背景采样层（与聊天页标题栏共用同一层）；null 时降级为普通容器。 */
+    /** Glass background sampling layer (shared with the chat page's title bar); when null, degrades to a plain container. */
     glassBackdrop: com.styropyr0.prismal.sources.PrismalGlassLayer? = null,
     glassLuminance: () -> Float = { 0.5f },
     sessionId: String = "",
     onTodoExpandedChange: (Boolean) -> Unit = {},
     forceCollapseDashboard: Boolean = false,
-    /** 消息列表正在滚动时内容区淡出到 40%，停止滚动恢复；用于长列表阅读时降低底部干扰（同 git 页 tab 栏）。 */
+    /** While the message list is scrolling, the content area fades to 40% and recovers when scrolling stops; reduces bottom distraction when reading long lists (same as the git page's tab bar). */
     isScrolling: Boolean = false,
     forceOpenModelSheet: Boolean = false,
     onSelectModelInOnboarding: (() -> Unit)? = null,
@@ -193,8 +193,8 @@ internal fun ChatInputBar(
     val canSend = hasContent
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var showFullScreenInput by remember { mutableStateOf(false) }
-    // TextField 的 String 重载在整串替换时会保留旧 selection 下标（点快捷命令补全时光标会停在中间），
-    // 这里自持 TextFieldValue：外部改值时把光标移到末尾。
+    // The String overload of TextField keeps the old selection index on a whole-string replacement (when tapping a quick-command completion the cursor would stop in the middle),
+    // so a TextFieldValue is held here: when the value is changed externally, the cursor moves to the end.
     var inputFieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
     LaunchedEffect(value) {
         if (inputFieldValue.text != value) {
@@ -208,8 +208,8 @@ internal fun ChatInputBar(
         else slashCommands.filter { "/${it.name}".startsWith(value) }
     } else emptyList()
 
-    // 文本是否已经超出输入框高度（超出后框内滚动，展开按钮才有意义）。
-    // 按换行符数硬编码阈值在长行自动折行时会判断错，这里按 TextField 的实际宽度实测文本高度。
+    // Whether the text already exceeds the input-box height (past it, the text scrolls in the box and the expand button becomes meaningful).
+    // Hardcoding a threshold by newline count misjudges when long lines wrap automatically, so here the text height is measured at the TextField's actual width.
     val textMeasurer = rememberTextMeasurer()
     val inputDensity = LocalDensity.current
     var inputFieldWidthPx by remember { mutableStateOf(0) }
@@ -232,22 +232,22 @@ internal fun ChatInputBar(
         modifier = modifier.fillMaxWidth()
     ) {
         val imeInset = rememberImeBottomInset()
-        // 滚动弱化：内容区（slash 菜单/排队面板/数据面板/输入框本体）整体淡出到 40%，蒙版渐变保持不透明。
+        // Scroll fading: the content area (slash menu / queue panel / data panel / the input box itself) fades as a whole to 40%, while the mask gradient stays opaque.
         val contentAlpha by animateFloatAsState(
             targetValue = if (isScrolling) 0.4f else 1f,
             animationSpec = tween(200),
             label = "inputbar-content-alpha"
         )
-        // 渐变终点固定在蒙版可视高度内：若跟随整个 Box（含 imeInset 被键盘拉长的部分），
-        // 键盘弹起时可见区域只占渐变前段，alpha 被摊薄到几乎透明——看起来像没有蒙版。
+        // The gradient's end point is fixed within the mask's visible height: if it followed the whole Box (including the part stretched by the keyboard's imeInset),
+        // then with the keyboard up the visible area would occupy only the gradient's first section and the alpha would be spread so thin it is almost transparent - looking as if there were no mask.
         val maskGradientEndY = with(LocalDensity.current) { INPUT_BAR_MASK_HEIGHT.toPx() }
         Box(
             modifier = Modifier.fillMaxWidth()
         ) {
-            // 半透明渐变蒙版：盖住输入框区域 + 导航栏（手势小白条）区域，滚动内容滑入时被遮罩
-            // （能看见但看不清）；高度含 IME inset 随键盘上移，渐变在 INPUT_BAR_MASK_HEIGHT 内完成，
-            // 之下为纯色。注意 IME padding 不能加在外层 Box 上——align(BottomCenter) 的子项
-            // 对齐在 padding 内部，会漏掉导航栏那条区域。
+            // Translucent gradient mask: covers the input-box area + the navigation bar (gesture pill) area, masking scrolling content as it slides in
+            // (visible but not legible); its height includes the IME inset and moves up with the keyboard, the gradient completes within INPUT_BAR_MASK_HEIGHT,
+            // and below that it is a solid colour. Note the IME padding must not be added to the outer Box - children aligned with align(BottomCenter)
+            // align inside the padding, which would miss the navigation bar strip.
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -362,8 +362,8 @@ internal fun ChatInputBar(
                 )
             }
 
-            // 工具栏与输入框合并成一个统一的玻璃 Surface（原来背景/描边就在这层）：
-            // 不再有多张彼此独立的卡片，模式 / 模型 / 附件 / 发送与文本域同属一块玻璃。
+            // The toolbar and the input box are merged into one unified glass Surface (the background/outline already lived on this layer):
+            // there are no longer several independent cards; mode / model / attachments / send and the text field all belong to one piece of glass.
             com.aicode.core.ui.GlassSurface(
                 backdrop = glassBackdrop,
                 modifier = Modifier.fillMaxWidth(),
@@ -451,7 +451,7 @@ internal fun ChatInputBar(
                         AgentModeChip(
                             mode = currentMode,
                             onClick = {
-                                // 三档循环：构建 → 计划 → 提问（对齐 Claude Code 的 Build/Plan/Ask）
+                                // Three-level cycle: Build -> Plan -> Ask (matching Claude Code's Build/Plan/Ask)
                                 val nextMode = when (currentMode) {
                                     AgentMode.BUILD -> AgentMode.PLAN
                                     AgentMode.PLAN -> AgentMode.ASK
@@ -483,8 +483,8 @@ internal fun ChatInputBar(
                             )
                         }
 
-                        // 元数据未命中时（如中转站改了模型名）退回全部档位由用户自选：
-                        // 这类模型可能强制开启推理，隐藏按钮会导致无法调档。
+                        // When no metadata matches (e.g. a relay station renamed the model), fall back to all levels for the user to choose from:
+                        // such models may force reasoning on, and hiding the button would make it impossible to change the level.
                         val availableEfforts = remember(activeProvider, modelMetadata) {
                             activeProvider?.let { provider ->
                                 modelMetadata[modelMetadataKey(provider.id, provider.effectiveModel)]?.reasoningEffortOptions
@@ -543,8 +543,8 @@ internal fun ChatInputBar(
 }
 
 /**
- * 全屏输入框：底部输入框被高度上限截断、框内滚动时，点右上角「展开」进入这里，
- * 用整屏编辑同一份草稿（内容实时回写，收起后输入框里就是最新文本）。
+ * Full-screen input box: when the bottom input box is truncated by its height cap and the text scrolls inside it, tapping "Expand" in the top-right corner enters this,
+ * editing the same draft full-screen (content is written back live, so after collapsing, the input box holds the latest text).
  */
 @Composable
 private fun FullScreenInputDialog(
@@ -556,13 +556,13 @@ private fun FullScreenInputDialog(
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
-            // 不设则 dialog window 是 WRAP_CONTENT，内容铺不满屏
+            // Without this, the dialog window is WRAP_CONTENT and the content does not fill the screen
             usePlatformDefaultWidth = false,
-            // 不设则内容被系统栏 inset 挤进安全区，底色在状态栏处断开、露出后面的聊天界面
+            // Without this, the content is squeezed into the safe area by the system-bar insets, the background colour breaks at the status bar, and the chat screen behind shows through
             decorFitsSystemWindows = false
         )
     ) {
-        // dialog 有自己的 window：系统栏图标色要单独按当前主题设置，否则浅色主题下状态栏图标压在浅底上看不见。
+        // The dialog has its own window: the system-bar icon colour must be set separately for the current theme, otherwise in a light theme the status-bar icons sit on a pale background and are invisible.
         val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
         val lightBackground = MaterialTheme.colorScheme.background.luminance() > 0.5f
         SideEffect {
@@ -576,7 +576,7 @@ private fun FullScreenInputDialog(
 
         val imeInset = rememberImeBottomInset()
         val focusRequester = remember { FocusRequester() }
-        // 打开即聚焦，键盘不停，可以接着往下写。
+        // Focuses immediately on opening, the keyboard stays up, and typing can continue.
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
         Surface(
@@ -668,7 +668,7 @@ internal fun SendButton(
     onSend: () -> Unit,
     onStop: () -> Unit
 ) {
-    // AI 工作中：输入框为空显示停止按钮；有内容显示橙色发送（消息排队发送）；空闲时按常规发送按钮
+    // While the AI is working: an empty input box shows the stop button; with content it shows orange send (the message is queued); when idle, the normal send button
     val showStop = isBusy && !hasContent
     val clickable = showStop || canSend
     val buttonColor = when {
@@ -677,7 +677,7 @@ internal fun SendButton(
         canSend -> MaterialTheme.semanticColors.success
         else -> MaterialTheme.colorScheme.surfaceVariant
     }
-    // 前景色相对按钮底色而非主题：深色主题下的亮绿底用主题 onSurface（近白）会看不清。
+    // The foreground colour is relative to the button background, not the theme: on a bright-green background in a dark theme, the theme's onSurface (near-white) would be illegible.
     val iconTint = when {
         !clickable -> MaterialTheme.colorScheme.onSurfaceVariant
         buttonColor.luminance() > 0.5f -> Color(0xFF1C1C1E)
@@ -699,7 +699,7 @@ internal fun SendButton(
             Canvas(
                 modifier = Modifier
                     .size(44.dp)
-                    // 上下文用量只靠这圈弧表达，给读屏补上百分比。
+                    // Context usage is expressed only by this ring arc, so the percentage is added for screen readers.
                     .semantics { contentDescription = usageLabel }
             ) {
                 val stroke = 3.dp.toPx()
@@ -753,10 +753,10 @@ internal fun ToolPermissionPanel(
     isScrolling: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(true) }
-    // 余额面板展开时同帧收起本面板，避免叠加
+    // Collapse this panel in the same frame when the balance panel expands, avoiding stacking
     val effectiveExpanded = expanded && !forceCollapse
 
-    // 滚动弱化：用户上下滑动列表时，悬浮授权弹窗跟随淡化为 40%，避免遮挡用户查看背后消息；停止滑动后平滑恢复
+    // Scroll fading: while the user scrolls the list up and down, the floating permission dialog fades along to 40%, avoiding blocking the user's view of the messages behind it; it smoothly recovers when scrolling stops
     val panelAlpha by animateFloatAsState(
         targetValue = if (isScrolling) 0.4f else 1f,
         animationSpec = tween(durationMillis = 200),
@@ -855,7 +855,7 @@ internal fun ToolPermissionPanel(
             ) {
                 Column {
                     Spacer(Modifier.height(Spacing.sm))
-                    // AI 命令审查器的高危提示（「自主执行」挡位审查拒绝/不确定转人工时）：醒目置顶展示
+                    // High-risk warning from the AI command reviewer (when review at the "autonomous execution" level refuses / is uncertain and escalates to a human): shown prominently at the top
                     if (!request.reviewNote.isNullOrBlank()) {
                         Surface(
                             shape = RoundedCornerShape(Radius.sm),
@@ -922,7 +922,7 @@ internal fun ToolPermissionPanel(
                     val rememberLabel = when {
                         !canRemember -> request.rememberDisabledReason ?: stringResource(R.string.chat_perm_single_use_desc)
                         request.rememberablePatterns == listOf("*") -> stringResource(R.string.chat_perm_always_tool_desc)
-                        else -> stringResource(R.string.chat_perm_always_prefix) + request.rememberablePatterns.joinToString("、")
+                        else -> stringResource(R.string.chat_perm_always_prefix) + request.rememberablePatterns.joinToString(", ")
                     }
                     Spacer(Modifier.height(Spacing.xs))
                     Text(
@@ -961,8 +961,8 @@ internal fun ToolPermissionPanel(
 
 @Composable
 internal fun StatusBanner(state: AgentUIState) {
-    // 退出动画期间 state 已不是 Error，when 会走 else 渲染空内容，横幅的淡出就变成了瞬间消失；
-    // 拿最后一次的错误文本兜住整段退场。
+    // During the exit animation the state is no longer Error, so the when would take the else branch and render empty content, turning the banner's fade-out into an instant disappearance;
+    // hold the last error text to cover the whole exit.
     val lastError = rememberLastNonNull((state as? AgentUIState.Error)?.message)
     AnimatedVisibility(
         visible = state is AgentUIState.Error,
@@ -974,8 +974,8 @@ internal fun StatusBanner(state: AgentUIState) {
 }
 
 /**
- * 失败错误气泡：风格对齐 ToolPermissionPanel / AskUserQuestionPanel（内联面板，与输入框同宽且两侧留距）。
- * 默认折叠为一行标题（请求失败），点击展开完整错误详情；右上角可一键复制。
+ * Failure error bubble: style matches ToolPermissionPanel / AskUserQuestionPanel (an inline panel, the same width as the input box with margins on both sides).
+ * Collapsed by default to a one-line title (Request failed); tap to expand the full error details; one-tap copy in the top-right corner.
  */
 @Composable
 private fun ErrorBubble(message: String) {
@@ -1060,8 +1060,8 @@ private fun ErrorBubble(message: String) {
 }
 
 /**
- * 会话模式芯片：点击在 构建 → 计划 → 提问 三档间循环（对齐 Claude Code 的 Build/Plan/Ask）。
- * 中文标签 + 模式图标；颜色区分：构建=成功绿、计划=主题蓝、提问=紫。
+ * Session mode chip: tapping cycles through the three levels Build -> Plan -> Ask (matching Claude Code's Build/Plan/Ask).
+ * Chinese label + mode icon; colour coding: Build = success green, Plan = theme blue, Ask = purple.
  */
 @Composable
 private fun AgentModeChip(
@@ -1118,8 +1118,8 @@ private fun AgentModeChip(
 }
 
 /**
- * 计划审查面板：AI 从 PLAN 模式切回 BUILD 时弹出，展示计划摘要供用户批准或继续反馈。
- * 风格与 ToolPermissionPanel / AskUserQuestionPanel 一致。
+ * Plan review panel: pops up when the AI switches back from PLAN mode to BUILD, showing the plan summary for the user to approve or give further feedback on.
+ * Style is consistent with ToolPermissionPanel / AskUserQuestionPanel.
  */
 @Composable
 internal fun PlanApprovalPanel(
@@ -1129,7 +1129,7 @@ internal fun PlanApprovalPanel(
     forceCollapse: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(true) }
-    // 余额面板展开时同帧收起本面板，避免叠加顶开输入框
+    // Collapse this panel in the same frame when the balance panel expands, avoiding stacking that pushes the input box open
     val effectiveExpanded = expanded && !forceCollapse
 
     Surface(

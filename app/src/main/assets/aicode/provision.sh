@@ -1,22 +1,22 @@
 #!/bin/sh
-# 容器环境脚本（通用）：一个脚本，两个入口。
-#   1) 首次进入终端：在 PTY 上弹出初始化菜单（自动安装 / 环境安装 / 手动安装 / 退出），用户完成
-#      后写 /.provisioned 标记，之后进入终端不再弹。
-#   2) 容器内执行命令 `aicode`（等价于 `provision.sh --env`）：直接打开「环境安装」菜单，按场景
-#      安装开发环境，可反复使用，不受初始化标记影响。
-# 两个入口共用同一套逻辑：按容器内包管理器（apk/apt-get/dnf/yum/pacman）安装运行时，并可换国内镜像源。
-# 由 App 启动时提取到 ~/.aicode/provision.sh（容器内 /root/.aicode/provision.sh，经 -b 绑定可见）；
-# 公共能力（包管理器探测/包名映射/版本探测/换源/场景）在 lib/env-common.sh，与本脚本一并提取。
-# 修改包清单/安装逻辑/镜像源后，需同步在 LinuxContainerEngine.PROVISION_VERSION 上 +1 触发存量设备重跑。
-# 注意：apk 源分支 v3.21 需与 assets 内 alpine-rootfs 版本（ContainerInstaller.INSTALL_VERSION）保持一致。
+# Container environment script (generic): one script, two entry points.
+#   1) First terminal entry: shows a setup menu on the PTY (Auto install / Environment setup / Manual install / Exit); when the user finishes,
+#      it writes the /.provisioned marker, and the menu no longer appears on later entries.
+#   2) Running the `aicode` command inside the container (equivalent to `provision.sh --env`): opens the Environment Setup menu directly,
+#      to install a development environment by scenario; reusable any time, unaffected by the setup marker.
+# Both entry points share the same logic: install runtimes via the container's package manager (apk/apt-get/dnf/yum/pacman), with optional China mirror sources.
+# Extracted by the App at startup to ~/.aicode/provision.sh (inside the container: /root/.aicode/provision.sh, visible via a -b bind mount);
+# shared capabilities (package-manager detection / package-name mapping / version detection / mirror switching / scenarios) live in lib/env-common.sh, extracted together with this script.
+# After changing the package list / install logic / mirrors, also bump LinuxContainerEngine.PROVISION_VERSION by 1 so existing devices re-run provisioning.
+# Note: the apk source branch v3.21 must stay in sync with the alpine-rootfs version in assets (ContainerInstaller.INSTALL_VERSION).
 
-PROVISION_VERSION="provision-script-v9"
+PROVISION_VERSION="provision-script-v10"
 PROVISION_SKIPPED="provision-script-skipped"
 MARKER="/.provisioned"
 
-# ── 载入公共库（包名映射/换源/场景等）。按脚本自身所在目录定位：生产脚本在 /root/.aicode/provision.sh、
-# 库在 /root/.aicode/lib/；工作区草稿副本（aicode-env/）结构相同，故同一份脚本两处都能跑。
-# 缺失时不阻塞：提示重启 App 重新提取后重进终端。──
+# ── Load the shared library (package-name mapping / mirror switching / scenarios, etc.). Located relative to this script's own directory: in production the script is at /root/.aicode/provision.sh and
+# the library in /root/.aicode/lib/; the workspace draft copy (aicode-env/) has the same layout, so the same script runs in both places.
+# If the library is missing, do not block: tell the user to restart the App so it re-extracts, then re-enter the terminal. ──
 SELF_DIR=$(dirname "$0")
 [ "${SELF_DIR#/}" = "$SELF_DIR" ] && SELF_DIR="$(pwd)/$SELF_DIR"
 AICODE_LIB_DIR="$SELF_DIR/lib"
@@ -26,32 +26,32 @@ if [ ! -f "$LIB_FILE" ]; then
     LIB_FILE="$AICODE_LIB_DIR/env-common.sh"
 fi
 if [ ! -f "$LIB_FILE" ]; then
-    echo "环境工具未就绪，请重启 App 后重新进入终端" >&2
+    echo "Environment tools are not ready yet. Please restart the App and re-enter the terminal." >&2
     exit 0
 fi
 . "$LIB_FILE"
 
 detect_pmgr
 
-# ── 已安装运行时一览（环境安装菜单用）──
+# ── List of installed runtimes (used by the environment setup menu) ──
 list_installed() {
     echo ""
-    echo "已安装运行时："
+    echo "Installed runtimes:"
     for c in "node:Node.js" "python3:Python 3" "java:Java" "go:Go" "rustc:Rust" "php:PHP" "git:Git" "rg:ripgrep"; do
         cmd=${c%%:*}
         name=${c#*:}
         if command -v "$cmd" >/dev/null 2>&1; then
             ver=$("$cmd" --version 2>&1 | head -1)
-            echo "  · $name：$ver"
+            echo "  · $name: $ver"
         else
-            echo "  · $name：（未安装）"
+            echo "  · $name: (not installed)"
         fi
     done
-    [ -x "$HOME/android/sdk/cmdline-tools/latest/bin/sdkmanager" ] && echo "  · Android SDK：$HOME/android/sdk"
-    [ -x "$HOME/.local/flutter-$FLUTTER_VERSION/bin/flutter" ] && echo "  · Flutter SDK：$HOME/.local/flutter-$FLUTTER_VERSION"
+    [ -x "$HOME/android/sdk/cmdline-tools/latest/bin/sdkmanager" ] && echo "  · Android SDK: $HOME/android/sdk"
+    [ -x "$HOME/.local/flutter-$FLUTTER_VERSION/bin/flutter" ] && echo "  · Flutter SDK: $HOME/.local/flutter-$FLUTTER_VERSION"
 }
 
-# ── 环境安装菜单（场景化）：初始化菜单的「环境安装」与 `aicode` 命令共用 ──
+# ── Environment setup menu (scenario-based): shared by the setup menu's Environment Setup entry and the `aicode` command ──
 env_install_menu() {
     TOTAL=$(echo $SCENARIO_IDS | wc -w)
     CUSTOM_IDX=$((TOTAL + 1))
@@ -60,192 +60,192 @@ env_install_menu() {
     EXIT_IDX=$((TOTAL + 4))
     while :; do
         echo ""
-        echo "${C_CYAN}环境安装${C_RESET} — 选择要安装的开发环境"
+        echo "${C_CYAN}Environment Setup${C_RESET} — choose a development environment to install"
         echo "${C_YELLOW}──────────────────────────────${C_RESET}"
         i=1
         for id in $SCENARIO_IDS; do
             printf "  ${C_GREEN}%d.${C_RESET} %s\n" "$i" "$(scenario_name "$id")"
             i=$((i + 1))
         done
-        printf "  ${C_GREEN}%d.${C_RESET} 自定义安装（逐项勾选）\n" "$CUSTOM_IDX"
-        printf "  ${C_GREEN}%d.${C_RESET} 仅换软件源\n" "$MIRROR_IDX"
-        printf "  ${C_GREEN}%d.${C_RESET} 查看已安装运行时\n" "$LIST_IDX"
-        printf "  ${C_DIM}%d. 退出${C_RESET}\n" "$EXIT_IDX"
+        printf "  ${C_GREEN}%d.${C_RESET} Custom install (pick items one by one)\n" "$CUSTOM_IDX"
+        printf "  ${C_GREEN}%d.${C_RESET} Switch package mirror only\n" "$MIRROR_IDX"
+        printf "  ${C_GREEN}%d.${C_RESET} View installed runtimes\n" "$LIST_IDX"
+        printf "  ${C_DIM}%d. Exit${C_RESET}\n" "$EXIT_IDX"
         echo "${C_YELLOW}──────────────────────────────${C_RESET}"
-        printf "请选择: "
+        printf "Select: "
         if ! read choice; then
             echo ""
             break
         fi
         case "$choice" in
             ""|*[!0-9]*)
-                echo "${C_RED}无效输入，请重新选择。${C_RESET}"
+                echo "${C_RED}Invalid input, please select again.${C_RESET}"
                 continue
                 ;;
         esac
         if [ "$choice" -ge 1 ] && [ "$choice" -le "$TOTAL" ]; then
             id=$(echo $SCENARIO_IDS | awk -v i="$choice" '{print $i}')
-            plog "环境安装：场景 $id"
+            plog "Environment setup: scenario $id"
             install_scenario "$id"
             rc=$?
             case "$rc" in
-                0) echo ""; echo "${C_GREEN}安装完成。${C_RESET}" ;;
-                2) echo ""; echo "已取消，返回菜单。" ;;
-                *) echo ""; echo "${C_RED}安装失败，可重试或换一个镜像源。${C_RESET}" ;;
+                0) echo ""; echo "${C_GREEN}Installation complete.${C_RESET}" ;;
+                2) echo ""; echo "Cancelled, back to the menu." ;;
+                *) echo ""; echo "${C_RED}Installation failed. You can retry or switch to another mirror.${C_RESET}" ;;
             esac
         elif [ "$choice" -eq "$CUSTOM_IDX" ]; then
-            plog "环境安装：自定义安装"
+            plog "Environment setup: custom install"
             install_custom
             rc=$?
             case "$rc" in
-                0) echo ""; echo "${C_GREEN}安装完成。${C_RESET}" ;;
-                2) echo ""; echo "已取消，返回菜单。" ;;
-                *) echo ""; echo "${C_RED}安装失败，可重试或换一个镜像源。${C_RESET}" ;;
+                0) echo ""; echo "${C_GREEN}Installation complete.${C_RESET}" ;;
+                2) echo ""; echo "Cancelled, back to the menu." ;;
+                *) echo ""; echo "${C_RED}Installation failed. You can retry or switch to another mirror.${C_RESET}" ;;
             esac
         elif [ "$choice" -eq "$MIRROR_IDX" ]; then
-            plog "环境安装：仅换源"
+            plog "Environment setup: mirror only"
             ask_mirror
-            echo "软件源已更新。"
+            echo "Package sources updated."
         elif [ "$choice" -eq "$LIST_IDX" ]; then
             list_installed
         elif [ "$choice" -eq "$EXIT_IDX" ]; then
-            plog "环境安装：退出"
+            plog "Environment setup: exit"
             break
         else
-            echo "${C_RED}无效输入，请重新选择。${C_RESET}"
+            echo "${C_RED}Invalid input, please select again.${C_RESET}"
         fi
     done
 }
 
-# ══ 入口 2：`aicode`（provision.sh --env）→ 直接打开环境安装菜单，不受初始化标记影响 ══
+# ══ Entry point 2: `aicode` (provision.sh --env) → opens the environment setup menu directly, unaffected by the setup marker ══
 if [ "$1" = "--env" ]; then
-    plog "aicode 打开环境安装菜单：PMGR=${PMGR:-未识别}"
+    plog "aicode opening the environment setup menu: PMGR=${PMGR:-unknown}"
     if [ -z "$PMGR" ]; then
-        echo "${C_RED}未识别的包管理器（apk/apt-get/dnf/yum/pacman），无法安装依赖。${C_RESET}"
+        echo "${C_RED}Unrecognized package manager (apk/apt-get/dnf/yum/pacman); cannot install dependencies.${C_RESET}"
         exit 1
     fi
     env_install_menu
     exit 0
 fi
 
-# ══ 入口 1：首次进入终端的初始化流程 ══
-plog "provision.sh 启动：version=$PROVISION_VERSION HOME=$HOME uid=$(id -u 2>/dev/null) PATH=$PATH"
+# ══ Entry point 1: first-time terminal setup flow ══
+plog "provision.sh started: version=$PROVISION_VERSION HOME=$HOME uid=$(id -u 2>/dev/null) PATH=$PATH"
 
-# ── 宿主 supplementary gid 修复：proot 会把宿主进程的补充组（Android AID 3003 inet、
-# 9997 everybody、App 自身 uid 派生 gid 等）透传进容器，/etc/group 查不到名字会让
-# groups 等命令报警（cannot find name for group ID xxx）。幂等补行：gid_ 命名空间先清再补
-# 防历史残留；位于 MARKER 检查之前，每次进终端都执行（已配置设备同样生效），gid 变化自动跟上。
-# 全部静默失败，不阻塞进入 shell。
+# ── Host supplementary gid fix: proot passes the host process's supplementary groups (Android AID 3003 inet,
+# 9997 everybody, a gid derived from the App's own uid, etc.) into the container; when /etc/group has no name for a gid,
+# commands like groups complain (cannot find name for group ID xxx). Idempotent fix-up: clear the gid_ namespace first, then re-add,
+# to avoid stale leftovers; this runs before the MARKER check on every terminal entry (already-configured devices included), and follows gid changes automatically.
+# Everything fails silently and never blocks entering the shell.
 sed -i '/^gid_/d' /etc/group 2>/dev/null
 for g in $(id -G 2>/dev/null); do
     grep -q ":x:$g:" /etc/group 2>/dev/null || echo "gid_$g:x:$g:" >> /etc/group 2>/dev/null
 done
 
-# 已按当前版本完成或用户选择手动安装（跳过）则直接退出
+# Exit immediately if setup already completed for the current version, or the user chose manual install (skipped)
 if [ -f "$MARKER" ]; then
     state=$(cat "$MARKER" 2>/dev/null)
-    if [ "$state" = "$PROVISION_VERSION" ]; then plog "标记已是 $PROVISION_VERSION，跳过菜单"; exit 0; fi
-    if [ "$state" = "$PROVISION_SKIPPED" ]; then plog "用户曾选择手动安装，跳过菜单"; exit 0; fi
+    if [ "$state" = "$PROVISION_VERSION" ]; then plog "Marker is already $PROVISION_VERSION, skipping the menu"; exit 0; fi
+    if [ "$state" = "$PROVISION_SKIPPED" ]; then plog "User previously chose manual install, skipping the menu"; exit 0; fi
 fi
 
-plog "显示初始化菜单：PMGR=${PMGR:-未识别}"
+plog "Showing setup menu: PMGR=${PMGR:-unknown}"
 
 while :; do
     echo ""
     cat <<EOF
-${C_CYAN}    _    ___ ____ ___  ____  _____ ${C_RESET}
-${C_CYAN}   / \  |_ _/ ___/ _ \|  _ \| ____|${C_RESET}
-${C_CYAN}  / _ \  | | |  | | | | | | |  _|  ${C_RESET}
-${C_CYAN} / ___ \ | | |__| |_| | |_| | |___ ${C_RESET}
-${C_CYAN}/_/   \_\___\____\___/|____/|_____|${C_RESET}
+${C_CYAN} __  __ ____      _    ___      _    ___ ____ ___  ____  _____ ${C_RESET}
+${C_CYAN}|  \/  |  _ \    / \  |_ _|    / \  |_ _/ ___/ _ \|  _ \| ____|${C_RESET}
+${C_CYAN}| |\/| | |_) |  / _ \  | |    / _ \  | | |  | | | | | | |  _|  ${C_RESET}
+${C_CYAN}| |  | |  _ <  / ___ \ | |   / ___ \ | | |__| |_| | |_| | |___ ${C_RESET}
+${C_CYAN}|_|  |_|_| \_\/_/   \_\___| /_/   \_\___\____\___/|____/|_____|${C_RESET}
+${C_YELLOW}═══════════════════════════════════════════════════════════════${C_RESET}
+${C_BOLD}  Container Setup · Choose an Installation Method${C_RESET}
 ${C_YELLOW}══════════════════════════════════════════════${C_RESET}
-${C_BOLD}  容器初始化 · 选择安装方式${C_RESET}
+  ${C_GREEN}1. Auto-install dependencies${C_RESET} (recommended)
+  ${C_GREEN}2. Environment Setup${C_RESET} (choose a runtime environment by scenario)
+  ${C_BOLD}3. Manual install${C_RESET} (don't ask again)
+  ${C_DIM}4. Exit${C_RESET}
 ${C_YELLOW}══════════════════════════════════════════════${C_RESET}
-  ${C_GREEN}1. 自动安装依赖${C_RESET}（推荐）
-  ${C_GREEN}2. 环境安装${C_RESET}（按场景选择运行环境）
-  ${C_BOLD}3. 手动安装${C_RESET}（不再提示）
-  ${C_DIM}4. 退出${C_RESET}
-${C_YELLOW}══════════════════════════════════════════════${C_RESET}
-${C_DIM}  提示：之后随时可在终端执行命令 aicode 打开环境安装${C_RESET}
+${C_DIM}  Tip: run the aicode command in the terminal at any time to open Environment Setup${C_RESET}
 EOF
-    printf "请选择: "
+    printf "Please choose: "
     if ! read choice; then
         echo ""
-        echo "输入中断，退出初始化"
+        echo "Input interrupted, exiting setup"
         break
     fi
     case "$choice" in
         1)
-            plog "用户选择 1（自动安装）"
+            plog "User chose 1 (auto install)"
             echo ""
-            echo "${C_YELLOW}安装提示${C_RESET}："
-            echo "  · 安装耗时较长，建议开启「后台保活」并将 App 保持在前台"
-            echo "  · 安装过程中请勿切走或锁屏，否则进程可能被系统杀死导致安装中断"
+            echo "${C_YELLOW}Install tips${C_RESET}:"
+            echo "  · Installation takes a while; turn on background keep-alive and keep the App in the foreground"
+            echo "  · Do not switch away or lock the screen during installation, or the system may kill the process and interrupt it"
             echo ""
             install_scenario common
             rc=$?
             case "$rc" in
                 0)
                     echo "$PROVISION_VERSION" > "$MARKER"
-                    plog "自动安装完成，写入标记 $PROVISION_VERSION"
+                    plog "Auto install complete, wrote marker $PROVISION_VERSION"
                     echo ""
-                    echo "${C_GREEN}基础依赖安装完成，开始使用吧！${C_RESET}"
+                    echo "${C_GREEN}Base dependencies installed. You are ready to go!${C_RESET}"
                     break
                     ;;
                 2)
                     printf '\033[2J\033[H'
-                    echo "已取消安装，返回菜单。"
+                    echo "Installation cancelled, back to the menu."
                     ;;
                 *)
                     echo ""
-                    echo "${C_RED}安装失败。可在 AI 对话中让 AI 读取本终端内容进行诊断修复，或重新进入终端重试。${C_RESET}"
+                    echo "${C_RED}Installation failed. Ask the AI in the chat to read this terminal's output to diagnose and fix it, or re-enter the terminal and retry.${C_RESET}"
                     break
                     ;;
             esac
             ;;
         2)
-            plog "用户选择 2（环境安装）"
+            plog "User chose 2 (environment setup)"
             echo ""
-            echo "${C_YELLOW}安装提示${C_RESET}："
-            echo "  · 安装耗时较长，建议开启「后台保活」并将 App 保持在前台"
-            echo "  · 安装过程中请勿切走或锁屏，否则进程可能被系统杀死导致安装中断"
+            echo "${C_YELLOW}Install tips${C_RESET}:"
+            echo "  · Installation takes a while; turn on background keep-alive and keep the App in the foreground"
+            echo "  · Do not switch away or lock the screen during installation, or the system may kill the process and interrupt it"
             env_install_menu
             echo "$PROVISION_VERSION" > "$MARKER"
-            plog "环境安装完成，写入标记 $PROVISION_VERSION"
+            plog "Environment setup complete, wrote marker $PROVISION_VERSION"
             echo ""
-            echo "${C_GREEN}环境安装完成，开始使用吧！${C_RESET}"
+            echo "${C_GREEN}Environment setup complete. You are ready to go!${C_RESET}"
             break
             ;;
         3)
-            plog "用户选择 3（手动安装）"
+            plog "User chose 3 (manual install)"
             echo ""
-            echo "${C_YELLOW}手动安装提示${C_RESET}："
-            echo "  · ripgrep（rg）是必装工具，缺失会影响使用体验"
-            echo "  · git 是可视化版本管理操作的基础"
-            echo "  · MCP 工具依赖 python3 / nodejs 等运行时"
+            echo "${C_YELLOW}Manual install tips${C_RESET}:"
+            echo "  · ripgrep (rg) is a must-have tool; missing it degrades the experience"
+            echo "  · git is the foundation of the visual version-control features"
+            echo "  · MCP tools depend on runtimes such as python3 / nodejs"
             echo ""
-            printf "确认选择手动安装，不再提示吗？[y/N]: "
+            printf "Confirm manual install and stop asking? [y/N]: "
             read manual_confirm
             if [ "$manual_confirm" = "y" ] || [ "$manual_confirm" = "Y" ]; then
                 echo "$PROVISION_SKIPPED" > "$MARKER"
-                plog "确认手动安装，写入跳过标记"
-                echo "已选择手动安装，之后进入终端不再提示。"
+                plog "Manual install confirmed, wrote skip marker"
+                echo "Manual install selected; you will not be prompted again when entering the terminal."
                 break
             else
                 printf '\033[2J\033[H'
-                echo "已取消，返回菜单。"
+                echo "Cancelled, back to the menu."
             fi
             ;;
         4)
-            plog "用户选择 4（退出，下次仍提示）"
-            echo "已退出，下次进入终端仍会提示。"
+            plog "User chose 4 (exit, ask again next time)"
+            echo "Exited. You will be prompted again next time you enter the terminal."
             break
             ;;
         *)
             printf '\033[2J\033[H'
-            echo "${C_RED}无效输入，请重新选择。${C_RESET}"
+            echo "${C_RED}Invalid input, please select again.${C_RESET}"
             ;;
     esac
 done
-plog "初始化菜单结束"
+plog "Setup menu finished"
 git_config

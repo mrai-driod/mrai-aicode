@@ -63,7 +63,7 @@ import compose.icons.feathericons.Folder
 import compose.icons.feathericons.Play
 import compose.icons.feathericons.Server
 
-/** 同步设置底部弹窗（右上角齿轮打开）。 */
+/** Sync settings bottom sheet (opened via the gear in the top-right corner). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SyncSettingsSheet(
@@ -162,7 +162,7 @@ fun SyncSettingsSheet(
     }
 }
 
-/** 行内通用编辑箭头：与 MCP/设置列表一致的大于号，整行点击进入编辑。 */
+/** Generic in-row edit chevron: the same greater-than sign as in MCP/settings lists; tapping the row opens editing. */
 @Composable
 private fun EditRowButton(onEdit: () -> Unit) {
     IconButton(onClick = onEdit) {
@@ -175,7 +175,7 @@ private fun EditRowButton(onEdit: () -> Unit) {
     }
 }
 
-/** 行内通用图标方块：40dp 圆角浅底容器 + 居中 22dp 线条图标。 */
+/** Generic in-row icon block: 40dp rounded light-background container + centered 22dp line icon. */
 @Composable
 private fun RowIconBox(icon: androidx.compose.ui.graphics.vector.ImageVector) {
     Box(
@@ -197,7 +197,7 @@ private fun RowIconBox(icon: androidx.compose.ui.graphics.vector.ImageVector) {
     }
 }
 
-/** 协议徽章：SFTP/FTP 用不同颜色区分（样式同容器镜像来源徽章）。 */
+/** Protocol badge: SFTP/FTP distinguished by colour (same style as the container image source badge). */
 @Composable
 private fun ProtocolBadge(protocol: RemoteProtocol) {
     val color = when (protocol) {
@@ -217,7 +217,7 @@ private fun ProtocolBadge(protocol: RemoteProtocol) {
     }
 }
 
-/** 连接通道行：服务器图标 + 名称（协议徽章）+ 地址副标题 + 右侧箭头，整行点击编辑，左滑删除。 */
+/** Connection channel row: server icon + name (protocol badge) + address subtitle + chevron on the right; tap the row to edit, swipe to delete. */
 @Composable
 fun RemoteConnectionCard(
     conn: RemoteConnection,
@@ -261,7 +261,7 @@ fun RemoteConnectionCard(
     }
 }
 
-/** 挂载行：图标方块 + 通道名 + 状态徽章 + 路径副标题 + 右侧编辑，底部连接/同步操作区，左滑删除。 */
+/** Mount row: icon block + channel name + status badge + path subtitle + edit on the right, connect/sync actions at the bottom; swipe to delete. */
 @Composable
 fun RemoteMountCard(
     mount: RemoteMount,

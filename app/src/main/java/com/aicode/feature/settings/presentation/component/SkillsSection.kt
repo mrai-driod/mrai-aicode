@@ -43,8 +43,8 @@ import compose.icons.feathericons.Book
 import compose.icons.feathericons.ChevronRight
 
 /**
- * 技能二级页：与「工具授权」一致的折叠分组列表——「当前项目 / 全局」两组各自可折叠，
- * 每行一个技能（图标 + 名称 + 描述），左滑删除，点击行进入详情。
+ * Skills secondary page: a collapsible grouped list matching "Tool permissions" — the two groups "Current project / Global" are each collapsible,
+ * with one skill per row (icon + name + description); swipe left to delete, tap a row to open its details.
  */
 @Composable
 internal fun SkillsSection(
@@ -157,7 +157,7 @@ internal fun SkillsSection(
     }
 }
 
-/** 单个技能行：图标 + 名称/描述 + 右箭头；左滑删除，点击行进入详情。 */
+/** A single skill row: icon + name/description + right chevron; swipe left to delete, tap the row to open its details. */
 @Composable
 private fun SkillRow(
     entry: SkillUiEntry,
@@ -233,7 +233,7 @@ private fun SkillRow(
     }
 }
 
-/** 分组内空状态：一行灰字，与行内容对齐。 */
+/** Empty state inside a group: one line of grey text, aligned with row content. */
 @Composable
 private fun SkillEmptyHint(text: String) {
     Text(

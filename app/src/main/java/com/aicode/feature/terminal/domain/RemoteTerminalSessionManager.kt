@@ -25,10 +25,10 @@ private const val DEFAULT_COLUMNS = 80
 private const val DEFAULT_ROWS = 24
 
 /**
- * 远程 SSH 终端会话管理器：用 sshj shell channel 驱动 [TerminalSession]（接 [SshShellBackend]），
- * 与本地 [TerminalSessionManager]（fork PTY 进程）共用同一套 UI/工具接口。
+ * Remote SSH terminal session manager: drives [TerminalSession] (backed by [SshShellBackend]) using an sshj shell channel,
+ * sharing the same UI/tool interface as the local [TerminalSessionManager] (which forks a PTY process).
  *
- * 生命周期、tab 管理、事件流与本地版对齐；区别仅在 backend。
+ * Lifecycle, tab management, and event flows are aligned with the local version; the only difference is the backend.
  */
 @Singleton
 class RemoteTerminalSessionManager @Inject constructor(
@@ -55,11 +55,11 @@ class RemoteTerminalSessionManager @Inject constructor(
 
     fun tab(id: String): TerminalTab? = _tabs.value.firstOrNull { it.id == id }
 
-    /** 仅当当前模式是 REMOTE_SSH 且已连接时才可使用。 */
+    /** Only usable when the current mode is REMOTE_SSH and connected. */
     private fun ensureRemote(): Boolean =
         modeHolder.currentMode() == ExecutionMode.REMOTE_SSH && connection.isConnected()
 
-    /** 终端页进入时调用：没有任何标签则建一个交互 shell。幂等。 */
+    /** Called when the terminal page is entered: creates an interactive shell if there are no tabs. Idempotent. */
     suspend fun ensureInitialTab() {
         if (_tabs.value.isEmpty()) {
             createInteractiveTab()
@@ -68,12 +68,12 @@ class RemoteTerminalSessionManager @Inject constructor(
         }
     }
 
-    /** 新建一个交互 shell 标签并设为当前。返回新标签 id。 */
+    /** Creates a new interactive shell tab and makes it current. Returns the new tab id. */
     suspend fun createInteractiveTab(): String {
-        if (!ensureRemote()) throw IllegalStateException("非远程模式或 SSH 未连接")
+        if (!ensureRemote()) throw IllegalStateException("Not in remote mode or SSH not connected")
         return openShellTab(command = null, isBackground = false, notify = false, title = null, sourceSessionId = null).also { id ->
             _activeTabId.value = id
-            FileLogger.i(TAG, "新建交互远程终端标签 $id")
+            FileLogger.i(TAG, "Created new interactive remote terminal tab $id")
         }
     }
 
@@ -83,15 +83,15 @@ class RemoteTerminalSessionManager @Inject constructor(
         notify: Boolean,
         sourceSessionId: String?
     ): String {
-        if (!ensureRemote()) throw IllegalStateException("非远程模式或 SSH 未连接")
+        if (!ensureRemote()) throw IllegalStateException("Not in remote mode or SSH not connected")
         val id = openShellTab(command, isBackground = true, notify = notify, title = title, sourceSessionId = sourceSessionId)
-        FileLogger.i(TAG, "后台命令标签 $id: $command")
+        FileLogger.i(TAG, "Background command tab $id: $command")
         return id
     }
 
     /**
-     * 开一个 SSH shell channel，分配 PTY，构造 [TerminalSession]（接 [SshShellBackend]），
-     * 加入标签列表。交互标签与后台命令共用此路径，区别仅在元数据。
+     * Opens an SSH shell channel, allocates a PTY, constructs [TerminalSession] (backed by [SshShellBackend]),
+     * and adds it to the tab list. Interactive tabs and background commands share this path, differing only in metadata.
      */
     private suspend fun openShellTab(
         command: String?,
@@ -101,17 +101,17 @@ class RemoteTerminalSessionManager @Inject constructor(
         sourceSessionId: String?
     ): String {
         val id = nextId()
-        // sshj startSession/startShell 走网络 I/O，必须离开主线程，否则 NetworkOnMainThreadException。
-        // 但 TerminalSession 构造时会 new Handler()（绑当前线程 Looper），必须在有 Looper 的线程（主线程）构造，
-        // 所以只把 sshj channel 建立切到 IO，拿到 shell 句柄后回主线程构造 session。
+        // sshj startSession/startShell performs network I/O and must be off the main thread, otherwise NetworkOnMainThreadException.
+        // But TerminalSession's constructor calls new Handler() (bound to the current thread's Looper) and must be constructed on a thread with a Looper (the main thread),
+        // so only the sshj channel setup is moved to IO; after obtaining the shell handle, return to the main thread to construct the session.
         val shell = withContext(Dispatchers.IO) {
             connection.startShellSession().also { it.allocateDefaultPTY() }.startShell()
         }
         val backend = SshShellBackend(shell)
         val termSession = TerminalSession(TRANSCRIPT_ROWS, AppRemoteSessionClient(), backend)
         termSession.updateSize(DEFAULT_COLUMNS, DEFAULT_ROWS)
-        // shell 登录后默认在 home，先 cd 到当前工作区，与命令执行链路（RemoteSshEngine.buildCdCommand）保持一致：
-        // 优先 ~/workspace 符号链接，失败回退到真实工作区路径。
+        // After login the shell defaults to home, so first cd to the current workspace, consistent with the command execution path (RemoteSshEngine.buildCdCommand):
+        // Prefer the ~/workspace symlink, falling back to the real workspace path on failure.
         val wsPath = workspaceRepository.currentPath()
         if (wsPath.isNotBlank() && wsPath != "/") {
             termSession.write("cd ~/workspace 2>/dev/null || cd '${wsPath.trimEnd('/')}' 2>/dev/null\n")
@@ -187,7 +187,7 @@ class RemoteTerminalSessionManager @Inject constructor(
             _activeTabId.value = remaining.lastOrNull()?.id
         }
         bumpRevision()
-        FileLogger.i(TAG, "关闭远程终端标签 $id")
+        FileLogger.i(TAG, "Closed remote terminal tab $id")
         return true
     }
 
@@ -202,7 +202,7 @@ class RemoteTerminalSessionManager @Inject constructor(
         }
     }
 
-    /** 向当前活动标签写入文本（额外按键行：方向键/Tab 等）。 */
+    /** Writes text to the current active tab (extra keys row: arrow keys/Tab, etc.). */
     fun writeToActive(text: String) {
         activeTab?.let { tab ->
             if (tab.runState !is RunState.Running) return
@@ -211,7 +211,7 @@ class RemoteTerminalSessionManager @Inject constructor(
         }
     }
 
-    /** 向当前活动标签写入原始字节（控制字符，如 Ctrl-C=0x03）。 */
+    /** Writes raw bytes to the current active tab (control characters, e.g. Ctrl-C=0x03). */
     fun writeBytesToActive(vararg bytes: Int) {
         val tab = activeTab ?: return
         if (tab.runState !is RunState.Running) return
@@ -230,7 +230,7 @@ class RemoteTerminalSessionManager @Inject constructor(
         _revision.value = _revision.value + 1
     }
 
-    /** 远程模式的 [TerminalSessionClient] 实现，回调与本地一致。 */
+    /** Implementation of [TerminalSessionClient] for remote mode, with callbacks consistent with the local one. */
     private inner class AppRemoteSessionClient : TerminalSessionClient {
         override fun onTextChanged(changedSession: TerminalSession) {
             _tabs.value.firstOrNull { it.session === changedSession }?.view?.onScreenUpdated()

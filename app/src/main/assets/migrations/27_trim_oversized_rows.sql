@@ -1,8 +1,8 @@
--- 清理 agent_messages 中因生图/多模态模型返回超大 base64 图片而超限的数据行
--- （SQLiteBlobTooBigException / CursorWindow 单行约 2MB 限制导致启动即崩）。
--- 含内嵌 data:image base64 的行：截断到 base64 起点前并附说明；
--- 其余超长字段一律截断到 200000 字符的安全阈值。
--- 注意：本文件的 SQL 字符串字面量内不能出现分号，否则会被 MigrationLoader 分割破坏。
+-- Clean up agent_messages rows that exceed limits because image-generation / multimodal models returned oversized base64 images
+-- (SQLiteBlobTooBigException / the CursorWindow ~2MB single-row limit caused a crash on startup).
+-- Rows containing embedded data:image base64: truncate to just before the base64 start and append a note;
+-- all other overlong fields are truncated to the safe threshold of 200000 characters.
+-- Note: SQL string literals in this file must not contain semicolons, otherwise MigrationLoader will split on them and break.
 
 UPDATE agent_messages SET content = CASE
     WHEN instr(content, 'base64,') > 0 AND length(content) > 200000 THEN substr(content, 1, instr(content, 'base64,') - 1) || char(10) || '[图片数据已省略：内嵌图片数据过大]'

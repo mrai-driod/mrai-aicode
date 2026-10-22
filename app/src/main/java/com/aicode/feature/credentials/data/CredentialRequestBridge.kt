@@ -23,26 +23,26 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 自定义 git credential helper（容器内 /root/.aicode/git-credential-aicode）与 app 之间的文件 IPC 桥。
+ * File IPC bridge between the custom git credential helper (inside the container at /root/.aicode/git-credential-aicode) and the app.
  *
- * 容器内 git 缺凭据时 helper 写 `cred-req-<id>` 到 /root/.aicode（经 PRoot -b 绑定即宿主 filesDir/aicode 同一
- * inode）。本桥订阅 [FileChangeHub] 的 aicode 目录事件捕获请求 → 暴露 [request] StateFlow 供全局 Compose 弹窗 →
- * 用户回填后 [respond] 写 `cred-resp-<id>` 明文 KV，helper 轮询取走喂回 git，git 自动续跑。三端（UI / AI Bash /
- * 交互终端）git 缺凭据都走这条统一链，无需逐命令路径适配。
+ * When git inside the container lacks credentials, the helper writes `cred-req-<id>` to /root/.aicode (bound via PRoot -b, i.e. the same
+ * inode as the host filesDir/aicode). This bridge subscribes to [FileChangeHub] aicode directory events to capture requests → exposes the [request] StateFlow for a global Compose dialog →
+ * after the user fills it in, [respond] writes `cred-resp-<id>` as plain-text KV, the helper polls for it, picks it up and feeds it back to git, and git continues automatically. All three surfaces (UI / AI Bash /
+ * interactive terminal) use this single unified path when git lacks credentials, with no per-command path adaptation needed.
  *
- * 临时文件清理：请求文件由 helper 在拿到响应后自删（helper 知道自己何时结束），响应文件也由 helper 删它读到的；
- * app 只写响应、不删它没写的文件，避免与 helper 抢删。详见 helper 脚本内 rm 逻辑。
+ * Temporary file cleanup: the request file is deleted by the helper itself after it receives the response (the helper knows when it ends), and the response file is also deleted by the helper after it reads it;
+ * the app only writes the response and does not delete files it did not write, to avoid racing the helper on deletion. See the rm logic in the helper script for details.
  *
- * 在途计数：收到请求 [LinuxContainerEngine.incPromptInFlight]、写回响应 [decPromptInFlight]，配合
- * [LinuxContainerEngine.launchKillWatchdog] 在 helper 在途时暂停超时杀进程——用户离开几分钟填凭据，git 命令
- * 不会被 120s watchdog 强杀。
+ * In-flight counting: on receiving a request [LinuxContainerEngine.incPromptInFlight], on writing back the response [decPromptInFlight], working with
+ * [LinuxContainerEngine.launchKillWatchdog] to pause the timeout process kill while a helper is in flight——so if the user steps away for a few minutes to fill in credentials, the git command
+ * will not be force-killed by the 120s watchdog.
  *
- * 目录监听交给中心服务 [FileChangeHub]（inotify 跨 PRoot -b 对 app filesDir 基本可靠，但个别机型 inotify 在
- * 绑定目录可能失效），本桥另起一个低频兜底轮询协程（[fallbackPollLoop]）扫 `cred-req-*` 未处理项；两者按
- * requestId 去重防双处理。
+ * Directory watching is delegated to the central service [FileChangeHub] (inotify across PRoot -b is generally reliable for the app filesDir, but on some devices inotify on
+ * bound directories may fail), so this bridge also starts a low-frequency fallback polling coroutine ([fallbackPollLoop]) to scan for unhandled `cred-req-*` items; the two are
+ * deduplicated by requestId to prevent double handling.
  *
- * 生命周期：@Singleton = App 级，借 [com.aicode.AIEditorApp] 调 [start]。弹窗在任意页面（终端页/聊天页/Git 页）
- * 都能弹，不限于 Git 页。
+ * Lifecycle: @Singleton = app level, [start] is called via [com.aicode.AIEditorApp]. The dialog can appear on any page (terminal page / chat page / Git page),
+ * not limited to the Git page.
  */
 @Singleton
 class CredentialRequestBridge @Inject constructor(
@@ -55,13 +55,13 @@ class CredentialRequestBridge @Inject constructor(
         const val TAG = "CredentialRequestBridge"
         const val REQ_PREFIX = "cred-req-"
         const val RESP_PREFIX = "cred-resp-"
-        /** 兜底轮询间隔：中心服务的 inotify 不灵时也能在 ~1s 内捕获请求。 */
+        /** Fallback polling interval: when the central service's inotify does not work, requests can still be captured within ~1s. */
         const val FALLBACK_POLL_MS = 1000L
-        /** seen 去重集容量上限，超过淘汰最旧。 */
+        /** Capacity cap for the seen deduplication set; the oldest entries are evicted beyond it. */
         const val SEEN_CAP = 64
     }
 
-    /** 当前待弹凭据请求（host 来自 git credential 协议的 host 字段）。null 表示无待处理。 */
+    /** The credential request currently pending display (host comes from the host field of the git credential protocol). null means nothing is pending. */
     data class CredentialRequest(
         val requestId: String,
         val host: String
@@ -70,7 +70,7 @@ class CredentialRequestBridge @Inject constructor(
     private val _request = MutableStateFlow<CredentialRequest?>(null)
     val request: StateFlow<CredentialRequest?> = _request.asStateFlow()
 
-    /** 已处理/在途的 requestId 去重集，防事件订阅与兜底轮询双触发同一条。 */
+    /** Deduplication set of handled / in-flight requestIds, preventing the event subscription and fallback polling from both triggering on the same one. */
     private val seen = LinkedHashSetWithCap(SEEN_CAP)
 
     private val seenMutex = Mutex()
@@ -80,14 +80,14 @@ class CredentialRequestBridge @Inject constructor(
     private var aicodeDir: File? = null
 
     /**
-     * 启动监听：订阅中心服务的 aicode 目录事件捕获请求，并起兜底轮询协程。幂等可重复调。
+     * Start listening: subscribe to the central service's aicode directory events to capture requests, and start the fallback polling coroutine. Idempotent and safe to call repeatedly.
      */
     fun start() {
         val dir = File(context.filesDir, "aicode").apply { mkdirs() }
         aicodeDir = dir
         if (!started) {
             started = true
-            // 请求文件落在 ~/.aicode 根下，由中心服务统一监听；本桥只做业务侧过滤、去重与弹窗。
+            // Request files land in the root of ~/.aicode and are watched centrally by the central service; this bridge only does business-side filtering, deduplication and dialog display.
             scope.launch {
                 fileChangeHub.watchAicode().collect { batch ->
                     for (change in batch.changes) {
@@ -97,13 +97,13 @@ class CredentialRequestBridge @Inject constructor(
                     }
                 }
             }
-            FileLogger.i(TAG, "已订阅 aicode 目录事件，监听 ${dir.absolutePath}")
+            FileLogger.i(TAG, "Subscribed to aicode directory events, watching ${dir.absolutePath}")
         }
-        // 兜底轮询：个别机型 -b 目录 inotify 失效时仍能取到请求；并清理上次会话残留。
+        // Fallback polling: on some devices where inotify on -b directories fails, requests can still be picked up; also cleans up leftovers from the previous session.
         scope.launch { cleanupStale(dir); fallbackPollLoop(dir) }
     }
 
-    /** 兜底轮询：扫未在 seen 里的 cred-req-* 文件，补中心服务漏报。App 常驻，永不退出。 */
+    /** Fallback polling: scan cred-req-* files not in seen, to make up for events the central service missed. The app is resident and never exits. */
     private suspend fun fallbackPollLoop(dir: File) {
         while (true) {
             delay(FALLBACK_POLL_MS)
@@ -114,7 +114,7 @@ class CredentialRequestBridge @Inject constructor(
         }
     }
 
-    /** 启动时清理上次会话残留的 cred-req/cred-resp，避免误触发弹窗。 */
+    /** On startup, clean up cred-req/cred-resp leftovers from the previous session to avoid triggering dialogs by mistake. */
     private fun cleanupStale(dir: File) {
         runCatching {
             dir.listFiles { f -> f.name.startsWith(REQ_PREFIX) || f.name.startsWith(RESP_PREFIX) }
@@ -122,12 +122,12 @@ class CredentialRequestBridge @Inject constructor(
         }
     }
 
-    /** 解析请求文件 → 置 [request]，并 inc 在途。事件订阅与轮询都走这里，靠 seen 去重。 */
+    /** Parse a request file → set [request], and inc in-flight. Both the event subscription and polling go through here, deduplicated via seen. */
     private suspend fun handleRequest(file: File, name: String) {
         val requestId = name.removePrefix(REQ_PREFIX)
         val fresh = seenMutex.withLock { seen.addCapped(requestId) }
-        if (!fresh) return   // 已处理过，跳过
-        // 文件已被 helper 删了或为空（启动残留已 cleanup，正常不该到这里），跳过。
+        if (!fresh) return   // Already handled, skip
+        // The file was already deleted by the helper or is empty (startup leftovers were already cleaned up, so this normally should not happen here), skip.
         if (!file.exists() || file.length() == 0L) return
         val text = runCatching { file.readText() }.getOrNull() ?: return
         val host = text.lineSequence()
@@ -138,13 +138,13 @@ class CredentialRequestBridge @Inject constructor(
             ?: ""
         if (host.isBlank()) return
         containerEngine.incPromptInFlight()
-        FileLogger.i(TAG, "收到凭据请求 host=$host id=$requestId")
+        FileLogger.i(TAG, "Received credential request host=$host id=$requestId")
         _request.value = CredentialRequest(requestId, host)
     }
 
     /**
-     * 用户填完凭据确认：写响应明文 KV + 存凭据文件（每主机一条，后续免填）+ dec 在途 + 清 [request]。
-     * [host] 取自 [CredentialRequest]（Git 进程在收到 resp 前不会删 req，但 host 已在请求里，直接传更稳）。
+     * User confirms after filling in credentials: write the response plain-text KV + save the credential file (one per host, so no refilling later) + dec in-flight + clear [request].
+     * [host] comes from [CredentialRequest] (the Git process does not delete req before receiving resp, but host is already in the request, so passing it directly is more reliable).
      */
     fun respond(requestId: String, host: String, username: String, token: String) {
         val dir = aicodeDir ?: File(context.filesDir, "aicode")
@@ -155,21 +155,21 @@ class CredentialRequestBridge @Inject constructor(
                 credentialRepository.save(
                     GitCredential(id = h, host = h, username = username.trim(), token = token)
                 )
-            }.onFailure { FileLogger.e(TAG, "保存回填凭据失败", it) }
+            }.onFailure { FileLogger.e(TAG, "Failed to save filled-in credential", it) }
             containerEngine.decPromptInFlight()
             clearIfCurrent(requestId)
-            FileLogger.i(TAG, "已回填凭据 id=$requestId host=$host")
+            FileLogger.i(TAG, "Filled in credential id=$requestId host=$host")
         }
     }
 
-    /** 用户取消弹窗：写 cancel 响应（helper 退出非零让 git 报认证失败）+ dec 在途 + 清状态。 */
+    /** User cancels the dialog: write a cancel response (the helper exits non-zero so git reports an authentication failure) + dec in-flight + clear state. */
     fun cancel(requestId: String) {
         val dir = aicodeDir ?: File(context.filesDir, "aicode")
         scope.launch {
             writeRespAtomically(dir, requestId, "cancel=1\n")
             containerEngine.decPromptInFlight()
             clearIfCurrent(requestId)
-            FileLogger.i(TAG, "用户取消凭据弹窗 id=$requestId")
+            FileLogger.i(TAG, "User cancelled credential dialog id=$requestId")
         }
     }
 
@@ -177,7 +177,7 @@ class CredentialRequestBridge @Inject constructor(
         if (_request.value?.requestId == requestId) _request.value = null
     }
 
-    /** 先写 .tmp 再 rename 原子写，避免 helper 轮询读到半截文件。 */
+    /** Write to .tmp first, then rename for an atomic write, so the helper's polling does not read a half-written file. */
     private fun writeRespAtomically(dir: File, requestId: String, content: String) {
         val target = File(dir, RESP_PREFIX + requestId)
         val tmp = File(dir, "$RESP_PREFIX${requestId}.tmp")
@@ -188,11 +188,11 @@ class CredentialRequestBridge @Inject constructor(
                 target.writeText(content)
                 tmp.delete()
             }
-        }.onFailure { FileLogger.e(TAG, "写凭据响应文件失败", it) }
+        }.onFailure { FileLogger.e(TAG, "Failed to write credential response file", it) }
     }
 }
 
-/** 带容量上限的 [LinkedHashSet]，超过 [cap] 自动淘汰最旧条目。供 [CredentialRequestBridge.seen] 去重。 */
+/** A [LinkedHashSet] with a capacity cap; entries beyond [cap] automatically evict the oldest. Used for deduplication by [CredentialRequestBridge.seen]. */
 private class LinkedHashSetWithCap(private val cap: Int) : LinkedHashSet<String>() {
     fun addCapped(id: String): Boolean {
         if (contains(id)) return false

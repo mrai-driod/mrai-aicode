@@ -11,7 +11,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import com.aicode.feature.onboarding.domain.OnboardingStep
 
 /**
- * 引导目标组件注册表：集中记录各步骤高亮组件在 Root 坐标系中的边界矩形。
+ * Registry of onboarding target components: centrally records the bounding rectangles of each step's highlighted component in the Root coordinate system.
  */
 class OnboardingTargetRegistry {
     private val _targets = mutableStateMapOf<OnboardingStep, Rect>()
@@ -29,12 +29,12 @@ class OnboardingTargetRegistry {
 }
 
 /**
- * 全局 CompositionLocal，便于深层组件无感知上报高亮位置。
+ * Global CompositionLocal, so deeply nested components can report their highlight position without being aware of it.
  */
 val LocalOnboardingTargetRegistry = compositionLocalOf<OnboardingTargetRegistry?> { null }
 
 /**
- * 快捷 Modifier：为目标组件打标并在布局完成后自动上报坐标边界。
+ * Convenience Modifier: tags a target component and automatically reports its coordinate bounds once laid out.
  */
 fun Modifier.onboardingTarget(step: OnboardingStep): Modifier = composed {
     val registry = LocalOnboardingTargetRegistry.current

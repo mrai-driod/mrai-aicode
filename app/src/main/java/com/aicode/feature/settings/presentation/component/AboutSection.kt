@@ -56,9 +56,9 @@ import compose.icons.feathericons.Send
 import compose.icons.feathericons.Tag
 
 /**
- * 关于页：顶部应用信息、版本号（点击手动检查更新）、自动检查更新开关、更新通道、
- * GitHub 仓库、开源许可证。检查更新逻辑与弹窗由全局 [SettingsViewModel] 承载，
- * 本页只负责触发与展示设置项。
+ * About page: app info at the top, version number (tap to manually check for updates), auto-check-for-updates switch, update channel,
+ * GitHub repository, and open-source license. Update-check logic and dialogs are hosted by the global [SettingsViewModel];
+ * this page only triggers them and displays the settings items.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,7 +72,7 @@ internal fun AboutSection(
     val context = LocalContext.current
     var showChannelSheet by remember { mutableStateOf(false) }
 
-    // 通过 PackageManager 读取 versionName/versionCode（项目未开启 BuildConfig）
+    // Reads versionName/versionCode via PackageManager (the project does not enable BuildConfig)
     val appInfo = remember {
         runCatching {
             val pm = context.packageManager
@@ -87,8 +87,8 @@ internal fun AboutSection(
         }.getOrDefault(AppVersion("unknown", 0L))
     }
 
-    // 应用图标：用 PackageManager.loadIcon 加载自适应图标，避免 mipmap-anydpi 的 XML
-    // 在 Compose painterResource 中不被支持的问题（Only VectorDrawables and rasterized types）。
+    // App icon: loads the adaptive icon via PackageManager.loadIcon to avoid the mipmap-anydpi XML
+    // not being supported in Compose painterResource (Only VectorDrawables and rasterized types).
     val appIcon = remember { loadAppIconBitmap(context) }
 
     Column(
@@ -102,7 +102,7 @@ internal fun AboutSection(
         AboutHeaderCard(appName = stringResource(R.string.app_name), appIcon = appIcon)
 
         SettingsGroup {
-            // 版本：点击手动检查更新
+            // Version: tap to manually check for updates
             SettingsRow(
                 icon = FeatherIcons.Tag,
                 title = stringResource(R.string.about_version),
@@ -116,7 +116,7 @@ internal fun AboutSection(
                 }
             )
             SettingsDivider()
-            // 自动检查更新：开关
+            // Auto check for updates: switch
             SettingsRow(
                 icon = FeatherIcons.RefreshCw,
                 title = stringResource(R.string.about_auto_check_update),
@@ -129,7 +129,7 @@ internal fun AboutSection(
                 }
             )
             SettingsDivider()
-            // 更新通道
+            // Update channel
             SettingsRow(
                 icon = FeatherIcons.Globe,
                 title = stringResource(R.string.about_update_channel),
@@ -149,21 +149,21 @@ internal fun AboutSection(
                 }
             )
             SettingsDivider()
-            // GitHub 仓库（本仓库，非上游）
+            // GitHub repository (this repo, not upstream)
             SettingsRow(
                 icon = FeatherIcons.Github,
                 title = stringResource(R.string.about_github_repo),
                 onClick = { openUrl(context, GITHUB_REPO_URL) }
             )
             SettingsDivider()
-            // TG 交流群：优先唤起 Telegram App，未安装则打开网页版
+            // Telegram group: prefers launching the Telegram app, falls back to the web version if not installed
             SettingsRow(
                 icon = FeatherIcons.Send,
                 title = stringResource(R.string.about_telegram_group),
                 onClick = { openTelegram(context, TELEGRAM_GROUP_URL) }
             )
             SettingsDivider()
-            // 许可证
+            // License
             SettingsRow(
                 icon = FeatherIcons.Book,
                 title = stringResource(R.string.about_license),
@@ -184,7 +184,7 @@ internal fun AboutSection(
     }
 }
 
-/** 顶部信息卡：左 app 图标，右上 app 名，右下一句简介。 */
+/** Top info card: app icon on the left, app name at top right, a one-line description below it. */
 @Composable
 private fun AboutHeaderCard(appName: String, appIcon: androidx.compose.ui.graphics.ImageBitmap?) {
     Surface(
@@ -204,7 +204,7 @@ private fun AboutHeaderCard(appName: String, appIcon: androidx.compose.ui.graphi
                     modifier = Modifier.size(48.dp)
                 )
             } else {
-                // 极端情况下图标加载失败的占位，保持布局占位
+                // Placeholder for the edge case where the icon fails to load, to keep the layout in place
                 Spacer(Modifier.size(48.dp))
             }
             Spacer(Modifier.width(Spacing.lg))
@@ -228,7 +228,7 @@ private fun AboutHeaderCard(appName: String, appIcon: androidx.compose.ui.graphi
     }
 }
 
-/** 更新通道底部弹窗：稳定版 / 最新版 单选，样式对齐语言切换。 */
+/** Update channel bottom sheet: Stable / Latest single choice, styled to match the language switcher. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun UpdateChannelSheet(
@@ -310,7 +310,7 @@ private fun UpdateChannelSheet(
     }
 }
 
-/** GitHub tag 形如 v1.7.0 / 1.7.0 / v1.7.0-rc1，提取出纯版本号。 */
+/** GitHub tags look like v1.7.0 / 1.7.0 / v1.7.0-rc1; extracts the bare version number. */
 internal fun parseVersionTag(tag: String): String? {
     val raw = tag.trim().removePrefix("v")
     val seg = raw.substringBefore(' ')
@@ -318,8 +318,8 @@ internal fun parseVersionTag(tag: String): String? {
 }
 
 /**
- * 语义化版本比较：判断最新版本 [latest] 是否严格大于当前版本 [current]。
- * 若 latest 不大于 current（即最新版本已安装或当前属于开发/测试版），返回 true 表示已是最新。
+ * Semantic version comparison: determines whether the latest version [latest] is strictly greater than the current version [current].
+ * If latest is not greater than current (i.e. the latest version is already installed or the current build is a dev/test build), returns true to indicate it is up to date.
  */
 internal fun isUpToDate(latest: String, current: String): Boolean {
     val cmp = compareVersions(latest, current)
@@ -327,12 +327,12 @@ internal fun isUpToDate(latest: String, current: String): Boolean {
 }
 
 /**
- * 语义化版本号比较器（SemVer 兼容）：
- * 返回 >0 表示 v1 > v2，<0 表示 v1 < v2，0 表示相等。
- * 规则：
- * 1. 优先比较主.次.修（如 1.7.0 > 1.6.9）
- * 2. 主次修相同时，正式版 > 预发布版（1.7.0 > 1.7.0-rc1 > 1.7.0-dev）
- * 3. 均为预发布版时，同标识比序号（rc2 > rc1、dev.10 > dev.9），不同标识按字典序
+ * Semantic version comparator (SemVer compatible):
+ * Returns >0 if v1 > v2, <0 if v1 < v2, 0 if equal.
+ * Rules:
+ * 1. Compare major.minor.patch first (e.g. 1.7.0 > 1.6.9)
+ * 2. When major/minor/patch are equal, release > pre-release (1.7.0 > 1.7.0-rc1 > 1.7.0-dev)
+ * 3. When both are pre-releases, compare the number for the same identifier (rc2 > rc1, dev.10 > dev.9); different identifiers compare lexicographically
  */
 internal fun compareVersions(v1: String, v2: String): Int {
     if (v1 == v2) return 0
@@ -350,8 +350,8 @@ internal fun compareVersions(v1: String, v2: String): Int {
         if (p1 != p2) return p1.compareTo(p2)
     }
 
-    // 主版本号相同的情况下：
-    // 正式版 (pre为空) > 预发布版 (pre不为空)
+    // When the main version numbers are the same:
+    // release (pre is empty) > pre-release (pre is not empty)
     if (pre1.isEmpty() && pre2.isNotEmpty()) return 1
     if (pre1.isNotEmpty() && pre2.isEmpty()) return -1
 
@@ -361,8 +361,8 @@ internal fun compareVersions(v1: String, v2: String): Int {
 private val PRE_RELEASE_TOKEN = Regex("^(\\D*?)(\\d+)$")
 
 /**
- * 预发布段比较：「同标识 + 序号」按数字比（rc10 > rc9），避免字典序把 rc10 排在 rc9 前；
- * 标识不同或不含尾随数字时退回字典序。
+ * Pre-release segment comparison: "same identifier + number" compares numerically (rc10 > rc9), avoiding lexicographic ordering that would place rc10 before rc9;
+ * falls back to lexicographic order when identifiers differ or there is no trailing number.
  */
 private fun comparePreRelease(a: String, b: String): Int {
     val ma = PRE_RELEASE_TOKEN.matchEntire(a)
@@ -374,7 +374,7 @@ private fun comparePreRelease(a: String, b: String): Int {
 }
 
 internal fun splitVersion(v: String): Pair<String, String> {
-    val clean = v.substringBefore('+') // 去掉构建哈希如 +g04bc2fa
+    val clean = v.substringBefore('+') // Removes the build hash, e.g. +g04bc2fa
     val base = clean.substringBefore('-')
     val pre = if (clean.contains('-')) clean.substringAfter('-') else ""
     return base to pre
@@ -383,10 +383,10 @@ internal fun splitVersion(v: String): Pair<String, String> {
 private data class AppVersion(val name: String, val code: Long)
 
 /**
- * 通过 PackageManager.loadIcon 加载应用图标并转为 ImageBitmap，兼容自适应图标
- * (adaptive icon XML)。解决 painterResource(R.mipmap.ic_launcher) 在 v26+ 设备上
- * 因解析到 mipmap-anydpi-v26/ic_launcher.xml 而抛 IllegalArgumentException 的问题。
- * 失败返回 null（调用方预留占位）。
+ * Loads the app icon via PackageManager.loadIcon and converts it to an ImageBitmap, handling adaptive icons
+ * (adaptive icon XML). Fixes painterResource(R.mipmap.ic_launcher) throwing IllegalArgumentException on v26+ devices
+ * because it resolves to mipmap-anydpi-v26/ic_launcher.xml.
+ * Returns null on failure (the caller reserves a placeholder).
  */
 private fun loadAppIconBitmap(context: Context): ImageBitmap? {
     return runCatching {
@@ -410,8 +410,8 @@ private const val TELEGRAM_GROUP_URL = "https://t.me/maoleikernel"
 private const val ICON_PX_DP = 48
 
 /**
- * 打开 Telegram 交流群：优先用 tg:// scheme 唤起 Telegram App（按域名直达群组），
- * 未安装 App（ActivityNotFoundException）时回退 t.me 网页版，由系统浏览器打开。
+ * Opens the Telegram group: prefers the tg:// scheme to launch the Telegram app (directly to the group by domain),
+ * and falls back to the t.me web version in the system browser when the app is not installed (ActivityNotFoundException).
  */
 private fun openTelegram(context: Context, webUrl: String) {
     val domain = webUrl.removePrefix("https://t.me/")

@@ -10,17 +10,17 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import com.aicode.R
 
-/** 一套主题在某个明暗模式下的完整配色。 */
+/** The complete colour scheme of one theme in a given light/dark mode. */
 data class AppThemeColors(
     val colorScheme: ColorScheme,
     val semanticColors: AppSemanticColors
 )
 
 /**
- * 推导整套配色所需的最小种子集。
+ * The minimal seed set needed to derive the whole colour scheme.
  *
- * 只描述"这套主题长什么样"的 10 个关键色，其余 Material 槽位与 [AppSemanticColors]
- * 的 23 个语义色全部由 [deriveThemeColors] 推导，新增主题不必逐个手调。
+ * Only describes the 10 key colours of "what this theme looks like"; the remaining Material slots and the
+ * 23 semantic colours of [AppSemanticColors] are all derived by [deriveThemeColors], so new themes do not need to be hand-tuned one by one.
  */
 data class AppThemeSeed(
     val primary: Color,
@@ -36,9 +36,9 @@ data class AppThemeSeed(
 )
 
 /**
- * 可选的应用配色主题。
+ * Selectable app colour themes.
  *
- * [DEFAULT] 直接沿用手调的品牌蓝配色，其余主题由种子推导——保证升级后默认观感不变。
+ * [DEFAULT] directly reuses the hand-tuned brand blue scheme, while other themes are derived from seeds -- guaranteeing the default look is unchanged after an upgrade.
  */
 data class AppThemePreset(
     val id: String,
@@ -46,14 +46,14 @@ data class AppThemePreset(
     val light: AppThemeColors,
     val dark: AppThemeColors
 ) {
-    /** 选择器色块预览：主色与页面底色。 */
+    /** Selector swatch preview: primary colour and page background. */
     fun previewColors(dark: Boolean): Pair<Color, Color> {
         val colors = if (dark) this.dark else this.light
         return colors.colorScheme.primary to colors.semanticColors.pageBackground
     }
 
     companion object {
-        /** 品牌蓝：历史默认配色，颜色值逐个手调，不走推导。 */
+        /** Brand blue: the historical default scheme, with colour values hand-tuned one by one, not derived. */
         val DEFAULT = AppThemePreset(
             id = "default",
             nameRes = R.string.theme_preset_default,
@@ -61,7 +61,7 @@ data class AppThemePreset(
             dark = AppThemeColors(DarkColorScheme, DarkSemanticColors)
         )
 
-        /** 咖啡：暖赤陶 + 米白纸感，取自 Anthropic 品牌色。 */
+        /** Coffee: warm terracotta + off-white paper feel, taken from the Anthropic brand colours. */
         val COFFEE = fromSeeds(
             id = "coffee",
             nameRes = R.string.theme_preset_coffee,
@@ -91,7 +91,7 @@ data class AppThemePreset(
             )
         )
 
-        /** 石墨：中性冷灰，弱化色彩干扰。 */
+        /** Graphite: neutral cool grey, reducing colour distraction. */
         val GRAPHITE = fromSeeds(
             id = "graphite",
             nameRes = R.string.theme_preset_graphite,
@@ -121,7 +121,7 @@ data class AppThemePreset(
             )
         )
 
-        /** 森林：低饱和绿，长时间阅读代码不刺眼。 */
+        /** Forest: low-saturation green, easy on the eyes when reading code for a long time. */
         val FOREST = fromSeeds(
             id = "forest",
             nameRes = R.string.theme_preset_forest,
@@ -170,11 +170,11 @@ data class AppThemePreset(
     }
 }
 
-/** 系统级动态取色（莫奈）自 Android 12 起提供，低版本设备读不到壁纸调色板。 */
+/** System-level dynamic colour extraction (Monet) is provided from Android 12 onwards; older devices cannot read the wallpaper palette. */
 val isDynamicColorSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-/** 功能色基准：success / warning / info 的色相跨主题固定，只随明暗切换，避免"成功"在某套主题里变成别的颜色。 */
+/** Functional colour baseline: the hues of success / warning / info are fixed across themes and only switch with light/dark, avoiding "success" becoming a different colour in some theme. */
 private object FunctionalHues {
     val LightSuccess = Color(0xFF22C55E)
     val LightWarning = Color(0xFFF59E0B)
@@ -187,7 +187,7 @@ private object FunctionalHues {
     val DarkError = Color(0xFFF87171)
 }
 
-/** 由种子推导完整的 Material 槽位与语义色。 */
+/** Derives the complete Material slots and semantic colours from a seed. */
 fun deriveThemeColors(seed: AppThemeSeed, dark: Boolean): AppThemeColors =
     AppThemeColors(
         colorScheme = deriveColorScheme(seed, dark),
@@ -195,8 +195,8 @@ fun deriveThemeColors(seed: AppThemeSeed, dark: Boolean): AppThemeColors =
     )
 
 /**
- * 莫奈取色：系统只提供 Material 槽位，语义色需要从中反推，否则会出现
- * 主色跟着壁纸变、卡片底色和状态色还停在旧主题的割裂感。
+ * Monet colour extraction: the system only provides Material slots, so semantic colours must be derived back from them, otherwise
+ * the primary colour follows the wallpaper while card backgrounds and status colours stay in the old theme, creating a disjointed feel.
  */
 fun deriveDynamicThemeColors(scheme: ColorScheme, dark: Boolean): AppThemeColors {
     val seed = AppThemeSeed(
@@ -212,7 +212,7 @@ fun deriveDynamicThemeColors(scheme: ColorScheme, dark: Boolean): AppThemeColors
         outlineVariant = scheme.outlineVariant
     )
     return AppThemeColors(
-        // surfaceTint 保持与自有主题一致，避免 M3 组件按高度叠加染色。
+        // surfaceTint is kept consistent with our own themes, avoiding M3 components tinting by elevation.
         colorScheme = scheme.copy(surfaceTint = if (dark) Color.Transparent else scheme.surface),
         semanticColors = deriveSemanticColors(seed, dark)
     )
@@ -241,8 +241,8 @@ private fun deriveColorScheme(seed: AppThemeSeed, dark: Boolean): ColorScheme {
         surfaceVariant = seed.surfaceVariant,
         onSurfaceVariant = seed.onSurfaceVariant,
         surfaceTint = if (dark) Color.Transparent else seed.surface,
-        // M3 组件（BottomSheet / Dialog / DropdownMenu）默认取 surfaceContainer* 而不是 surface，
-        // 不覆盖会露出 Material 基线的纯白与淡紫。
+        // M3 components (BottomSheet / Dialog / DropdownMenu) use surfaceContainer* by default instead of surface,
+        // and not overriding them would expose the Material baseline pure white and pale purple.
         surfaceContainerLowest = if (dark) lerp(seed.background, Color.Black, 0.25f) else seed.surface,
         surfaceContainerLow = if (dark) seed.background else lerp(seed.surface, seed.background, 0.45f),
         surfaceContainer = if (dark) seed.surface else seed.background,
@@ -296,17 +296,17 @@ private fun deriveSemanticColors(seed: AppThemeSeed, dark: Boolean): AppSemantic
     )
 }
 
-/** 该色作背景时，其上文字取近白还是近黑——按自身亮度判定，并混入主题色温以免出现纯黑白。 */
+/** When this colour is a background, whether text on it is near-white or near-black -- judged by its own luminance, with the theme colour temperature mixed in to avoid pure black/white. */
 private fun Color.contentColor(seed: AppThemeSeed, dark: Boolean): Color {
     val light = if (dark) seed.onSurface else seed.surface
     val deep = if (dark) seed.background else seed.onSurface
     return if (luminance() > 0.45f) lerp(deep, this, 0.12f) else lerp(light, this, 0.08f)
 }
 
-/** 该色的容器底：向主题表面色靠拢，让状态色融进当前主题而不是突兀的独立色块。 */
+/** This colour's container background: moves toward the theme surface colour, letting status colours blend into the current theme instead of being jarring standalone blocks. */
 private fun Color.container(seed: AppThemeSeed, dark: Boolean): Color =
     lerp(this, seed.surface, if (dark) 0.78f else 0.86f)
 
-/** 容器底之上的文字：浅色模式压深、深色模式提亮，保证与 [container] 的对比度。 */
+/** Text on the container background: darkened in light mode, lightened in dark mode, guaranteeing contrast with [container]. */
 private fun Color.onContainer(dark: Boolean): Color =
     if (dark) lerp(this, Color.White, 0.30f) else lerp(this, Color.Black, 0.45f)

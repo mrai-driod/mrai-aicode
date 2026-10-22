@@ -11,7 +11,7 @@ class FileMigration(
     val sqlStatements: List<String>
 ) : Migration(version - 1, version) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        // 整段迁移包在事务里：任一条语句失败整体回滚，避免留半迁移状态
+        // The whole migration is wrapped in a transaction: if any statement fails the whole thing rolls back, avoiding a half-migrated state
         db.beginTransaction()
         try {
             db.execSQL(

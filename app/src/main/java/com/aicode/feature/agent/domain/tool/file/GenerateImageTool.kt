@@ -44,15 +44,15 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * 生图工具：调用 OpenAI Images API（POST /v1/images/generations）按提示词生成位图。
+ * Image generation tool: calls the OpenAI Images API (POST /v1/images/generations) to generate a bitmap from a prompt.
  *
- * 使用「设置 → 默认模型 → 生图模型」配置的 provider + 模型（如 gpt-image-1 / dall-e-3）；
- * 未配置时返回带设置指引的错误。生成的图片：
- * - 始终以 [AgentImage] 返回给工作流，聊天区可直接渲染；
- * - 传入 `output_path` 时同时落盘到工作区（多张时自动加序号后缀）。
+ * Uses the provider + model configured in "Settings -> Default model -> Image generation model" (such as gpt-image-1 / dall-e-3);
+ * when not configured, returns an error with setup guidance. The generated images:
+ * - are always returned to the workflow as [AgentImage], so the chat area can render them directly;
+ * - when `output_path` is passed, they are also written to the workspace (with a numeric suffix added automatically for multiple images).
  *
- * 请求体兼容 dall-e 系（显式 `response_format=b64_json`）与 GPT image 系
- * （不支持该参数、总是返回 base64）；调用失败时把错误信息原样作为工具结果返回。
+ * The request body is compatible with the dall-e family (explicit `response_format=b64_json`) and the GPT image family
+ * (which does not support that parameter and always returns base64); on failure, the error message is returned as-is as the tool result.
  */
 class GenerateImageTool @Inject constructor(
     private val fileAccess: FileAccessProvider,
@@ -181,9 +181,9 @@ class GenerateImageTool @Inject constructor(
             lastProviderId = provider.id
             activeApiKey = keyRotator.activeKey(provider, context.sessionId) ?: provider.firstUsableApiKey
             val model = provider.effectiveModel
-            // Gemini 官方图像模型走 Interactions 协议（v1beta/interactions），OpenAI 的
-            // /v1/images/generations 端点打不通；设了 Gemini 生图模型时切独立通道，
-            // OpenAI 特有的参数（size/quality/background 等）在 Gemini 分支里忽略。
+            // Official Gemini image models use the Interactions protocol (v1beta/interactions); OpenAI's
+            // /v1/images/generations endpoint cannot reach them, so when a Gemini image-generation model is set, switch to a separate channel;
+            // OpenAI-specific parameters (size/quality/background, etc.) are ignored in the Gemini branch.
             if (provider.type == ProviderType.GEMINI) {
                 return@withContext generateViaGemini(provider, activeApiKey, prompt, n, outputPath, context.sessionId)
             }
@@ -200,10 +200,10 @@ class GenerateImageTool @Inject constructor(
             FileLogger.i(TAG, "generateImage provider=${provider.id} model=$model prompt=$prompt n=$n size=$size")
 
             val url = if (provider.useFullUrl) provider.baseUrl else joinUrl(provider.baseUrl, "v1/images/generations")
-            // 兼容性规则：
-            // 1. 只有真正的官方 GPT Image 系列模型（如 gpt-image-1 / gpt-image-1.5）才支持 output_format，且其默认就返回 base64、不支持 response_format；
-            // 2. 其它模型（DALL-E、各类聚合网关如 agnes/OneAPI/NewAPI/Flux/SD 等）必须传 response_format=b64_json 才会返回 base64，
-            //    且绝对不能传 output_format（带上会直接被网关报 HTTP 400：output_format is not supported）。
+            // Compatibility rules:
+            // 1. Only genuine official GPT Image family models (such as gpt-image-1 / gpt-image-1.5) support output_format, and they return base64 by default and do not support response_format;
+            // 2. Other models (DALL-E, and various aggregation gateways such as agnes/OneAPI/NewAPI/Flux/SD) must be passed response_format=b64_json to return base64,
+            //    and must absolutely not be passed output_format (passing it gets an HTTP 400 from the gateway: output_format is not supported).
             val request = ImageGenerationRequest(
                 model = model,
                 prompt = prompt,
@@ -234,7 +234,7 @@ class GenerateImageTool @Inject constructor(
             if (activeApiKey.isNotEmpty() && enriched.isKeySwitchFailure()) {
                 keyRotator.reportFailure(lastProviderId, context.sessionId, activeApiKey)
             }
-            FileLogger.e(TAG, "generateImage 失败", enriched)
+            FileLogger.e(TAG, "generateImage failed", enriched)
             AILogger.logError(context.sessionId, lastProviderId, enriched, seq)
             ToolResult.Error(enriched.message ?: "Image generation failed", "IMAGE_GEN_FAILED")
         }
@@ -292,7 +292,7 @@ class GenerateImageTool @Inject constructor(
                 )
             } catch (e: Exception) {
                 failedCount++
-                FileLogger.w(TAG, "处理第 ${index + 1} 张生图结果失败", e)
+                FileLogger.w(TAG, "Failed to process generated image result ${index + 1}", e)
             }
         }
 
@@ -306,9 +306,9 @@ class GenerateImageTool @Inject constructor(
     }
 
     /**
-     * Gemini 生图通道：跟随 provider 的 useResponseApi 设置。开启走 Interactions 非流式端点
-     * （从 `steps` 时间线解析图片）；关闭（默认）走 generateContent（图像模型原生支持，从
-     * candidates[].parts 的 inlineData 解析）。多张走多次调用；OpenAI 特有参数忽略。
+     * Gemini image-generation channel: follows the provider's useResponseApi setting. When on, it uses the Interactions non-streaming endpoint
+     * (parsing images from the `steps` timeline); when off (the default), it uses generateContent (natively supported by image models, parsing
+     * from the inlineData in candidates[].parts). Multiple images use multiple calls; OpenAI-specific parameters are ignored.
      */
     private suspend fun generateViaGemini(
         provider: com.aicode.feature.settings.domain.model.AIProviderConfig,
@@ -327,7 +327,7 @@ class GenerateImageTool @Inject constructor(
         }
     }
 
-    /** Interactions 通道：非流式 createInteraction，从响应 steps 提取图片。 */
+    /** Interactions channel: non-streaming createInteraction; extracts images from the response steps. */
     private suspend fun generateViaGeminiInteractions(
         provider: com.aicode.feature.settings.domain.model.AIProviderConfig,
         apiKey: String,
@@ -379,7 +379,7 @@ class GenerateImageTool @Inject constructor(
                             image.base64Data, effectiveBasePath, overwrite, agentImages,
                             savedDisplayPaths, filesList, totalBytes
                         )
-                    }.onFailure { FileLogger.w(TAG, "处理 Gemini 生图结果失败", it) }
+                    }.onFailure { FileLogger.w(TAG, "Failed to process Gemini image-generation result", it) }
                 }
                 if (agentImages.size == beforeCount) failedCount++
                 if (index == 0 && agentImages.isEmpty() && n > 1) break
@@ -389,7 +389,7 @@ class GenerateImageTool @Inject constructor(
         } catch (e: Exception) {
             val enriched = e.enrichWithHttpErrorBody()
             if (enriched.isKeySwitchFailure()) keyRotator.reportFailure(provider.id, sessionId, apiKey)
-            FileLogger.e(TAG, "generateImage(Gemini) 失败", enriched)
+            FileLogger.e(TAG, "generateImage(Gemini) failed", enriched)
             AILogger.logError(sessionId, provider.id, enriched, lastSeq)
             if (agentImages.isNotEmpty()) {
                 return buildGeminiResult(
@@ -404,8 +404,8 @@ class GenerateImageTool @Inject constructor(
     }
 
     /**
-     * generateContent 通道：图像模型（Nano Banana）原生支持该端点，图片在
-     * candidates[].content.parts 的 inlineData（camelCase）中整块返回。
+     * generateContent channel: image models (Nano Banana) natively support this endpoint, and the image is returned as a whole block in
+     * the inlineData (camelCase) of candidates[].content.parts.
      */
     private suspend fun generateViaGeminiGenerateContent(
         provider: com.aicode.feature.settings.domain.model.AIProviderConfig,
@@ -446,7 +446,7 @@ class GenerateImageTool @Inject constructor(
                             base64, effectiveBasePath, overwrite, agentImages,
                             savedDisplayPaths, filesList, totalBytes
                         )
-                    }.onFailure { FileLogger.w(TAG, "处理 Gemini 生图结果失败", it) }
+                    }.onFailure { FileLogger.w(TAG, "Failed to process Gemini image-generation result", it) }
                 }
                 if (agentImages.size == beforeCount) failedCount++
                 if (index == 0 && agentImages.isEmpty() && n > 1) break
@@ -456,7 +456,7 @@ class GenerateImageTool @Inject constructor(
         } catch (e: Exception) {
             val enriched = e.enrichWithHttpErrorBody()
             if (enriched.isKeySwitchFailure()) keyRotator.reportFailure(provider.id, sessionId, apiKey)
-            FileLogger.e(TAG, "generateImage(Gemini) 失败", enriched)
+            FileLogger.e(TAG, "generateImage(Gemini) failed", enriched)
             AILogger.logError(sessionId, provider.id, enriched, lastSeq)
             if (agentImages.isNotEmpty()) {
                 return buildGeminiResult(
@@ -470,7 +470,7 @@ class GenerateImageTool @Inject constructor(
         return buildGeminiResult(agentImages, savedDisplayPaths, filesList, model, n, outputPath, failedCount)
     }
 
-    /** 从 generateContent 响应提取图片 base64 列表（inlineData / inline_data 都认）。 */
+    /** Extracts the list of image base64 strings from a generateContent response (accepts both inlineData / inline_data). */
     private fun extractGenerateContentImageData(response: com.google.gson.JsonObject): List<String> {
         val parts = response.get("candidates")?.takeIf { it.isJsonArray }?.asJsonArray
             ?.firstOrNull()?.takeIf { it.isJsonObject }?.asJsonObject
@@ -486,7 +486,7 @@ class GenerateImageTool @Inject constructor(
         }
     }
 
-    /** 单张图落盘：base64 → 按真实格式写文件 → 组装 AgentImage 与 files 附件。 */
+    /** Writes one image to disk: base64 -> writes the file in its real format -> assembles the AgentImage and files attachments. */
     private fun persistImage(
         base64: String,
         effectiveBasePath: String,
@@ -539,7 +539,7 @@ class GenerateImageTool @Inject constructor(
         )
     }
 
-    /** 组装 Gemini 生图的统一结果（两通道共用）。 */
+    /** Assembles the unified result for Gemini image generation (shared by both channels). */
     private fun buildGeminiResult(
         agentImages: List<AgentImage>,
         savedDisplayPaths: List<String>,
@@ -650,8 +650,8 @@ class GenerateImageTool @Inject constructor(
     private fun createDefaultBasePath(): String =
         "$DEFAULT_OUTPUT_DIR/gen_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}"
 
-    /** 输出路径派生：去掉调用方后缀、按真实格式落盘，多张在文件名后加 _1/_2 序号。
-     * 扩展名点只在最后一个路径分隔符之后找：`~/.aicode/...` 这类路径自身的点不能当扩展名分隔符。 */
+    /** Derives the output path: strips the caller's suffix, writes to disk in the real format, and adds _1/_2 suffixes to the file name for multiple images.
+     * The extension dot is only looked for after the last path separator: dots in paths such as `~/.aicode/...` themselves cannot be treated as extension separators. */
     private fun buildTargetPath(basePath: String, index: Int, format: String): String {
         val slash = basePath.lastIndexOf('/')
         val dot = basePath.lastIndexOf('.', basePath.length - 1).takeIf { it > slash } ?: -1
@@ -660,7 +660,7 @@ class GenerateImageTool @Inject constructor(
         return "$base$suffix.${extForFormat(format)}"
     }
 
-    /** 从字节流 magic number 判定真实图片格式（网关可能忽略 output_format，直接看内容最可靠）。 */
+    /** Determines the real image format from the byte stream's magic number (a gateway may ignore output_format; looking at the content directly is most reliable). */
     private fun detectImageFormat(bytes: ByteArray): String {
         if (bytes.size >= 8 &&
             bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() &&

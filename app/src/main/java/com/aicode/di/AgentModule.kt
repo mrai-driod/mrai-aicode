@@ -166,14 +166,14 @@ object AgentModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(@ApplicationContext context: Context): OkHttpClient {
-        // 统一 UA 为 aicode/<版本> (Android)；请求已带显式 UA（如用户自定义头）时不覆盖。
-        // 版本号走 PackageManager（项目未开启 BuildConfig），dev 构建为 1.x.y-dev.N+hash 天然可溯源。
+        // Normalises the UA to aicode/<version> (Android); does not overwrite a request that already carries an explicit UA (e.g. a user-customised header).
+        // The version number comes from PackageManager (the project does not enable BuildConfig); dev builds are 1.x.y-dev.N+hash, which is inherently traceable.
         val userAgent = runCatching {
             val name = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
             "aicode/$name (Android)"
         }.getOrDefault("aicode (Android)")
-        // 流式 SSE 下读超时是「相邻数据块之间」的等待上限，设为 0（无限制），
-        // 慢生成不会因块间隔超时被掐断；首字节前的卡死由上层 watchdog（RetryPolicy）兜底。
+        // Under streaming SSE, the read timeout is the maximum wait "between adjacent data chunks"; set to 0 (unlimited),
+        // so slow generation is not cut off by a gap timeout between chunks; a stall before the first byte is covered by the upper-layer watchdog (RetryPolicy).
         return OkHttpClient.Builder()
             .connectTimeout(120, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.SECONDS)
@@ -384,8 +384,8 @@ object AgentModule {
             register("viewImage", viewImageTool)
             register("writeFile", writeFileTool)
             register("editFile", editFileTool)
-            // loadSkill 提前到文件工具组之后、Bash 之前：注册顺序即工具 schema 顺序，
-            // 模型对清单前段的工具更敏感（本机实测 loadSkill 原在第 12 位，239 次调用 0 命中）。
+            // loadSkill is moved earlier, after the file tool group and before Bash: registration order is the tool schema order,
+            // and models are more sensitive to tools at the front of the list (measured on this device: loadSkill was originally 12th, with 0 hits in 239 calls).
             register("loadSkill", loadSkillTool)
             register("generateImage", generateImageTool)
             register("Bash", executeCommandTool)

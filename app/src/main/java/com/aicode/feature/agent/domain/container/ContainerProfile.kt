@@ -4,51 +4,54 @@ import com.aicode.feature.settings.data.repository.ExecutionMode
 import kotlinx.serialization.Serializable
 
 /**
- * 一个可切换的容器配置：镜像来源 + shell 路径 + 额外 proot 绑定/参数。
+ * A switchable container configuration: image source + shell path + extra proot bindings/arguments.
  *
- * 内置 [BUILTIN_ALPINE] 描述现有 Alpine rootfs（来自 assets）。用户自定义 profile 通过导入
- * tar.gz 提供 rootfs。所有容器首次进入终端时统一弹出初始化菜单（见 assets/aicode/provision.sh），
- * 由用户选择自动安装基础工具或手动安装，装包失败不阻塞进入 shell，处理方式一致。
+ * The built-in [BUILTIN_ALPINE] describes the existing Alpine rootfs (from assets). User-defined profiles provide
+ * a rootfs by importing a tar.gz. Every container shows the same initialization menu the first time its terminal
+ * is entered (see assets/aicode/provision.sh), where the user chooses automatic installation of the base tools or
+ * manual installation; a package installation failure does not block entering the shell, and handling is consistent.
  *
- * 远程 SSH profile（[mode] == [ExecutionMode.REMOTE_SSH]）不导入本地 rootfs，而是绑定一个
- * 工作区已配置的 SSH 通道（[RootfsSource.RemoteSsh]），命令执行走 [RemoteSshEngine]。
+ * A remote SSH profile ([mode] == [ExecutionMode.REMOTE_SSH]) does not import a local rootfs; instead it binds an
+ * SSH channel already configured for the workspace ([RootfsSource.RemoteSsh]), and command execution goes through [RemoteSshEngine].
  */
 @Serializable
 data class ContainerProfile(
     val id: String,
     val name: String,
     val rootfsSource: RootfsSource,
-    /** 自定义镜像用的 shell（如 /bin/sh 或 /bin/bash）；未指定时按 provision 状态自动选择。 */
+    /** Shell for custom images (such as /bin/sh or /bin/bash); when unspecified, chosen automatically from the provision state. */
     val shellPath: String?,
-    /** 额外 -b 绑定，如 ["/sdcard:/mnt/sdcard"]，逐项作为 `-b <binding>` 拼进 proot argv。 */
+    /** Extra -b bindings, such as ["/sdcard:/mnt/sdcard"], each appended to the proot argv as `-b <binding>`. */
     val extraBindings: List<String> = emptyList(),
-    /** 额外 proot 参数，原样追加到基础 argv（如 ["-k","..."]）。 */
+    /** Extra proot arguments, appended verbatim to the base argv (such as ["-k","..."]). */
     val extraArgs: List<String> = emptyList(),
-    /** 自定义环境变量，注入容器内进程（覆盖同名默认值）。 */
+    /** Custom environment variables, injected into processes inside the container (overriding defaults of the same name). */
     val env: Map<String, String> = emptyMap(),
     val isBuiltin: Boolean,
-    /** 该 profile 的执行模式：本地 PRoot 容器 or 远程 SSH。选中时据此切全局 [ExecutionMode]。 */
+    /** This profile's execution mode: local PRoot container or remote SSH. Selecting it switches the global [ExecutionMode] accordingly. */
     val mode: ExecutionMode = ExecutionMode.LOCAL_PROOT,
-    /** 添加时间（毫秒时间戳），容器列表按此降序排列；旧数据/内置默认 0 排最后。 */
+    /** Time added (millisecond timestamp); the container list is sorted descending by this, so legacy data / built-ins with the default 0 come last. */
     val createdAt: Long = 0
 ) {
     companion object {
         const val BUILTIN_ID = "builtin-alpine"
 
         /**
-         * 新容器默认注入的 proot 参数。刻意与用户手动添加走同一条路径（[extraArgs]，追加在 proot argv
-         * 末尾），而不在引擎里硬编码 argv——硬编码的位置与手动添加不同，会导致 --link2symlink 行为异常，
-         * 且无法在编辑页撤销。
-         *  - --link2symlink：Android SELinux 禁止 app 域创建硬链接，dpkg 用 link() 备份文件会 Permission
-         *    denied，proot 以符号链接模拟硬链接绕过；
-         *  - --kill-on-exit：proot 退出时级联杀掉容器内子进程，避免终端仍在运行时重置容器残留孤儿进程致卡死。
+         * Proot arguments injected by default for new containers. They deliberately go through the same path as
+         * user-added arguments ([extraArgs], appended at the end of the proot argv) rather than being hardcoded
+         * in the engine: a hardcoded position would differ from the manually added one, causing abnormal
+         * --link2symlink behaviour, and could not be undone on the edit page.
+         *  - --link2symlink: Android SELinux forbids the app domain from creating hard links, and dpkg backing up
+         *    files with link() gets Permission denied, so proot emulates hard links with symlinks to get around it;
+         *  - --kill-on-exit: when proot exits it cascades and kills the child processes inside the container, so
+         *    resetting the container while a terminal is still running leaves no orphan processes behind to freeze it.
          */
         val DEFAULT_PROOT_ARGS = listOf("--link2symlink", "--kill-on-exit")
 
-        /** 内置 Alpine profile：镜像来自 assets，复用现有安装/provision 全流程。 */
+        /** Built-in Alpine profile: the image comes from assets and reuses the existing install/provision flow. */
         val BUILTIN_ALPINE = ContainerProfile(
             id = BUILTIN_ID,
-            name = "内置 Alpine",
+            name = "Built-in Alpine",
             rootfsSource = RootfsSource.Asset("alpine-rootfs.bin"),
             shellPath = null,
             extraArgs = DEFAULT_PROOT_ARGS,
@@ -59,15 +62,15 @@ data class ContainerProfile(
 
 @Serializable
 sealed interface RootfsSource {
-    /** 内置：assets 里的 rootfs 文件（[ContainerProfile.BUILTIN_ALPINE] 用）。 */
+    /** Built-in: a rootfs file in assets (used by [ContainerProfile.BUILTIN_ALPINE]). */
     @Serializable
     data class Asset(val path: String) : RootfsSource
 
-    /** 用户导入的 tar.gz，经 content uri 引用，解压到 filesDir/rootfs_<id>。 */
+    /** A user-imported tar.gz, referenced by content uri and extracted to filesDir/rootfs_<id>. */
     @Serializable
     data class LocalFile(val uri: String) : RootfsSource
 
-    /** 远程 SSH：绑定工作区已配置的 SSH 通道（connectionId）+ 远程工作区路径，不导入本地 rootfs。 */
+    /** Remote SSH: binds an SSH channel already configured for the workspace (connectionId) + a remote workspace path; no local rootfs is imported. */
     @Serializable
     data class RemoteSsh(
         val connectionId: String,

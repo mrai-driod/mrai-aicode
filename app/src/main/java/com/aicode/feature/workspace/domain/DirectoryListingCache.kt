@@ -3,21 +3,21 @@ package com.aicode.feature.workspace.domain
 import java.util.LinkedHashMap
 
 /**
- * 目录列举缓存：容器路径 → 该目录最近一次**成功列举**的条目快照。
+ * Directory listing cache: container path -> snapshot of the entries from that directory's most recent **successful listing**.
  *
- * 存在的原因：文件树的每次重建（展开/折叠/文件变更/手动刷新）都不必重新 listFiles 所有已展开
- * 目录——本地模式一次 list 是几十上百次 stat，ROOT 模式是一次 `su` fork + 逐项 stat fork，
- * 远程模式是一次网络往返。展开一个目录后再次折叠再展开，内容没有理由再读一遍盘。
+ * Why it exists: every rebuild of the file tree (expand/collapse/file change/manual refresh) does not need to re-listFiles every expanded
+ * directory -- in local mode one list is dozens to hundreds of stats, in ROOT mode it is one `su` fork + a stat fork per item,
+ * and in remote mode it is one network round trip. After expanding a directory, collapsing it and expanding it again, there is no reason to read the disk again.
  *
- * 设计约定（长期维护请先读这段）：
- * - **只缓存成功结果**：列举失败的目录不入缓存，下次重建会重试，错误状态不会粘住；
- * - **失效完全由事件驱动**：本类不提供 TTL，正确性依赖调用方在文件变更时调用
- *   [invalidate]/[invalidateTree]（见 [planBrowseInvalidation]）。漏失效的代价是树与磁盘短暂
- *   不一致，因此调用方必须保留可手动全量刷新的入口兜底；
- * - **有容量上限**：超过 [maxEntries] 按插入序淘汰最旧条目，防止用户把整棵仓库展开后内存无界增长；
- * - **线程安全**：内部 `synchronized`，读写都很快（纳秒级），不会与 listFiles 的 IO 竞争锁。
+ * Design conventions (read this section before long-term maintenance):
+ * - **Only successful results are cached**: directories whose listing failed are not cached, so the next rebuild retries and the error state does not stick;
+ * - **Invalidation is entirely event-driven**: this class provides no TTL; correctness depends on the caller calling
+ *   [invalidate]/[invalidateTree] on file changes (see [planBrowseInvalidation]). The cost of a missed invalidation is a brief inconsistency
+ *   between the tree and the disk, so callers must keep a manual full-refresh entry point as a fallback;
+ * - **Capacity is bounded**: beyond [maxEntries], the oldest entries are evicted in insertion order, preventing unbounded memory growth after the user expands a whole repository;
+ * - **Thread-safe**: internal `synchronized`; reads and writes are fast (nanosecond level) and do not contend on a lock with listFiles IO.
  *
- * @param maxEntries 最多缓存的目录数；淘汰是「整目录丢弃」，不含任何子级联逻辑。
+ * @param maxEntries Maximum number of directories to cache; eviction discards whole directories, with no child-cascade logic.
  */
 class DirectoryListingCache(private val maxEntries: Int = DEFAULT_MAX_ENTRIES) {
 
@@ -25,15 +25,15 @@ class DirectoryListingCache(private val maxEntries: Int = DEFAULT_MAX_ENTRIES) {
 
     private val lock = Any()
 
-    /** 插入序 LinkedHashMap：淘汰时从头删最旧。 */
+    /** Insertion-ordered LinkedHashMap: eviction deletes the oldest from the head. */
     private val map = LinkedHashMap<String, Snapshot>(16, 0.75f, false)
 
-    /** 命中返回条目列表；未命中返回 null（调用方负责 listFiles 回填）。 */
+    /** On a hit, returns the entry list; on a miss, returns null (the caller is responsible for filling in via listFiles). */
     fun get(path: String): List<FileEntry>? = synchronized(lock) {
         map[path]?.entries
     }
 
-    /** 写入成功列举结果；超过容量时淘汰最旧条目。 */
+    /** Write a successful listing result; evicts the oldest entries when over capacity. */
     fun put(path: String, entries: List<FileEntry>) = synchronized(lock) {
         map.remove(path)
         map[path] = Snapshot(entries)
@@ -43,14 +43,14 @@ class DirectoryListingCache(private val maxEntries: Int = DEFAULT_MAX_ENTRIES) {
         }
     }
 
-    /** 失效单个目录（其列表重新读盘）。路径不存在时是 no-op。 */
+    /** Invalidate a single directory (its listing is re-read from disk). A no-op when the path does not exist. */
     fun invalidate(path: String) = synchronized(lock) {
         if (path.isNotEmpty()) map.remove(path)
     }
 
     /**
-     * 失效目录及其所有后代（目录被删除/移动时用）：缓存里的 `path/...` 子级一并丢弃，
-     * 避免目录删了又重建后展示旧的子列表。
+     * Invalidate a directory and all its descendants (used when a directory is deleted/moved): cached `path/...` children are discarded as well,
+     * to avoid showing stale child lists after a directory is deleted and recreated.
      */
     fun invalidateTree(path: String) = synchronized(lock) {
         if (path.isEmpty()) return@synchronized
@@ -61,14 +61,14 @@ class DirectoryListingCache(private val maxEntries: Int = DEFAULT_MAX_ENTRIES) {
         }
     }
 
-    /** 清空全部（工作区切换、用户手动刷新时用）。 */
+    /** Clear everything (used on workspace switch and manual user refresh). */
     fun clear() = synchronized(lock) { map.clear() }
 
-    /** 当前缓存的目录数（诊断/测试用）。 */
+    /** Current number of cached directories (for diagnostics/tests). */
     fun size(): Int = synchronized(lock) { map.size }
 
     companion object {
-        /** 默认容量：按「用户实际展开的目录数」量级取，256 个目录 × 每目录数百条目不构成内存压力。 */
+        /** Default capacity: sized to the order of "the number of directories the user actually expands"; 256 directories x a few hundred entries each is not a memory burden. */
         const val DEFAULT_MAX_ENTRIES = 256
     }
 }

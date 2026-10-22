@@ -24,31 +24,31 @@ import rikka.shizuku.Shizuku
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Shizuku 可用状态，供设置页展示与工具执行前判定。 */
+/** Shizuku availability state, for display on the settings page and for checks before tool execution. */
 enum class ShizukuState {
-    /** 未安装 Shizuku（或 Sui）。 */
+    /** Shizuku (or Sui) is not installed. */
     NOT_INSTALLED,
 
-    /** 已安装但服务未运行，需用户先在 Shizuku 内启动服务。 */
+    /** Installed but the service is not running; the user needs to start the service in Shizuku first. */
     NOT_RUNNING,
 
-    /** 服务运行中，但本应用尚未获得授权。 */
+    /** The service is running, but this app has not yet been granted permission. */
     PERMISSION_DENIED,
 
-    /** 就绪，可执行命令。 */
+    /** Ready; commands can be executed. */
     READY
 }
 
-/** 一次 Shizuku 命令执行结果。[exitCode] 为负值表示超时或启动异常。 */
+/** The result of one Shizuku command execution. A negative [exitCode] means a timeout or a startup exception. */
 data class ShizukuCommandResult(val output: String, val exitCode: Int)
 
 /**
- * Shizuku 后端：以 adb shell（uid 2000）身份执行命令。
+ * Shizuku backend: executes commands with the identity of adb shell (uid 2000).
  *
- * 通过 UserService（[ShizukuShellService]）而非已弃用的 `Shizuku#newProcess` 执行命令：
- * App 绑定一个运行在 shell 进程的服务，调用其 AIDL 接口代执行，进程间只传命令与结果。
+ * Executes commands via a UserService ([ShizukuShellService]) rather than the deprecated `Shizuku#newProcess`:
+ * the app binds a service running in the shell process and calls its AIDL interface to execute on its behalf; only the command and the result are passed between processes.
  *
- * 状态由 Shizuku 的 binder 存活/死亡与授权结果驱动，[state] 变化时设置页与工具据此响应。
+ * The state is driven by the survival/death of the Shizuku binder and by permission results; when [state] changes, the settings page and tools react accordingly.
  */
 @Singleton
 class ShizukuManager @Inject constructor(
@@ -57,18 +57,18 @@ class ShizukuManager @Inject constructor(
     private companion object {
         const val TAG = "ShizukuManager"
 
-        /** Shizuku 官方应用包名（Sui 也用它作为入口）。 */
+        /** The package name of the official Shizuku app (Sui also uses it as its entry point). */
         const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 
         const val PERMISSION_REQUEST_CODE = 1001
 
-        /** 服务身份 tag：不设时用类名，类名经 R8 混淆后不稳定，故显式固定。 */
+        /** Service identity tag: when not set the class name is used, which is unstable after R8 obfuscation, so it is explicitly fixed. */
         const val SERVICE_TAG = "shizuku_shell"
 
-        /** 绑定 UserService 的等待上限（毫秒）。Shizuku 启动服务自身超时为 30 秒。 */
+        /** Upper limit for waiting to bind the UserService (milliseconds). The Shizuku timeout for starting the service itself is 30 seconds. */
         const val BIND_TIMEOUT_MS = 30_000L
 
-        /** 命令超时上限（毫秒），与 [com.aicode.feature.agent.domain.container.CommandEngine.MAX_TIMEOUT_MS] 对齐。 */
+        /** Upper limit for the command timeout (milliseconds), aligned with [com.aicode.feature.agent.domain.container.CommandEngine.MAX_TIMEOUT_MS]. */
         const val MAX_TIMEOUT_MS = 1_800_000L
 
         const val DOWNLOAD_URL = "https://shizuku.rikka.app/download/"
@@ -89,7 +89,7 @@ class ShizukuManager @Inject constructor(
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
         shellService = null
-        pendingBind?.completeExceptionally(IllegalStateException("Shizuku 服务已断开"))
+        pendingBind?.completeExceptionally(IllegalStateException("Shizuku service disconnected"))
         pendingBind = null
         refreshState()
     }
@@ -108,7 +108,7 @@ class ShizukuManager @Inject constructor(
 
         override fun onServiceDisconnected(name: ComponentName?) {
             shellService = null
-            pendingBind?.completeExceptionally(IllegalStateException("Shizuku UserService 已断开"))
+            pendingBind?.completeExceptionally(IllegalStateException("Shizuku UserService disconnected"))
             pendingBind = null
             refreshState()
         }
@@ -125,7 +125,7 @@ class ShizukuManager @Inject constructor(
             .version(appVersionCode)
     }
 
-    /** 项目未开启 BuildConfig，版本号从 PackageManager 读取（升级后自动重建 UserService）。 */
+    /** The project does not enable BuildConfig; the version code is read from PackageManager (the UserService is rebuilt automatically after an upgrade). */
     @Suppress("DEPRECATION")
     private val appVersionCode: Int by lazy {
         runCatching {
@@ -144,15 +144,15 @@ class ShizukuManager @Inject constructor(
 
     init {
         runCatching {
-            // Sticky：binder 已就绪时立即回调，无需额外探测首帧状态。
+            // Sticky: calls back immediately when the binder is already ready, with no need to probe the first-frame state separately.
             Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
             Shizuku.addBinderDeadListener(binderDeadListener)
             Shizuku.addRequestPermissionResultListener(permissionResultListener)
-        }.onFailure { FileLogger.w(TAG, "注册 Shizuku 监听失败: ${it.message}") }
+        }.onFailure { FileLogger.w(TAG, "Failed to register Shizuku listener: ${it.message}") }
         refreshState()
     }
 
-    /** 重新计算并发布当前状态。 */
+    /** Recomputes and publishes the current state. */
     fun refreshState() {
         _state.value = computeState()
     }
@@ -160,7 +160,7 @@ class ShizukuManager @Inject constructor(
     private fun computeState(): ShizukuState {
         if (!isShizukuInstalled()) return ShizukuState.NOT_INSTALLED
         if (!runCatching { Shizuku.pingBinder() }.getOrDefault(false)) return ShizukuState.NOT_RUNNING
-        // pre-v11 无 UserService，等同不可用。
+        // pre-v11 has no UserService, so it is treated as unavailable.
         if (runCatching { Shizuku.isPreV11() }.getOrDefault(false)) return ShizukuState.NOT_RUNNING
         val granted = runCatching {
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
@@ -173,14 +173,14 @@ class ShizukuManager @Inject constructor(
         true
     }.getOrDefault(false)
 
-    /** 申请 Shizuku 授权。需在主线程调用（Shizuku 内部要求）。 */
+    /** Requests Shizuku permission. Must be called on the main thread (an internal Shizuku requirement). */
     fun requestPermission() {
         if (computeState() != ShizukuState.PERMISSION_DENIED) return
         runCatching { Shizuku.requestPermission(PERMISSION_REQUEST_CODE) }
-            .onFailure { FileLogger.w(TAG, "申请 Shizuku 授权失败: ${it.message}") }
+            .onFailure { FileLogger.w(TAG, "Failed to request Shizuku permission: ${it.message}") }
     }
 
-    /** 打开 Shizuku 应用；未安装则跳转官方下载页。 */
+    /** Opens the Shizuku app; if it is not installed, jumps to the official download page. */
     fun openShizukuApp() {
         val launch = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
         runCatching {
@@ -193,10 +193,10 @@ class ShizukuManager @Inject constructor(
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
             }
-        }.onFailure { FileLogger.w(TAG, "打开 Shizuku 失败: ${it.message}") }
+        }.onFailure { FileLogger.w(TAG, "Failed to open Shizuku: ${it.message}") }
     }
 
-    /** 执行 shell 命令。未就绪或绑定失败时抛异常，由调用方转成工具错误。 */
+    /** Executes a shell command. Throws an exception when not ready or when binding fails, for the caller to convert into a tool error. */
     suspend fun runCommand(command: String, timeoutMs: Long): ShizukuCommandResult {
         val service = ensureBound()
         val timeout = timeoutMs.coerceIn(1_000L, MAX_TIMEOUT_MS).toInt()
@@ -209,13 +209,13 @@ class ShizukuManager @Inject constructor(
         }
     }
 
-    /** 幂等绑定 UserService，返回可用的 AIDL 代理。 */
+    /** Idempotently binds the UserService and returns a usable AIDL proxy. */
     private suspend fun ensureBound(): IShizukuShellService {
         shellService?.let { return it }
         return bindMutex.withLock {
             shellService?.let { return@withLock it }
             if (computeState() != ShizukuState.READY) {
-                throw IllegalStateException("Shizuku 未就绪（${_state.value}）")
+                throw IllegalStateException("Shizuku not ready (${_state.value})")
             }
             val deferred = CompletableDeferred<IShizukuShellService>()
             pendingBind = deferred
@@ -223,7 +223,7 @@ class ShizukuManager @Inject constructor(
                 Shizuku.bindUserService(userServiceArgs, serviceConnection)
             }
             withTimeoutOrNull(BIND_TIMEOUT_MS) { deferred.await() }
-                ?: throw IllegalStateException("绑定 Shizuku 服务超时")
+                ?: throw IllegalStateException("Timed out binding the Shizuku service")
         }
     }
 }

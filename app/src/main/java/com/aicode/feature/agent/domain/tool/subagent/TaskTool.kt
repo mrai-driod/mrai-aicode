@@ -31,22 +31,22 @@ import kotlinx.serialization.json.put
 import javax.inject.Inject
 
 /**
- * 子代理工具 `task`：统一管理子代理的生命周期。
+ * The sub-agent tool `task`: centrally manages sub-agents' lifecycles.
  *
- * 通过 `action` 参数区分操作类型：
- * - `create`（默认）：创建一个子代理会话并让 AI 替用户向其发消息，子代理自动开始回复。
- * - `send`：向指定子代理发送一条消息（可反复发送）。运行中的子代理会在下一批工具结果里搭车收到，
- *   已完成的子代理会被重新唤醒；消息按发送顺序送达。
- * - `read`：读取指定子代理的最后输出（最后一条助手回复）。
- * - `stop`：停止指定子代理的执行（取消其 AI 任务）。
- * - `del`：删除指定子代理会话及其全部消息。
- * - `list`：列出当前会话的全部子代理及其状态。
+ * Operations are distinguished by the `action` parameter:
+ * - `create` (default): creates a sub-agent session and has the AI send it a message on the user's behalf; the sub-agent starts replying automatically.
+ * - `send`: sends a message to the specified sub-agent (can be sent repeatedly). A running sub-agent receives it piggybacked in the next batch of tool results;
+ *   a completed sub-agent is reawakened; messages are delivered in send order.
+ * - `read`: reads the specified sub-agent's last output (its last assistant reply).
+ * - `stop`: stops the specified sub-agent's execution (cancels its AI task).
+ * - `del`: deletes the specified sub-agent session and all its messages.
+ * - `list`: lists all sub-agents of the current session and their states.
  *
- * 最多同时允许 5 个运行中的子代理（create 时检查上限）。
- * 子代理不能嵌套创建子代理（其工具集中不含 `task`）。
+ * At most 5 sub-agents may run at the same time (the cap is checked on create).
+ * Sub-agents cannot create nested sub-agents (their tool set does not include `task`).
  *
- * `create` 可用 `agent` 参数指定自定义子代理定义（`agents/<name>.md`），
- * 由定义决定该子会话的模型、工具集与系统提示词；省略则用继承父会话模型的默认通用子代理。
+ * `create` can use the `agent` parameter to specify a custom sub-agent definition (`agents/<name>.md`),
+ * which determines that sub-session's model, tool set and system prompt; when omitted, the default general sub-agent inheriting the parent session's model is used.
  */
 class TaskTool @Inject constructor(
     private val sessionUseCase: SessionUseCase,
@@ -60,7 +60,7 @@ class TaskTool @Inject constructor(
     private companion object {
         const val TAG = "TaskTool"
         const val TASK_DESCRIPTION_MAX = 30
-        /** 未指定 agent 时子会话记录的类型标识。 */
+        /** The type identifier recorded for a sub-session when no agent is specified. */
         const val DEFAULT_SUBAGENT_TYPE = "subagent"
     }
 
@@ -130,13 +130,13 @@ class TaskTool @Inject constructor(
         }
     }
 
-    /** 创建子代理并启动执行。 */
+    /** Creates a sub-agent and starts execution. */
     private suspend fun createSubagent(args: Map<String, JsonElement>, context: AgentContext): ToolResult {
         val parentSessionId = context.sessionId ?: return ToolResult.Error("Missing session context", "NO_SESSION")
         val parentSession = sessionUseCase.getSessionById(parentSessionId)
             ?: return ToolResult.Error("Current session does not exist", "SESSION_NOT_FOUND")
 
-        // 检查并发上限
+        // Check the concurrency cap
         if (eventBus.isFull) {
             return ToolResult.Error(
                 "Subagent limit reached (at most ${SubAgentEventBus.MAX_RUNNING} running at once). Wait for one to complete or stop one with stop before creating another",
@@ -153,8 +153,8 @@ class TaskTool @Inject constructor(
             ?.take(TASK_DESCRIPTION_MAX)
             ?: "Subagent task"
 
-        // 指定 agent 时必须能找到定义：写错名字就报错并列出可用名，不静默回退成通用子代理，
-        // 否则会拿着错的工具集与提示词跑完整个任务。
+        // When an agent is specified its definition must be findable: a misspelled name reports an error and lists the available names, rather than silently falling back to a general sub-agent;
+        // otherwise it would run the whole task with the wrong tool set and prompt.
         val agentName = (args["agent"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
         var definition: AgentDefinition? = null
         if (agentName != null) {
@@ -166,7 +166,7 @@ class TaskTool @Inject constructor(
             }
         }
 
-        // 创建子代理会话
+        // Create the sub-agent session
         val subSession = sessionUseCase.newSubSessionEntity(
             title = description,
             parentId = parentSessionId,
@@ -182,7 +182,7 @@ class TaskTool @Inject constructor(
         sessionUseCase.upsertSession(subSession)
         val subSessionId = subSession.id
 
-        // 通知 ViewModel 在子会话上启动 AI 工作流
+        // Notify the ViewModel to start the AI workflow on the sub-session
         eventBus.emit(
             SubAgentEvent(
                 subSessionId = subSessionId,
@@ -191,7 +191,7 @@ class TaskTool @Inject constructor(
                 detail = prompt
             )
         )
-        FileLogger.i(TAG, "子代理已创建: session=$subSessionId parent=$parentSessionId agent=${definition?.name ?: "-"}")
+        FileLogger.i(TAG, "Sub-agent created: session=$subSessionId parent=$parentSessionId agent=${definition?.name ?: "-"}")
 
         return ToolResult.Success(
             buildJsonObject {
@@ -204,10 +204,10 @@ class TaskTool @Inject constructor(
     }
 
     /**
-     * 向指定子代理发送一条消息（可反复发送）。
+     * Sends a message to the specified sub-agent (can be sent repeatedly).
      *
-     * 事件交由 ViewModel 按收件人状态分发：运行中的子代理把消息入通知队列、在下一批工具结果里搭车送达；
-     * 已完成的子代理则被重新唤醒并起新一轮。不在工具层直接投递，以复用同一套忙碌/空闲分发逻辑。
+     * The event is dispatched by the ViewModel according to the recipient's state: a running sub-agent queues the message in the notification queue and receives it piggybacked in the next batch of tool results;
+     * a completed sub-agent is reawakened and starts a new round. It is not delivered directly at the tool layer, reusing the same busy/idle dispatch logic.
      */
     private suspend fun sendToSubagent(args: Map<String, JsonElement>, context: AgentContext): ToolResult {
         val parentSessionId = context.sessionId ?: return ToolResult.Error("Missing session context", "NO_SESSION")
@@ -233,7 +233,7 @@ class TaskTool @Inject constructor(
                 detail = message
             )
         )
-        FileLogger.i(TAG, "向子代理发送消息: session=$subSessionId parent=$parentSessionId")
+        FileLogger.i(TAG, "Sending message to sub-agent: session=$subSessionId parent=$parentSessionId")
         return ToolResult.Success(
             buildJsonObject {
                 put("id", subSessionId)
@@ -244,8 +244,8 @@ class TaskTool @Inject constructor(
     }
 
     /**
-     * 把定义里的 provider 字段解析为真实 provider id：先按 id 精确匹配，再按名称忽略大小写匹配，
-     * 让用户在 frontmatter 里能直接写设置里看到的提供商名。都匹不上则返回 null（继承父会话）。
+     * Resolves the provider field in a definition to a real provider id: first an exact id match, then a case-insensitive name match,
+     * so users can write the provider name they see in settings directly in the frontmatter. If neither matches, returns null (inherits the parent session).
      */
     private suspend fun resolveProviderId(raw: String): String? {
         aiProviderRepository.getProviderById(raw)?.let { return it.id }
@@ -253,7 +253,7 @@ class TaskTool @Inject constructor(
         return all.firstOrNull { it.name.equals(raw, ignoreCase = true) }?.id
     }
 
-    /** 读取指定子代理的最后输出。 */
+    /** Reads the specified sub-agent's last output. */
     private suspend fun readSubagent(args: Map<String, JsonElement>, context: AgentContext): ToolResult {
         val subSessionId = (args["id"] as? JsonPrimitive)?.contentOrNull?.trim()
         if (subSessionId.isNullOrBlank()) {
@@ -266,7 +266,7 @@ class TaskTool @Inject constructor(
         }
 
         val messages = agentMessageDao.getMessagesBySessionOnce(subSessionId)
-        // 取最后一条有内容的助手回复（跳过 reasoning-only 的中间消息）
+        // Take the last assistant reply with content (skipping reasoning-only intermediate messages)
         val lastAssistant = messages.lastOrNull {
             it.role == MessageRole.ASSISTANT.name && it.content.isNotBlank()
         }
@@ -287,7 +287,7 @@ class TaskTool @Inject constructor(
         )
     }
 
-    /** 停止指定子代理的执行。 */
+    /** Stops the specified sub-agent's execution. */
     private suspend fun stopSubagent(args: Map<String, JsonElement>, context: AgentContext): ToolResult {
         val subSessionId = (args["id"] as? JsonPrimitive)?.contentOrNull?.trim()
         if (subSessionId.isNullOrBlank()) {
@@ -315,7 +315,7 @@ class TaskTool @Inject constructor(
         )
     }
 
-    /** 删除指定子代理会话（含其消息）。若仍在运行先请求停止。 */
+    /** Deletes the specified sub-agent session (including its messages). If it is still running, request a stop first. */
     private suspend fun deleteSubagent(args: Map<String, JsonElement>, context: AgentContext): ToolResult {
         val subSessionId = (args["id"] as? JsonPrimitive)?.contentOrNull?.trim()
         if (subSessionId.isNullOrBlank()) {
@@ -336,7 +336,7 @@ class TaskTool @Inject constructor(
             )
         }
         sessionUseCase.deleteSession(subSessionId)
-        FileLogger.i(TAG, "子代理已删除: session=$subSessionId parent=${context.sessionId}")
+        FileLogger.i(TAG, "Sub-agent deleted: session=$subSessionId parent=${context.sessionId}")
         return ToolResult.Success(
             buildJsonObject {
                 put("id", subSessionId)
@@ -346,7 +346,7 @@ class TaskTool @Inject constructor(
         )
     }
 
-    /** 列出当前会话的全部子代理。 */
+    /** Lists all sub-agents of the current session. */
     private suspend fun listSubagents(context: AgentContext): ToolResult {
         val parentSessionId = context.sessionId ?: return ToolResult.Error("Missing session context", "NO_SESSION")
         val subs = chatSessionDao.getSubSessionsByParentOnce(parentSessionId)

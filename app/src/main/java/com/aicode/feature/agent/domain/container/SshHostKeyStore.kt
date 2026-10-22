@@ -8,7 +8,7 @@ import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** SSH 主机指纹的持久化存储，key 为 `host:port`。 */
+/** Persistent storage for SSH host fingerprints, keyed by `host:port`. */
 interface SshHostKeyStore {
     fun get(host: String, port: Int): String?
     fun save(host: String, port: Int, fingerprint: String)
@@ -18,7 +18,7 @@ interface SshHostKeyStore {
 
 private const val PREFS_NAME = "ssh_host_keys"
 
-/** 基于应用私有 SharedPreferences 的实现。 */
+/** Implementation backed by the app's private SharedPreferences. */
 @Singleton
 class SharedPrefsSshHostKeyStore @Inject constructor(
     @ApplicationContext context: Context
@@ -42,26 +42,26 @@ class SharedPrefsSshHostKeyStore @Inject constructor(
     }.toMap()
 }
 
-/** 计算主机公钥的 SHA-256 指纹，形如 `SHA256:<base64>`，与 ssh-keygen -lf 的格式一致。 */
+/** Computes the SHA-256 fingerprint of a host public key, in the form `SHA256:<base64>`, matching the format of ssh-keygen -lf. */
 fun sshHostKeyFingerprint(key: PublicKey): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(key.encoded)
     return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest)
 }
 
-/** 主机密钥需要用户确认（首次连接或已保存指纹变化）。changed=false 首次，true 指纹变化。 */
+/** The host key needs user confirmation (first connection, or the saved fingerprint changed). changed=false means first time, true means the fingerprint changed. */
 class SshHostKeyPendingException(
     val host: String,
     val port: Int,
     val keyType: String,
     val fingerprint: String,
     val changed: Boolean
-) : Exception("SSH 主机密钥需要确认: $host:$port")
+) : Exception("SSH host key needs confirmation: $host:$port")
 
 class SshHostKeyVerifier @Inject constructor(
     private val store: SshHostKeyStore
 ) : net.schmizz.sshj.transport.verification.HostKeyVerifier {
-    /** 最近一次校验失败（待确认）详情；sshj 会把 verify 抛出的异常包装成 TransportException，
-     *  连接层无法按异常类型捕获，故通过此字段传递。consumePending 读取后清空。 */
+    /** Details of the most recent verification failure (pending confirmation); sshj wraps exceptions thrown by verify into a TransportException,
+     *  so the connection layer cannot catch them by exception type and they are passed through this field instead. consumePending clears it after reading. */
     @Volatile
     private var pending: SshHostKeyPendingException? = null
 

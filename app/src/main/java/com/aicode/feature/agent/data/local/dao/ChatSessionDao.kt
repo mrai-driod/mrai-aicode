@@ -24,22 +24,22 @@ interface ChatSessionDao {
     @Query("SELECT * FROM chat_sessions WHERE workspacePath = :workspacePath AND parentId IS NULL ORDER BY isPinned DESC, updatedAt DESC")
     suspend fun getRootSessionsByWorkspaceOnce(workspacePath: String): List<ChatSessionEntity>
 
-    /** 最近更新的根会话（忽略置顶，仅按 updatedAt 降序），供启动时「打开最近会话」。 */
+    /** The most recently updated root session (ignoring pinning, ordered only by updatedAt descending), for "open the most recent session" at startup. */
     @Query("SELECT * FROM chat_sessions WHERE workspacePath = :workspacePath AND parentId IS NULL ORDER BY updatedAt DESC LIMIT 1")
     suspend fun getLatestRootSessionByWorkspace(workspacePath: String): ChatSessionEntity?
 
-    /** 指定父会话的全部子会话（子代理），按最近更新降序。 */
+    /** All child sessions (sub-agents) of the given parent session, most recently updated first. */
     @Query("SELECT * FROM chat_sessions WHERE parentId = :parentId ORDER BY updatedAt DESC")
     fun getSubSessionsByParent(parentId: String): Flow<List<ChatSessionEntity>>
 
-    /** 指定父会话的全部子会话（子代理），一次性查询。 */
+    /** All child sessions (sub-agents) of the given parent session, as a one-shot query. */
     @Query("SELECT * FROM chat_sessions WHERE parentId = :parentId ORDER BY updatedAt DESC")
     suspend fun getSubSessionsByParentOnce(parentId: String): List<ChatSessionEntity>
 
     @Query("SELECT * FROM chat_sessions")
     suspend fun getAllOnce(): List<ChatSessionEntity>
 
-    /** 分页读取（keyset：按 updatedAt,id 字典序取 [limit] 条），供备份流式导出。 */
+    /** Paged read (keyset: takes [limit] rows in updatedAt,id lexicographic order), for streaming backup export. */
     @Query("SELECT * FROM chat_sessions WHERE updatedAt > :lastUpdatedAt OR (updatedAt = :lastUpdatedAt AND id > :lastId) ORDER BY updatedAt ASC, id ASC LIMIT :limit")
     suspend fun getPageAfter(lastUpdatedAt: Long, lastId: String, limit: Int): List<ChatSessionEntity>
 
@@ -49,7 +49,7 @@ interface ChatSessionDao {
     @Query("SELECT * FROM chat_sessions WHERE id = :id")
     suspend fun getById(id: String): ChatSessionEntity?
 
-    /** 单个会话的实时流（根会话与子会话通用）。 */
+    /** Live stream of a single session (shared by root sessions and child sessions). */
     @Query("SELECT * FROM chat_sessions WHERE id = :id")
     fun getByIdFlow(id: String): Flow<ChatSessionEntity?>
 

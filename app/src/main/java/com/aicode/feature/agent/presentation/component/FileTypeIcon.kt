@@ -13,8 +13,8 @@ import compose.icons.feathericons.Terminal
 import compose.icons.feathericons.Video
 
 /**
- * 文件浏览行的单色线性图标，按文件语义和扩展名挑选合适的 Feather 线性图标。
- * 风格与 App 全局保持一致的极简线性视觉，渲染时跟随主题色着色。
+ * Monochrome linear icon for a file-browse row; picks a suitable Feather linear icon based on the file's meaning and extension.
+ * Matches the app-wide minimalist linear look and is tinted with the theme colour when rendered.
  */
 fun fileTypeIconFor(name: String): ImageVector {
     val lower = name.lowercase()
@@ -35,7 +35,7 @@ fun fileTypeIconFor(name: String): ImageVector {
     }
 }
 
-/** 源代码文件扩展名。 */
+/** Source code file extensions. */
 private val CODE_EXTS = setOf(
     "kt", "kts", "java", "py", "pyw", "pyi",
     "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx",
@@ -47,17 +47,17 @@ private val CODE_EXTS = setOf(
     "ex", "exs", "erl", "v", "zig", "nim", "d", "jl"
 )
 
-/** 脚本与命令行文件扩展名。 */
+/** Script and command-line file extensions. */
 private val TERMINAL_EXTS = setOf(
     "sh", "bash", "zsh", "ksh", "csh", "fish", "bat", "cmd", "ps1", "awk", "sed"
 )
 
-/** 常见无后缀脚本或构建文件。 */
+/** Common extensionless script or build files. */
 private val SPECIAL_TERMINAL_FILES = setOf(
     "dockerfile", "containerfile", "makefile", "rakefile", "vagrantfile", "justfile"
 )
 
-/** 文档、纯文本与各类配置文件（json、yaml、xml、properties、env 等统一作为文本呈现）。 */
+/** Documents, plain text and assorted config files (json, yaml, xml, properties, env, etc., all presented uniformly as text). */
 private val TEXT_AND_CONFIG_EXTS = setOf(
     "md", "markdown", "mdown", "txt", "rst", "asciidoc", "adoc",
     "doc", "docx", "rtf", "log", "csv", "tsv", "pdf",
@@ -66,36 +66,36 @@ private val TEXT_AND_CONFIG_EXTS = setOf(
     "lock", "editorconfig"
 )
 
-/** 常见独立文本或配置规则文件名。 */
+/** Common standalone text or config-rule file names. */
 private val SPECIAL_TEXT_FILES = setOf(
     ".gitignore", ".gitattributes", ".gitmodules", ".dockerignore",
     ".npmrc", ".prettierrc", ".eslintrc", ".clang-format",
     "license", "notice", "authors", "contributors", "changelog"
 )
 
-/** 图片格式。 */
+/** Image formats. */
 private val IMAGE_EXTS = setOf(
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "ico",
     "heic", "heif", "avif", "tif", "tiff"
 )
 
-/** 视频媒体格式。 */
+/** Video media formats. */
 private val VIDEO_EXTS = setOf(
     "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm"
 )
 
-/** 音频格式。 */
+/** Audio formats. */
 private val AUDIO_EXTS = setOf(
     "mp3", "wav", "flac", "aac", "ogg", "m4a", "wma"
 )
 
-/** 压缩包与安装包。 */
+/** Archives and install packages. */
 private val ARCHIVE_EXTS = setOf(
     "zip", "tar", "gz", "tgz", "bz2", "tbz2", "xz", "txz", "7z", "rar",
     "apk", "apks", "xapk", "aab", "jar", "war", "ear", "deb", "rpm", "ipa", "dmg", "iso"
 )
 
-/** 数据库文件。 */
+/** Database files. */
 private val DATABASE_EXTS = setOf(
     "sql", "db", "sqlite", "sqlite3", "mdb"
 )

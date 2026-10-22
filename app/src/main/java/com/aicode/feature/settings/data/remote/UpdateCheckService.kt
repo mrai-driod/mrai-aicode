@@ -12,20 +12,20 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** 单个版本的更新日志。 */
+/** Changelog for a single version. */
 data class VersionUpdate(
     val tag: String,
     val changelog: String
 )
 
-/** 拉取到的更新信息：最新版本号 + 从当前版本到最新的更新日志。 */
+/** Fetched update info: latest version tag + changelog from the current version up to the latest. */
 data class UpdateInfo(
     val latestTag: String,
     val changelog: String,
     val updates: List<VersionUpdate>
 )
 
-/** 检查更新结果。 */
+/** Update check result. */
 sealed interface UpdateCheckResult {
     data object UpToDate : UpdateCheckResult
     data class NewVersion(val info: UpdateInfo) : UpdateCheckResult
@@ -33,11 +33,11 @@ sealed interface UpdateCheckResult {
 }
 
 /**
- * 从 GitHub Releases 拉取版本信息并生成更新日志。
+ * Fetches version info from GitHub Releases and builds a changelog.
  *
- * 稳定版通道过滤预发布（RC），最新版通道包含预发布；只统计严格高于当前版本的 release，
- * 更新日志按版本从高到低拼接（版本号 + 正文，轻量清理 markdown 标题/粗体）。
- * 结果不落盘，由调用方按需展示。
+ * The stable channel filters out prereleases (RC), the latest channel includes prereleases; only releases strictly higher than the current version are counted,
+ * and the changelog is concatenated from highest to lowest version (version tag + body, with light cleanup of markdown headings/bold).
+ * Results are not persisted; the caller displays them as needed.
  */
 @Singleton
 class UpdateCheckService @Inject constructor(
@@ -104,7 +104,7 @@ class UpdateCheckService @Inject constructor(
         )
     }
 
-    /** 轻量清理 markdown：去掉行首标题符与粗体标记，并删除 GitHub 自动生成的标题/链接行，保留纯文本便于直接阅读。 */
+    /** Lightly cleans markdown: strips leading heading markers and bold markers, and removes GitHub auto-generated title/link lines, keeping plain text for direct reading. */
     private fun cleanMarkdown(text: String): String = text
         .lines()
         .map { it.trimEnd().replace("**", "") }

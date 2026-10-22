@@ -18,12 +18,12 @@ private val Context.screenOnDataStore by preferencesDataStore(
 )
 
 /**
- * 持久化「屏幕常亮」开关。默认关闭。
+ * Persists the "keep screen on" toggle. Off by default.
  *
- * 开启后由 [com.aicode.MainActivity] 监听本开关，给窗口加
- * [android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON]。该标志只在 App 位于前台时
- * 约束屏幕，退到后台由系统自动失效，因此不需要像 wakeLock 那样手动释放。
- * DataStore 用法与 [KeepaliveSettingsRepository] 一致。
+ * When enabled, [com.aicode.MainActivity] observes this toggle and adds
+ * [android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON] to the window. This flag only constrains the screen while the App is in the foreground,
+ * and is automatically invalidated by the system when the App moves to the background, so it does not need to be released manually like a wakeLock.
+ * DataStore usage is consistent with [KeepaliveSettingsRepository].
  */
 @Singleton
 class ScreenOnSettingsRepository @Inject constructor(
@@ -33,17 +33,17 @@ class ScreenOnSettingsRepository @Inject constructor(
         val ENABLED_KEY = booleanPreferencesKey("screen_on_enabled")
     }
 
-    /** 当前持久化的开关流；未设置时回退到 false（默认关闭，需手动开启）。 */
+    /** The currently persisted toggle flow; falls back to false when unset (off by default, must be enabled manually). */
     val enabledFlow: Flow<Boolean> = context.screenOnDataStore.data.map { it[ENABLED_KEY] ?: false }
 
-    /** 写入开关。窗口标志的增删由 [com.aicode.MainActivity] 监听本流统一完成。 */
+    /** Writes the toggle. Adding/removing the window flag is handled uniformly by [com.aicode.MainActivity] observing this flow. */
     suspend fun setEnabled(enabled: Boolean) {
         context.screenOnDataStore.edit { it[ENABLED_KEY] = enabled }
     }
 
-    /** 备份快照：当前屏幕常亮开关是否开启。 */
+    /** Backup snapshot: whether the keep-screen-on toggle is currently enabled. */
     suspend fun snapshot(): Boolean = enabledFlow.first()
 
-    /** 从备份还原屏幕常亮开关。 */
+    /** Restores the keep-screen-on toggle from a backup. */
     suspend fun restore(enabled: Boolean) = setEnabled(enabled)
 }

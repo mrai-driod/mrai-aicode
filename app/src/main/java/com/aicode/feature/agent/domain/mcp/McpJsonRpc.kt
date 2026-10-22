@@ -6,10 +6,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 /**
- * 最小化 JSON-RPC 2.0 报文模型，用于与 MCP server 通信。
+ * Minimal JSON-RPC 2.0 message model for communicating with MCP servers.
  *
- * 只覆盖 MCP 当前需要的子集：带 id 的请求/响应、不带 id 的通知（notification）。
- * id 用整型递增；服务端必须原样回传，[McpClient] 据此把响应配对到请求。
+ * Covers only the subset MCP currently needs: requests/responses with an id, and notifications without an id.
+ * Ids are incrementing integers; the server must return them unchanged, and [McpClient] uses them to pair responses to requests.
  */
 const val JSONRPC_VERSION = "2.0"
 
@@ -21,7 +21,7 @@ data class JsonRpcRequest(
     val jsonrpc: String = JSONRPC_VERSION
 )
 
-/** 通知没有 id，服务端不应答（如 notifications/initialized）。 */
+/** Notifications have no id and the server does not reply (e.g. notifications/initialized). */
 @Serializable
 data class JsonRpcNotification(
     val method: String,
@@ -44,14 +44,14 @@ data class JsonRpcError(
     val data: JsonElement? = null
 )
 
-/** 调用 MCP server 失败时抛出，携带 JSON-RPC 错误码便于上层区分。 */
+/** Thrown when calling an MCP server fails; carries the JSON-RPC error code so callers can distinguish cases. */
 class McpException(
     val rpcCode: Int? = null,
     message: String,
     cause: Throwable? = null
 ) : Exception(message, cause)
 
-// ---- MCP 领域模型（initialize / tools/list 的返回片段）----
+// ---- MCP domain models (return fragments of initialize / tools/list)----
 
 @Serializable
 data class McpToolDescriptor(

@@ -3,13 +3,13 @@ package com.aicode.feature.agent.domain.memory
 import java.io.File
 
 /**
- * 解析后的单个 Memory 模型。
+ * A single parsed Memory model.
  *
- * @param name 记忆名称（供大模型调用的唯一标识，通常对应文件名不含扩展名）
- * @param description 记忆描述（一句话摘要，注入到系统提示词中）
- * @param scope 记忆的作用域（GLOBAL 或 PROJECT）
- * @param file 记忆对应的本地文件
- * @param content 记忆正文（剥离 Frontmatter 后的详细内容）
+ * @param name memory name (the unique identifier the model uses to invoke it, usually the file name without extension)
+ * @param description memory description (a one-sentence summary, injected into the system prompt)
+ * @param scope the memory's scope (GLOBAL or PROJECT)
+ * @param file the local file corresponding to the memory
+ * @param content the memory body (the detailed content after stripping the frontmatter)
  */
 data class Memory(
     val name: String,

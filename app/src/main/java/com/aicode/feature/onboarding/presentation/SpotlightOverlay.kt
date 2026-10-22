@@ -75,13 +75,13 @@ import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
- * 全屏聚光灯新手引导遮罩层（Spotlight Overlay）。
+ * Full-screen spotlight overlay for new-user onboarding (Spotlight Overlay).
  *
- * 1. 契合系统风格的通透遮罩（浅色 40% / 深色 52%），不产生压抑感；
- * 2. 硬件加速圆角挖孔（BlendMode.Clear）+ 原地平滑淡入（绝不从屏幕中央滑向目标）；
- * 3. 聚焦目标边缘带有极细腻的呼吸微光边框；
- * 4. 模拟面板使用原生 [ModelLogoIcon] 与应用级卡片层次，去除卡通玩具感；
- * 5. 悬浮精致 Material 3 规范说明卡片，去除厚重黑阴影，平滑呼吸淡入过渡。
+ * 1. A translucent scrim that matches the system style (40% in light mode / 52% in dark mode), without feeling oppressive;
+ * 2. Hardware-accelerated rounded cutout (BlendMode.Clear) + smooth fade-in in place (never slides toward the target from the centre of the screen);
+ * 3. The focused target's edge carries a very subtle breathing glow border;
+ * 4. Simulated panels use the native [ModelLogoIcon] and app-level card hierarchy, avoiding a cartoonish, toy-like feel;
+ * 5. A refined floating instruction card following Material 3 guidelines, without heavy black shadows, with a smooth breathing fade-in transition.
  */
 @Composable
 fun SpotlightOverlay(
@@ -96,7 +96,7 @@ fun SpotlightOverlay(
     val cardMarginPx = with(density) { 16.dp.toPx() }
     val cardGapPx = with(density) { 12.dp.toPx() }
 
-    // 呼吸灯动画：在高亮描边周围产生柔和微光脉冲
+    // Breathing animation: produces a soft glow pulse around the highlight outline
     val infiniteTransition = rememberInfiniteTransition(label = "SpotlightPulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.50f,
@@ -115,7 +115,7 @@ fun SpotlightOverlay(
         val isSheetStep = currentStep == OnboardingStep.SIMULATE_FETCH_DIALOG ||
             currentStep == OnboardingStep.SIMULATE_CHOOSE_MODEL
 
-        // 针对目标形态（图标小按钮 vs 宽组件）自适应计算最佳聚焦尺寸与安全边距，杜绝出界切边
+        // Adaptively computes the best focus size and safe margins for the target's shape (small icon button vs wide component), preventing any out-of-bounds clipping
         val (optimalTargetRect, holeRadiusPx) = remember(targetRect, screenWidthPx, screenHeightPx, density, isSheetStep) {
             if (targetRect != null && !isSheetStep) {
                 calculateOptimalHoleBounds(targetRect, screenWidthPx, screenHeightPx, density)
@@ -124,7 +124,7 @@ fun SpotlightOverlay(
             }
         }
 
-        // 聚光灯位置与透明度状态机
+        // State machine for the spotlight's position and opacity
         val holeLeft = remember { Animatable(0f) }
         val holeTop = remember { Animatable(0f) }
         val holeRight = remember { Animatable(0f) }
@@ -145,8 +145,8 @@ fun SpotlightOverlay(
                     ) > with(density) { 240.dp.toPx() }
 
                 if (isFirstTarget || isBigJump) {
-                    // 首次出现或跨页面大跳跃：
-                    // 立即对准新目标位置，在目标处淡入展开（消除全屏斜向拖拽拉扯的奇怪动画）
+                    // First appearance or a large jump across pages:
+                    // Snap immediately to the new target position and fade in/expand at the target (eliminating the odd full-screen diagonal drag/pull animation)
                     holeLeft.snapTo(optimalTargetRect.left)
                     holeTop.snapTo(optimalTargetRect.top)
                     holeRight.snapTo(optimalTargetRect.right)
@@ -154,7 +154,7 @@ fun SpotlightOverlay(
                     isFirstTarget = false
                     spotlightAlpha.animateTo(1f, animationSpec = tween(260, easing = FastOutSlowInEasing))
                 } else {
-                    // 同一区域内的近距离切换：平滑过渡到位
+                    // Short-distance switch within the same area: smooth transition into place
                     launch { holeLeft.animateTo(optimalTargetRect.left, tween(300, easing = FastOutSlowInEasing)) }
                     launch { holeTop.animateTo(optimalTargetRect.top, tween(300, easing = FastOutSlowInEasing)) }
                     launch { holeRight.animateTo(optimalTargetRect.right, tween(300, easing = FastOutSlowInEasing)) }
@@ -176,14 +176,14 @@ fun SpotlightOverlay(
 
         val primaryColor = MaterialTheme.colorScheme.primary
 
-        // 1. 全屏 Canvas：柔和半透明遮罩 + 挖孔清除 + 高亮微光边框
+        // 1. Full-screen Canvas: soft translucent scrim + cleared cutout + highlight glow border
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                 .pointerInput(targetRect, optimalTargetRect, onTargetClick) {
                     detectTapGestures { offset ->
-                        // 如果点击落在当前高亮区域内，优先响应高亮目标行为
+                        // If the tap lands inside the currently highlighted area, handle the highlighted target's behaviour first
                         if (targetRect != null && spotlightAlpha.value > 0.3f) {
                             val inHole = offset.x in optimalTargetRect.left..optimalTargetRect.right &&
                                 offset.y in optimalTargetRect.top..optimalTargetRect.bottom
@@ -192,11 +192,11 @@ fun SpotlightOverlay(
                                 return@detectTapGestures
                             }
                         }
-                        // 遮罩外部点击拦截消费，防止误触背后元素
+                        // Taps outside the scrim are intercepted and consumed, preventing accidental touches on elements behind it
                     }
                 }
         ) {
-            // 半透明遮罩
+            // Translucent scrim
             drawRect(color = scrimColor)
 
             if (spotlightAlpha.value > 0f) {
@@ -207,7 +207,7 @@ fun SpotlightOverlay(
                 val activeHoleHeight = holeBottom.value - holeTop.value
 
                 if (activeHoleWidth > 0f && activeHoleHeight > 0f) {
-                    // 挖孔
+                    // Cutout
                     drawRoundRect(
                         color = Color.Transparent,
                         topLeft = Offset(activeHoleLeft, activeHoleTop),
@@ -215,7 +215,7 @@ fun SpotlightOverlay(
                         cornerRadius = CornerRadius(holeRadiusPx, holeRadiusPx),
                         blendMode = BlendMode.Clear
                     )
-                    // 高亮聚焦外边框（实线微光）
+                    // Highlight focus outer border (solid glow)
                     drawRoundRect(
                         color = primaryColor.copy(alpha = pulseAlpha * currentAlpha),
                         topLeft = Offset(activeHoleLeft, activeHoleTop),
@@ -223,7 +223,7 @@ fun SpotlightOverlay(
                         cornerRadius = CornerRadius(holeRadiusPx, holeRadiusPx),
                         style = Stroke(width = 1.5.dp.toPx())
                     )
-                    // 外层微晕光泽（两倍发光半径）
+                    // Outer halo sheen (twice the glow radius)
                     val glowPadding = 2.dp.toPx()
                     drawRoundRect(
                         color = primaryColor.copy(alpha = 0.20f * pulseAlpha * currentAlpha),
@@ -236,7 +236,7 @@ fun SpotlightOverlay(
             }
         }
 
-        // 2. 说明指示小卡片：根据实测高度精确锚定，杜绝与聚光灯重叠
+        // 2. Instruction card: precisely anchored from its measured height, never overlapping the spotlight
         val cardWidthDp = 310.dp
         val cardWidthPx = with(density) { cardWidthDp.toPx() }
         var actualCardHeightPx by remember { mutableFloatStateOf(with(density) { 210.dp.toPx() }) }
@@ -258,7 +258,7 @@ fun SpotlightOverlay(
 
         val isBottomHalf = targetRect != null && ((holeTop.value + holeBottom.value) / 2f > screenHeightPx * 0.52f)
         val cardTopPx = if (isSheetStep) {
-            // 底部弹窗步骤：弹窗占据下半屏，卡片稳稳居中悬浮在屏幕上半区安全区域，绝不被弹窗遮挡
+            // Bottom-sheet step: the sheet occupies the lower half of the screen, so the card floats centred in the safe area of the upper half and is never obscured by the sheet
             (screenHeightPx * 0.10f).coerceIn(
                 cardMarginPx + with(density) { 36.dp.toPx() },
                 (screenHeightPx * 0.38f - actualCardHeightPx).coerceAtLeast(cardMarginPx + with(density) { 36.dp.toPx() })
@@ -266,10 +266,10 @@ fun SpotlightOverlay(
         } else if (targetRect == null || spotlightAlpha.value < 0.1f) {
             screenHeightPx * 0.38f
         } else if (isBottomHalf) {
-            // 目标处于屏幕下半区：卡片居于目标上方，卡片底边距离高亮顶边严格保留 cardGapPx
+            // Target is in the lower half of the screen: the card sits above the target, with the card's bottom edge strictly keeping cardGapPx from the highlight's top edge
             (holeTop.value - cardGapPx - actualCardHeightPx).coerceAtLeast(cardMarginPx)
         } else {
-            // 目标处于屏幕上半区：卡片居于目标下方，卡片顶边距离高亮底边严格保留 cardGapPx
+            // Target is in the upper half of the screen: the card sits below the target, with the card's top edge strictly keeping cardGapPx from the highlight's bottom edge
             (holeBottom.value + cardGapPx).coerceAtMost(screenHeightPx - actualCardHeightPx - cardMarginPx)
         }
 
@@ -313,7 +313,7 @@ fun SpotlightOverlay(
 }
 
 /**
- * 契合应用开发工具风格的高质感指示说明小卡片。
+ * A high-quality instruction card that matches the app's developer-tool style.
  */
 @Composable
 private fun SpotlightCard(
@@ -335,7 +335,7 @@ private fun SpotlightCard(
                 .fillMaxWidth()
                 .padding(Spacing.lg)
         ) {
-            // 步骤徽章：极简药丸胶囊
+            // Step badge: minimalist pill capsule
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -361,7 +361,7 @@ private fun SpotlightCard(
 
             Spacer(modifier = Modifier.height(Spacing.sm))
 
-            // 步骤标题
+            // Step title
             Text(
                 text = stringResource(step.titleRes),
                 style = MaterialTheme.typography.titleMedium,
@@ -371,7 +371,7 @@ private fun SpotlightCard(
 
             Spacer(modifier = Modifier.height(Spacing.xs))
 
-            // 步骤说明描述
+            // Step description
             Text(
                 text = stringResource(step.descRes),
                 style = MaterialTheme.typography.bodyMedium,
@@ -381,7 +381,7 @@ private fun SpotlightCard(
 
             Spacer(modifier = Modifier.height(Spacing.lg))
 
-            // 底部操作区：跳过 + 下一步/完成
+            // Bottom action area: Skip + Next/Done
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -420,12 +420,12 @@ private fun SpotlightCard(
 }
 
 /**
- * 根据目标元素在根视图中的边界，结合屏幕边界与组件特征计算最佳聚焦挖孔区域。
+ * Computes the optimal focus cutout region from the target element's bounds in the root view, combined with the screen bounds and the component's characteristics.
  *
- * 1. 紧凑型小目标（如 IconButton 顶栏按钮、模型切换键）：以其几何视觉中心对称聚焦，
- *    避免 48dp 交互热区叠加 padding 造成大方块撞墙截断；
- * 2. 宽型大目标（输入框、设置行）：保持外围 padding 并进行屏幕边缘防溢出夹紧；
- * 3. 屏幕边缘留有安全间距 [minEdgeMarginPx]，确保圆角和呼吸描边 100% 完整可见，绝不出界截断。
+ * 1. Compact small targets (e.g. an IconButton top-bar button, a model switch key): focus symmetrically on their geometric visual centre,
+ *    avoiding the large block that would be clipped against the edges if padding were added on top of the 48dp interactive hot area;
+ * 2. Wide large targets (input boxes, settings rows): keep the outer padding and clamp against the screen edges to prevent overflow;
+ * 3. A safe margin [minEdgeMarginPx] is left at the screen edges, ensuring the rounded corners and breathing outline are 100% fully visible and never clipped out of bounds.
  */
 private fun calculateOptimalHoleBounds(
     target: Rect,
@@ -444,7 +444,7 @@ private fun calculateOptimalHoleBounds(
         val centerX = target.center.x
         val centerY = target.center.y
 
-        // 确保不会超出屏幕边缘，保留 minEdgeMarginPx
+        // Ensure it never goes beyond the screen edge, keeping minEdgeMarginPx
         val left = (centerX - halfSize).coerceIn(minEdgeMarginPx, (screenWidth - minEdgeMarginPx - targetSizePx).coerceAtLeast(minEdgeMarginPx))
         val top = (centerY - halfSize).coerceIn(minEdgeMarginPx, (screenHeight - minEdgeMarginPx - targetSizePx).coerceAtLeast(minEdgeMarginPx))
         val rect = Rect(left, top, left + targetSizePx, top + targetSizePx)

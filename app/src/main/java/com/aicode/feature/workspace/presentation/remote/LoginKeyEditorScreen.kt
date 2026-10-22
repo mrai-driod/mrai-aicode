@@ -56,13 +56,13 @@ import compose.icons.feathericons.Eye
 import compose.icons.feathericons.EyeOff
 import compose.icons.feathericons.Shield
 
-/** 私钥内容隐藏时的掩码占位。 */
+/** Mask placeholder shown when the private-key content is hidden. */
 private const val MASKED_KEY = "••••••••••••••••••••••••••••••••"
 
 /**
- * 登录密钥编辑页。两种用途：
- * - [key] 为 null：新建（粘贴私钥），名称/口令/私钥内容均可填，保存后入库；
- * - [key] 非空：编辑已有密钥，可改名称与口令，私钥内容只读（默认隐藏、可点开查看）。
+ * Login key editor page. Two uses:
+ * - [key] is null: create (paste a private key); name/passphrase/key content can all be filled in and are saved to the store;
+ * - [key] is non-null: edit an existing key; name and passphrase can be changed, key content is read-only (hidden by default, can be revealed).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,7 +187,7 @@ fun LoginKeyEditorScreen(
                         color = MaterialTheme.semanticColors.cardSurface,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
-                        // 固定高度 + 内部滚动：切换显示/隐藏时私钥行数变化不会撑开页面。
+                        // Fixed height + internal scrolling: changes in the number of key lines when showing/hiding do not stretch the page.
                         Text(
                             text = if (pemVisible) pem.orEmpty() else MASKED_KEY,
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),

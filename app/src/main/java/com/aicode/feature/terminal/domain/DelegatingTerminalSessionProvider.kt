@@ -7,11 +7,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * [TerminalSessionProvider] 的委托层：同时持有本地与远程两套实现，每次方法调用时按
- * [ExecutionModeHolder.currentMode] 转发到对应实现。
+ * Delegation layer for [TerminalSessionProvider]: holds both local and remote implementations, and on each method call forwards according to
+ * [ExecutionModeHolder.currentMode] to the corresponding implementation.
  *
- * 这样 Hilt 注入时机不再影响最终行为——无论 [TerminalSessionProvider] 在何时被首次注入，
- * 真正使用终端时才读取当前模式。
+ * This way Hilt injection timing no longer affects the final behavior — no matter when [TerminalSessionProvider] is first injected,
+ * the current mode is only read when the terminal is actually used.
  */
 @Singleton
 class DelegatingTerminalSessionProvider @Inject constructor(

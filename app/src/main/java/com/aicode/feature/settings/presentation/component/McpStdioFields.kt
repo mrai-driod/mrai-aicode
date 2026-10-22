@@ -32,7 +32,7 @@ import compose.icons.feathericons.Trash2
 import androidx.compose.ui.res.stringResource
 import com.aicode.R
 
-/** stdio 形态字段：command + 参数列表 + 环境变量键值对（卡片排版）。 */
+/** stdio form fields: command + argument list + environment variable key-value pairs (card layout). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun McpStdioFields(

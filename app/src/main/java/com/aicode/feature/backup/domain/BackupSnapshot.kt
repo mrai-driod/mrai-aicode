@@ -7,10 +7,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * 备份快照：一次导出/导入的完整数据集。各 DTO 与 Room Entity 同构但解耦，避免序列化框架绑定到 Room。
+ * Backup snapshot: the complete data set for one export/import. Each DTO mirrors its Room Entity but is decoupled from it, so the serialization framework is not bound to Room.
  *
- * [schemaVersion] 记录导出时的 AgentDatabase 版本，导入时据此判断兼容性：
- * 备份版本 > 当前 App 版本则拒绝（字段可能缺失）；< 当前则允许（新字段取默认值）。
+ * [schemaVersion] records the AgentDatabase version at export time and is used on import to judge compatibility:
+ * backup version > current app version is rejected (fields may be missing); < current is allowed (new fields take default values).
  */
 @Serializable
 data class BackupSnapshot(
@@ -40,7 +40,7 @@ data class BackupSnapshot(
     val compactionThresholdPercent: Int = 90,
     val sendFileMaxSizeMb: Int = 100,
     val deleteExternalWorkspaceSessions: Boolean = false,
-    /** 任务待办显示位置（TodoDisplayPosition 的枚举名）；旧备份无此字段时导入回退到「消息栏上方」。 */
+    /** Todo display position (enum name of TodoDisplayPosition); when a legacy backup has no such field, import falls back to "above the message bar". */
     val todoDisplayPosition: String? = null,
     val logLevel: String? = null,
     val visionProviderId: String = "",
@@ -51,8 +51,8 @@ data class BackupSnapshot(
 )
 
 /**
- * 流式备份的元数据分片（tar 内 metadata.json）：不含聊天大表，大表走各 *.jsonl。
- * 与 [BackupSnapshot] 的元数据字段一一对应，导入时合并 jsonl 还原完整数据。
+ * Metadata shard of a streaming backup (metadata.json inside the tar): does not contain the large chat tables, which go in the individual *.jsonl files.
+ * Corresponds one-to-one with the metadata fields of [BackupSnapshot]; on import it is merged with the jsonl files to restore the complete data.
  */
 @Serializable
 data class BackupMetadata(
@@ -89,7 +89,7 @@ data class BackupMetadata(
     val workspaces: List<WorkspaceBackupMeta> = emptyList()
 )
 
-/** 备份元数据中的一个工作区段：名称 + 备份的文件数（用于导入摘要）。 */
+/** One workspace section in the backup metadata: name + number of backed-up files (used for the import summary). */
 @Serializable
 data class WorkspaceBackupMeta(
     val name: String,
@@ -142,26 +142,26 @@ data class ProviderDto(
     val isEnabled: Boolean = true,
     val useFullUrl: Boolean = false,
     val useResponseApi: Boolean = false,
-    /** 提供商级缓存开关；null 表示旧备份无此字段，导入时回退默认值。 */
+    /** Provider-level cache switch; null means a legacy backup has no such field, and import falls back to the default value. */
     val anthropicCacheBreakpoints: Boolean? = null,
     val openaiChatCacheKey: Boolean? = null,
-    /** 自定义面板脚本路径；null 表示旧备份无此字段，导入时回退默认值 ""。序列化名沿用历史命名以兼容旧备份。 */
+    /** Custom dashboard script path; null means a legacy backup has no such field, and import falls back to the default value "". The serialized name keeps the historical naming for compatibility with legacy backups. */
     @SerialName("balanceScriptPath")
     val dashboardScriptPath: String? = null,
-    /** 自定义面板刷新间隔（分钟）；null 表示旧备份无此字段，导入时回退默认值 5。序列化名沿用历史命名以兼容旧备份。 */
+    /** Custom dashboard refresh interval (minutes); null means a legacy backup has no such field, and import falls back to the default value 5. The serialized name keeps the historical naming for compatibility with legacy backups. */
     @SerialName("balanceRefreshInterval")
     val dashboardRefreshInterval: Int? = null,
-    /** 提供商列表排序序号；null 表示旧备份无此字段，导入时回退默认 0。 */
+    /** Provider list sort order; null means a legacy backup has no such field, and import falls back to the default 0. */
     val sortOrder: Int? = null,
-    /** 多 Key 模式相关字段；null 表示旧备份无此字段，导入时回退默认值。 */
+    /** Fields related to multi-key mode; null means a legacy backup has no such field, and import falls back to the default value. */
     val multiKeyEnabled: Boolean? = null,
     val apiKeys: String? = null,
     val keyRotationStrategy: String? = null,
     val keyFailoverThreshold: Int? = null,
     val keyCooldownMinutes: Int? = null,
-    /** 自定义面板 (DIY) 脚本参数（JSON 编码）；null 表示旧备份无此字段，导入时回退为空。 */
+    /** Custom dashboard (DIY) script parameters (JSON-encoded); null means a legacy backup has no such field, and import falls back to empty. */
     val scriptParams: String? = null,
-    /** 多 Key 自动切换状态码（逗号分隔）；null 表示旧备份无此字段，导入时回退空串（即默认码表）。 */
+    /** Status codes for automatic multi-key switching (comma-separated); null means a legacy backup has no such field, and import falls back to an empty string (i.e. the default code table). */
     val keySwitchStatusCodes: String? = null
 )
 
@@ -201,7 +201,7 @@ data class ChatSessionDto(
     val providerId: String? = null,
     val model: String? = null,
     val isPinned: Boolean = false,
-    /** 子代理会话的父会话 id；丢了它恢复后子会话会变成一堆根会话。 */
+    /** Parent session id of a sub-agent session; if it is lost, restored sub-sessions become a pile of root sessions. */
     val parentId: String? = null,
     val subagentType: String? = null
 )
@@ -224,7 +224,7 @@ data class AgentMessageDto(
     val isCompacted: Boolean = false,
     val isContextSummary: Boolean = false,
     val isCompactionMarker: Boolean = false,
-    /** Anthropic thinking / redacted_thinking 内容块的原样快照（JSON 数组文本）。 */
+    /** Verbatim snapshot of Anthropic thinking / redacted_thinking content blocks (JSON array text). */
     val thinkingBlocksJson: String? = null,
     val isContextExcluded: Boolean = false,
     val compactedBySummaryId: String? = null

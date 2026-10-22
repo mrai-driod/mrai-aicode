@@ -63,7 +63,7 @@ import compose.icons.feathericons.Sliders
 import compose.icons.feathericons.Type
 
 /**
- * 默认模型二级页：集中管理应用中的默认/特定用途模型设置（如识图模型、压缩模型）。
+ * Default models second-level page: centrally manages the app's default / special-purpose model settings (such as the vision model and the compaction model).
  */
 @Composable
 internal fun DefaultModelsSection(
@@ -90,9 +90,9 @@ internal fun DefaultModelsSection(
     onClearImageGenModel: () -> Unit,
     onSelectReviewerModel: (providerId: String, model: String) -> Unit,
     onClearReviewerModel: () -> Unit,
-    /** 上下文窗口统一值是否生效（仅用于副标题展示，开关本身在二级页里）。 */
+    /** Whether the unified context-window value is in effect (only used for the subtitle display; the switch itself is on the second-level page). */
     contextWindowEnabled: Boolean,
-    /** 点击整行进入二级设置页（开关与三个窗口值都在二级页里配置）。 */
+    /** Tapping the whole row opens the second-level settings page (the switch and the three window values are all configured on the second-level page). */
     onOpenContextWindow: () -> Unit
 ) {
     var showVisionSheet by remember { mutableStateOf(false) }
@@ -228,9 +228,9 @@ internal fun DefaultModelsSection(
             )
         }
 
-        // ── 上下文窗口统一高级设置 ──
-        // 入口行只负责「进二级页」，真正的开关与三个窗口值都在二级页里设置——
-        // 之前在外层也放了个开关，但必填校验会把它弹回关闭态（等于打不开），反而误导。
+        // ── Unified context-window advanced settings ──
+        // The entry row is only responsible for "opening the second-level page"; the actual switch and the three window values are all set on the second-level page —
+        // there used to be a switch on the outer level too, but required-field validation would bounce it back to the off state (effectively making it impossible to turn on), which was misleading.
         SettingsGroupHeader(text = stringResource(R.string.ctx_window_group))
         SettingsGroup {
             SettingsRow(
@@ -356,8 +356,8 @@ internal fun DefaultModelsSection(
 }
 
 /**
- * 模型选择弹窗：风格与拉取模型弹窗保持一致（iOS 胶囊搜索框、提供商分组卡片、能力 Tag）。
- * 识图模型、压缩模型与主页聊天模型共用此组件，仅文案不同；右上角「重置」清除专用模型配置（回退跟随聊天模型），主页场景传 null 不显示。
+ * Model selection sheet: its style matches the fetch-models sheet (iOS capsule search field, provider grouping cards, capability Tags).
+ * The vision model, compaction model and home-page chat model share this component, differing only in wording; "Reset" in the top-right corner clears the dedicated model configuration (falling back to following the chat model), and in the home-page scenario null is passed so it is not shown.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -448,7 +448,7 @@ internal fun ModelSelectionSheet(
                             searchQuery.isBlank() || it.contains(searchQuery, ignoreCase = true)
                         }
                         if (filteredModels.isNotEmpty()) {
-                            // 搜索时强制展开，否则用折叠状态：用户搜到名字却看不到结果会很困惑。
+                            // Force expansion while searching, otherwise use the collapsed state: it would be confusing if the user searched for a name but could not see the results.
                             val expanded = searchQuery.isNotBlank() || provider.id !in collapsedProviderIds
                             item(key = "header_${provider.id}") {
                                 CollapsibleGroupHeader(

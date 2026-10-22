@@ -3,19 +3,19 @@ package com.aicode.feature.terminal.domain
 import kotlinx.coroutines.flow.SharedFlow
 
 /**
- * 终端会话后端抽象：把"终端会话在哪运行"从硬编码的本地 Termux PTY 解耦。
+ * Terminal session backend abstraction: decouples "where the terminal session runs" from the hardcoded local Termux PTY.
  *
- * [TerminalSessionTool]（AI 的 terminal 工具）依赖本接口而非具体实现，
- * 由 DI 委托层按当前执行模式转发到对应实现：
- * - [TerminalSessionManager]：本地 Termux PTY（fork proot 进程）；
- * - `RemoteTerminalSessionManager`：远程 SSH shell channel。
+ * [TerminalSessionTool] (the AI's terminal tool) depends on this interface rather than a concrete implementation,
+ * and the DI delegation layer forwards to the corresponding implementation based on the current execution mode:
+ * - [TerminalSessionManager]: local Termux PTY (forks a proot process);
+ * - `RemoteTerminalSessionManager`: remote SSH shell channel.
  */
 interface TerminalSessionProvider {
 
-    /** 后台命令结束时 emit 的事件，供 ViewModel 订阅后通知 AI。 */
+    /** Event emitted when a background command ends, for the ViewModel to subscribe to and notify the AI. */
     val tabFinishedEvents: SharedFlow<TabFinishedEvent>
 
-    /** 把一条命令挂后台跑（如 `npm run dev`），返回唯一 tabId。 */
+    /** Runs a command in the background (e.g. `npm run dev`), returns a unique tabId. */
     suspend fun startBackgroundCommand(
         command: String,
         title: String? = null,
@@ -23,21 +23,21 @@ interface TerminalSessionProvider {
         sourceSessionId: String? = null
     ): String
 
-    /** 按 id 向标签发送输入并回车执行。返回是否命中标签且仍活跃。 */
+    /** Sends input to the tab by id and presses Enter to execute. Returns whether the tab was found and is still active. */
     fun sendInput(id: String, input: String, appendNewline: Boolean = true): Boolean
 
-    /** 按 id 向标签写入原始文本，不自动追加回车。 */
+    /** Writes raw text to the tab by id, without automatically appending a newline. */
     fun writeToTab(id: String, text: String): Boolean
 
-    /** 按 id 向标签写入原始字节（控制字符，如 Ctrl-C=0x03）。 */
+    /** Writes raw bytes to the tab by id (control characters, e.g. Ctrl-C=0x03). */
     fun writeBytesToTab(id: String, vararg bytes: Int): Boolean
 
-    /** 按 id 读取终端内容（emulator 屏幕缓冲）。返回 null 表示无此标签。 */
+    /** Reads terminal content by id (emulator screen buffer). Returns null if there is no such tab. */
     fun getTabOutput(id: String): String?
 
-    /** 列出全部标签的摘要。 */
+    /** Lists summaries of all tabs. */
     fun listTabs(): List<TabInfo>
 
-    /** 关闭并销毁标签。返回是否成功。 */
+    /** Closes and destroys a tab. Returns whether it succeeded. */
     fun closeTab(id: String): Boolean
 }

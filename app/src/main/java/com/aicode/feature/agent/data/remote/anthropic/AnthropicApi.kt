@@ -18,7 +18,7 @@ interface AnthropicApi {
         @Body request: AnthropicMessageRequest
     ): AnthropicMessageResponse
 
-    /** 流式（SSE）补全：返回原始响应体，由调用方逐行解析 event-stream。请求需带 stream=true。 */
+    /** Streaming (SSE) completion: returns the raw response body, which the caller parses line by line as an event-stream. The request must carry stream=true. */
     @Streaming
     @POST
     fun streamMessage(

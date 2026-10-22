@@ -114,7 +114,7 @@ fun WorkspaceChip(
 }
 
 /**
- * 顶栏的工作区选择图标按钮：点击弹出选择/新建/删除面板。
+ * Top-bar workspace picker icon button: tapping it opens the select/create/delete panel.
  */
 @Composable
 fun WorkspaceIconButton(
@@ -138,7 +138,7 @@ fun WorkspaceIconButton(
         )
     }
 
-    // 远程工作区路径/默认工作区创建失败提示：消费后清除，避免重复弹 Toast
+    // Remote workspace path / default workspace creation failure hint: cleared after consumption, to avoid showing the Toast repeatedly
     val initError by viewModel.initError.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(initError) {
@@ -158,8 +158,8 @@ fun WorkspaceIconButton(
 }
 
 /**
- * 工作区选择面板 + 切换确认弹窗的公共宿主：Chip 与 IconButton 两个入口共用，
- * 有会话运行时切换需先确认（确认回调由调用方执行停止逻辑）。
+ * Shared host for the workspace selection panel + switch confirmation dialog: shared by the Chip and IconButton entry points;
+ * switching while sessions are running requires confirmation first (the confirmation callback runs the caller's stop logic).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -191,7 +191,7 @@ private fun WorkspaceSelectionHost(
         }
     }
 
-    // 添加外部本地工作区失败提示：消费后清除，避免重复弹 Toast
+    // Add-external-local-workspace failure hint: cleared after consumption, to avoid showing the Toast repeatedly
     LaunchedEffect(addError) {
         if (addError != null) {
             Toast.makeText(context, addError, Toast.LENGTH_LONG).show()
@@ -199,7 +199,7 @@ private fun WorkspaceSelectionHost(
         }
     }
 
-    // 系统目录选择器：选设备上的目录注册为外部本地工作区
+    // System directory picker: choose a directory on the device to register as an external local workspace
     val folderLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->

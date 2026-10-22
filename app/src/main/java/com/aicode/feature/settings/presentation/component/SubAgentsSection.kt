@@ -42,9 +42,9 @@ import compose.icons.feathericons.ChevronRight
 import compose.icons.feathericons.Users
 
 /**
- * 子代理二级页：与「技能」一致的折叠分组列表——「当前项目 / 全局」两组各自可折叠，
- * 每行一个子代理（图标 + 名称 + 描述 + 模型标签），左滑删除，点击行进入详情。
- * 新建入口在顶栏的「＋」，启用开关与编辑入口在详情页。
+ * Sub-agent secondary page: a collapsible grouped list consistent with "Skills" -- the two groups "Current project / Global" are each collapsible,
+ * with one sub-agent per row (icon + name + description + model tag), swipe to delete, tap a row to open details.
+ * The create entry point is the "+" in the top bar; the enable toggle and edit entry are on the detail page.
  */
 @Composable
 internal fun SubAgentsSection(
@@ -157,7 +157,7 @@ internal fun SubAgentsSection(
     }
 }
 
-/** 单个子代理行：图标 + 名称/描述 + 模型标签 + 右箭头；左滑删除，点击行进入详情。 */
+/** Single sub-agent row: icon + name/description + model tag + right chevron; swipe to delete, tap the row to open details. */
 @Composable
 private fun SubAgentRow(
     entry: SubAgentUiEntry,
@@ -213,7 +213,7 @@ private fun SubAgentRow(
                             backgroundColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
                         )
                     }
-                    // 只在禁用时挂标签：默认启用是常态，每行都挂一个反而护不住重点。
+                    // Only show the tag when disabled: enabled-by-default is the norm, and tagging every row would bury the point.
                     if (entry.disabled) {
                         McpPill(
                             text = stringResource(R.string.common_disabled),
@@ -243,7 +243,7 @@ private fun SubAgentRow(
     }
 }
 
-/** 分组内空状态：一行灰字，与行内容对齐。 */
+/** Empty state inside a group: one line of gray text, aligned with row content. */
 @Composable
 private fun SubAgentEmptyHint(text: String) {
     Text(

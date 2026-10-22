@@ -2,7 +2,7 @@ package com.aicode.core.util
 
 import java.util.Locale
 
-/** 费用展示：小额保留 4 位小数，极小值折叠为 <$0.0001。 */
+/** Cost display: small amounts keep 4 decimal places, tiny values collapse to <$0.0001. */
 fun formatCostUsd(cost: Double): String = when {
     cost <= 0.0 -> "$0.00"
     cost < 0.0001 -> "<$0.0001"

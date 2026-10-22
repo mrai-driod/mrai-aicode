@@ -18,19 +18,19 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class StorageUiState(
-    /** 已算出的分类；扫描中时逐项填充，缺项界面显示「统计中」。 */
+    /** Categories computed so far; filled in item by item while scanning, and the UI shows "calculating" for missing items. */
     val entries: Map<StorageCategory, StorageEntry> = emptyMap(),
     val scanning: Boolean = false,
     val deviceSpace: DeviceSpace = DeviceSpace(0, 0),
     val expanded: Set<StorageCategory> = emptySet(),
     val cleaning: Boolean = false,
     val selectedCleanup: Set<CleanupKind> = setOf(CleanupKind.Caches, CleanupKind.Logs),
-    /** 上一次清理释放的字节数，非空时界面给出提示。 */
+    /** Bytes freed by the last cleanup; when non-null the UI shows a notice. */
     val freedBytes: Long? = null
 ) {
     val totalBytes: Long get() = entries.values.sumOf { it.bytes }
 
-    /** 各可清理项当前大小；未统计完的项按 0 计，界面据此禁用按钮。 */
+    /** Current size of each cleanable item; items not yet counted count as 0, and the UI disables buttons based on this. */
     val cleanableSizes: Map<CleanupKind, Long>
         get() = mapOf(
             CleanupKind.Caches to (entries[StorageCategory.Caches]?.bytes ?: 0L),
@@ -54,7 +54,7 @@ class StorageViewModel @Inject constructor(
     private val _state = MutableStateFlow(StorageUiState())
     val state: StateFlow<StorageUiState> = _state.asStateFlow()
 
-    /** 单独持有扫描协程：清理完成后触发的重扫不能把清理自身也取消掉。 */
+    /** Holds the scan coroutine separately: the rescan triggered after cleanup finishes must not cancel the cleanup itself. */
     private var scanJob: Job? = null
 
     init {

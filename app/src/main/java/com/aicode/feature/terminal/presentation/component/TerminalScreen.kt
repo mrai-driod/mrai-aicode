@@ -201,7 +201,7 @@ fun TerminalScreen(
     }
 }
 
-/** 可横滑的标签栏：每个标签显示状态点 + 标题 + 关闭；末尾「+」新建。激活标签变化时自动滚动，让当前标签可见。 */
+/** Horizontally scrollable tab bar: each tab shows a status dot + title + close; a "+" at the end creates a new one. Automatically scrolls when the active tab changes so the current tab stays visible. */
 @Composable
 private fun TabBar(
     tabs: List<TerminalTab>,
@@ -254,7 +254,7 @@ private fun TabBar(
                     modifier = Modifier.onGloballyPositioned { tabBounds[tab.id] = it.boundsInParent() }
                 )
             }
-            // SSH 模式下新建需等服务器响应，等待期间显示转圈并禁用按钮，避免网络卡顿时重复点击连开多个标签。
+            // In SSH mode creating a tab must wait for the server response; while waiting show a spinner and disable the button to avoid repeated taps opening multiple tabs when the network stalls.
             IconButton(onClick = onNew, enabled = !creating, modifier = Modifier.size(32.dp)) {
                 if (creating) {
                     CircularProgressIndicator(
@@ -286,12 +286,12 @@ private fun TabChip(
     val running = tab.runState is RunState.Running
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
     val dot = when {
-        running -> MaterialTheme.semanticColors.success // 鲜明活跃绿
+        running -> MaterialTheme.semanticColors.success // vivid active green
         tab.isBackground -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.outline
     }
 
-    // 选中态高对比度设计：醒目主色描边 + 浅主色填充 + 加粗文字
+    // Selected state high-contrast design: prominent primary-color outline + light primary fill + bold text
     val bg = when {
         selected -> MaterialTheme.colorScheme.primary.copy(alpha = if (isLight) 0.14f else 0.22f)
         else -> MaterialTheme.semanticColors.capsuleSurface
@@ -321,7 +321,7 @@ private fun TabChip(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
-        // 运行状态指示点（激活且运行时带微发光外圈）
+        // Running status indicator dot (with a subtle glowing outer ring when selected and running)
         Box(
             modifier = Modifier
                 .size(if (selected && running) 10.dp else 8.dp)
@@ -385,7 +385,7 @@ private fun applyTerminalColors(
     view.invalidate()
 }
 
-/** Termux TerminalView 的 Compose 包装：渲染与输入全部由该开源组件负责。 */
+/** Compose wrapper for the Termux TerminalView: rendering and input are all handled by that open-source component. */
 @Composable
 private fun TerminalSurface(
     tab: TerminalTab,
@@ -394,7 +394,7 @@ private fun TerminalSurface(
 ) {
     val preset = settings.theme
     val bgColor = Color(preset.background)
-    // 字号单一事实源：捏合缩放只改这里（预览），手势结束才落盘；设置面板的改动反向同步进来。
+    // Single source of truth for font size: pinch zoom only changes this (preview), persisted only when the gesture ends; changes from the settings panel sync back in.
     var liveFontSizeSp by remember { mutableIntStateOf(settings.fontSizeSp) }
     LaunchedEffect(settings.fontSizeSp) { liveFontSizeSp = settings.fontSizeSp }
 
@@ -481,7 +481,7 @@ private fun StatusView(
     }
 }
 
-/** 把容器初始化进度状态映射为 Loading 阶段展示给用户的文案。 */
+/** Maps container initialization progress state to the text shown to the user during the Loading phase. */
 private fun containerInitMessage(context: Context, state: ContainerInitState): String = when (state) {
     is ContainerInitState.CleaningOldRootfs ->
         context.getString(R.string.terminal_cleaning_old_container, state.processed)
@@ -495,7 +495,7 @@ private fun containerInitMessage(context: Context, state: ContainerInitState): S
         context.getString(R.string.terminal_preparing_env_first_run)
 }
 
-/** Termius 风格的现代化极客辅助按键栏。 */
+/** Termius-style modern geek auxiliary keys bar. */
 @Composable
 private fun ExtraKeysRow(viewModel: TerminalViewModel) {
     Surface(
@@ -511,7 +511,7 @@ private fun ExtraKeysRow(viewModel: TerminalViewModel) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 控制键
+            // Control keys
             KeyChip("ESC") { viewModel.write("\u001b") }
             KeyChip("TAB") { viewModel.write("\t") }
             KeyChip("CTRL", active = viewModel.modifiers.ctrl) {
@@ -521,19 +521,19 @@ private fun ExtraKeysRow(viewModel: TerminalViewModel) {
                 viewModel.modifiers.alt = !viewModel.modifiers.alt
             }
 
-            // 方向键
+            // Arrow keys
             KeyChip("←", repeatOnHold = true) { viewModel.write("\u001b[D") }
             KeyChip("↑", repeatOnHold = true) { viewModel.write("\u001b[A") }
             KeyChip("↓", repeatOnHold = true) { viewModel.write("\u001b[B") }
             KeyChip("→", repeatOnHold = true) { viewModel.write("\u001b[C") }
 
-            // 快捷控制组合
+            // Shortcut control combos
             KeyChip("C-c") { viewModel.writeBytes(0x03) }
             KeyChip("C-d") { viewModel.writeBytes(0x04) }
             KeyChip("C-z") { viewModel.writeBytes(0x1A) }
             KeyChip("C-l") { viewModel.writeBytes(0x0C) }
 
-            // 常用编程与 shell 符号
+            // Common programming and shell symbols
             KeyChip("|") { viewModel.write("|") }
             KeyChip("~") { viewModel.write("~") }
             KeyChip("/") { viewModel.write("/") }
@@ -548,7 +548,7 @@ private fun ExtraKeysRow(viewModel: TerminalViewModel) {
     }
 }
 
-/** 方向键长按重复节奏：按下后延迟多久开始连续发送，以及每次发送的间隔。 */
+/** Arrow-key long-press repeat timing: how long after pressing before continuous sending starts, and the interval between sends. */
 private const val KEY_REPEAT_INITIAL_DELAY_MS = 350L
 private const val KEY_REPEAT_INTERVAL_MS = 50L
 
@@ -619,6 +619,6 @@ private fun KeyChip(
     }
 }
 
-/** 单字符按键给固定宽度，多字符按键自适应。 */
+/** Single-character keys get a fixed width, multi-character keys size adaptively. */
 private fun Modifier.widthChip(label: String): Modifier =
     if (label.length <= 1) this.width(36.dp) else this

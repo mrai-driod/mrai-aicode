@@ -23,8 +23,8 @@ class MessagePersistenceUseCase @Inject constructor(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** agent_messages 表变更版本号：任何写路径（含 rewind 删除、压缩标记、冷启动清理）触发递增，
-     *  作为 [buildHistory] 缓存的失效信号。InvalidationTracker 监听表级变更，覆盖所有 DAO 写入。 */
+    /** Version number for agent_messages table changes: any write path (including rewind deletions, compaction marks, cold-start cleanup) increments it,
+     *  serving as the invalidation signal for the [buildHistory] cache. InvalidationTracker watches table-level changes, covering all DAO writes. */
     private val dbVersion = java.util.concurrent.atomic.AtomicLong(0)
     private val historyCache = HashMap<String, HistoryEntry>()
 
@@ -44,8 +44,8 @@ class MessagePersistenceUseCase @Inject constructor(
         )
     }
 
-    /** 内嵌图片 base64 的 LRU 缓存：key = path:size:lastModified，避免工具循环中
-     *  每轮 LLM 调用都重读文件 + base64 编码。带条目与总字节双重上限。 */
+    /** LRU cache for embedded-image base64: key = path:size:lastModified, avoiding, in the tool loop,
+     *  re-reading the file + base64-encoding it on every LLM call. Has both an entry-count and a total-bytes cap. */
     private val imageBase64Cache = object : LinkedHashMap<String, String>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
             size > MAX_IMAGE_CACHE_ENTRIES
@@ -67,7 +67,7 @@ class MessagePersistenceUseCase @Inject constructor(
         }
     }
 
-    // 单调递增时间戳：保证同毫秒内多次落库的顺序稳定（assistant 永远在其 tool 结果之前）。
+    // Monotonically increasing timestamp: keeps the order of multiple writes within the same millisecond stable (assistant always before its tool result).
     @Volatile
     private var lastTimestamp = 0L
 
@@ -168,37 +168,37 @@ class MessagePersistenceUseCase @Inject constructor(
         )
 
         /**
-         * 单条消息各文本字段的持久化上限（UTF-8 字节数）。远小于 SQLite CursorWindow 单窗口约 2MB
-         * 的硬限制，防止超大内容撑爆数据行导致读取消息时崩溃。
+         * Persistence cap for each text field of a single message (in UTF-8 bytes). Far below the SQLite CursorWindow single-window hard limit of about 2MB,
+         * preventing oversized content from bloating a data row and crashing when messages are read.
          *
-         * 按字节而非字符设限：中文等文本单字符最多占 3 字节，字符数上限约束不住真实占用。
-         * 也不能只限制单个字段——同一条消息可同时带正文、思考、工具入参等多份大快照，
-         * 各字段上限之和（约 720KB）必须整体留在窗口大小之下，否则该行可能因窗口预填充
-         * 而无处安放，读取时抛 IllegalStateException「Couldn't read row N, col 0 from CursorWindow」。
+         * The cap is in bytes, not characters: text such as Chinese can take up to 3 bytes per character, so a character-count cap cannot bound real usage.
+         * Nor can only a single field be capped -- one message can carry body, reasoning, tool arguments and several other large snapshots at once,
+         * so the sum of the per-field caps (about 720KB) must stay below the window size as a whole, otherwise the row may have nowhere to fit during window pre-fill
+         * and reading it throws IllegalStateException "Couldn't read row N, col 0 from CursorWindow".
          */
         const val MAX_CONTENT_BYTES = 150_000
         const val MAX_SNAPSHOT_BYTES = 100_000
         const val MAX_ATTACHMENTS_BYTES = 20_000
-        /** 工具入参上限：与正文同量级，长参数（如大段文件内容）能完整落库、由 UI 限高滚动查看。 */
+        /** Tool-argument cap: same order of magnitude as the body, so long arguments (such as large chunks of file content) can be persisted in full and viewed in the UI with height-limited scrolling. */
         const val MAX_TOOL_ARGS_BYTES = 150_000
-        const val IMAGE_OMITTED_MARKER = "[图片已省略：内嵌图片数据过大]"
-        const val CONTENT_TRUNCATED_MARKER = "…[内容过长，已截断]"
-        /** 图片 base64 缓存条目上限。 */
+        const val IMAGE_OMITTED_MARKER = "[Image omitted: embedded image data too large]"
+        const val CONTENT_TRUNCATED_MARKER = "...[Content too long, truncated]"
+        /** Image base64 cache entry cap. */
         private const val MAX_IMAGE_CACHE_ENTRIES = 12
-        /** 图片 base64 缓存总字节上限（base64 为原始大小的 ~4/3，48MB 约可存 36MB 原始图片）。 */
+        /** Image base64 cache total-bytes cap (base64 is ~4/3 of the original size, so 48MB holds about 36MB of original images). */
         private const val MAX_IMAGE_CACHE_BYTES = 48L * 1024 * 1024
 
-        /** 内嵌 base64 图片 data URL（`data:image/...;base64,...`）。 */
+        /** Embedded base64 image data URL (`data:image/...;base64,...`). */
         private val INLINE_BASE64_IMAGE = Regex("""data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+""")
 
-        /** UTF-8 单字符最多占 3 字节，故 [String.length] 的三倍不超上限时无需实际编码即可放行。 */
+        /** A single UTF-8 character takes at most 3 bytes, so when three times [String.length] does not exceed the cap it can pass without actually encoding. */
         private fun definitelyFits(raw: String, maxBytes: Int): Boolean =
             raw.length.toLong() * 3 <= maxBytes
 
         /**
-         * 落库前的内容净化，为所有 provider/模型提供统一兜底防线：
-         * 1. 剥离内嵌的 base64 图片 data URL（替换为占位说明），此类内容本不该进数据库文本；
-         * 2. 剥离后仍超长的内容按 UTF-8 字节截断到 [MAX_CONTENT_BYTES]，避免任何超大行触发 CursorWindow 崩溃。
+         * Content sanitisation before persisting, providing a uniform safety net for all providers/models:
+         * 1. Strip embedded base64 image data URLs (replaced with a placeholder note); such content should not enter database text in the first place;
+         * 2. Content still too long after stripping is truncated by UTF-8 bytes to [MAX_CONTENT_BYTES], avoiding any oversized row triggering a CursorWindow crash.
          */
         internal fun sanitizeContent(raw: String): String {
             if (definitelyFits(raw, MAX_CONTENT_BYTES) && !raw.contains("data:image/", ignoreCase = true)) {
@@ -210,10 +210,10 @@ class MessagePersistenceUseCase @Inject constructor(
         }
 
         /**
-         * 落库前对 JSON 快照字段（toolCallsJson / thinkingBlocksJson / attachmentsJson）与
-         * 思考签名等非展示文本按 UTF-8 字节截断。截断后 JSON 不再可解析，读取方经 runCatching
-         * 降级为「无工具调用 / 无思考快照 / 无附件」，而非崩溃；不带截断标记，避免给解析方徒增无意义内容。
-         * 截断按码点边界进行，不切出半个代理对。
+         * Before persisting, truncate JSON snapshot fields (toolCallsJson / thinkingBlocksJson / attachmentsJson) and
+         * non-display text such as reasoning signatures by UTF-8 bytes. Truncated JSON is no longer parseable; readers degrade via runCatching
+         * to "no tool calls / no reasoning snapshot / no attachments" instead of crashing; no truncation marker is added, to avoid giving parsers meaningless extra content.
+         * Truncation happens on code-point boundaries, never splitting a surrogate pair.
          */
         internal fun capBytes(raw: String, maxBytes: Int): String {
             if (definitelyFits(raw, maxBytes)) return raw
@@ -237,15 +237,15 @@ class MessagePersistenceUseCase @Inject constructor(
     }
 
     /**
-     * 从持久化的消息重建合法的上下文历史。
-     * 关键：只保留「assistant 的 tool_call」与「tool 结果」能配对成功的部分，
-     * 丢弃任何一方缺失的悬挂项，避免回放出现孤儿 tool_use / tool_result 违反 API 约束。
-     * 已被上下文压缩标记的消息（isCompacted=true）不参与回放。
+     * Rebuilds a valid context history from persisted messages.
+     * Key point: keep only the parts where "the assistant's tool_call" and "the tool result" pair up successfully,
+     * discarding dangling items missing either side, so replay never produces orphan tool_use / tool_result entries that violate API constraints.
+     * Messages marked as context-compacted (isCompacted=true) do not take part in replay.
      */
     suspend fun buildHistory(sessionId: String, pendingToolMarker: String): List<AgentMessage> {
-        // 版本化缓存：agent_messages 表无变更且 marker 相同时直接复用上次重建结果，
-        // 避免工具循环中每轮 LLM 调用都全量读库 + 多次遍历 + JSON 解码。
-        // InvalidationTracker 覆盖所有写路径（含 rewind 删除、压缩标记、冷启动清理），不会漏失效。
+        // Versioned cache: when the agent_messages table is unchanged and the marker is the same, reuse the last rebuild result directly,
+        // avoiding a full database read + multiple passes + JSON decoding on every LLM call in the tool loop.
+        // InvalidationTracker covers all write paths (including rewind deletions, compaction marks, cold-start cleanup), so no invalidation is missed.
         val version = dbVersion.get()
         synchronized(historyCache) {
             historyCache[sessionId]?.let { cached ->
@@ -265,7 +265,7 @@ class MessagePersistenceUseCase @Inject constructor(
         val entities = agentMessageDao.getMessagesBySessionOnce(sessionId)
             .filter { !it.isCompacted && !it.isContextExcluded }
 
-        // 第一遍：求 assistant 声明的 toolCallId 与 tool 结果 toolCallId 的交集。
+        // First pass: compute the intersection of the toolCallIds declared by the assistant and the toolCallIds of tool results.
         val declaredIds = mutableSetOf<String>()
         val resultIds = mutableSetOf<String>()
         for (e in entities) {
@@ -275,7 +275,7 @@ class MessagePersistenceUseCase @Inject constructor(
                         .getOrNull()?.forEach { tc -> declaredIds.add(tc.id) }
                 }
                 MessageRole.TOOL -> {
-                    // 只有真正完成的结果才计入配对；执行中占位行（完成事件未回来的孤儿）不算。
+                    // Only genuinely completed results count toward pairing; running placeholder rows (orphans whose completion event never came back) do not.
                     if (!e.content.startsWith(pendingToolMarker) &&
                         !e.content.startsWith(SessionUseCase.LEGACY_PENDING_TOOL_MARKER)
                     ) {
@@ -287,7 +287,7 @@ class MessagePersistenceUseCase @Inject constructor(
         }
         val validIds = declaredIds intersect resultIds
 
-        // 第二遍：构建消息，过滤掉无法配对的工具调用 / 工具结果。
+        // Second pass: build messages, filtering out tool calls / tool results that cannot be paired.
         val result = mutableListOf<AgentMessage>()
         for (e in entities) {
             when (MessageRole.valueOf(e.role)) {
@@ -363,7 +363,7 @@ class MessagePersistenceUseCase @Inject constructor(
                                 signature = e.signature ?: "",
                                 thinkingBlocksJson = e.thinkingBlocksJson ?: "",
                                 inputTokens = e.inputTokens,
-                                // 附件里的图片按路径重建 base64（带缓存），供下一轮上下文回放。
+                                // Images in attachments are rebuilt to base64 by path (with caching) for the next round of context replay.
                                 images = imageAttachments.mapNotNull { it.toAgentImage() }
                             )
                         )
@@ -391,7 +391,7 @@ class MessagePersistenceUseCase @Inject constructor(
         if (!isImage || localPath.isBlank()) return null
         val file = java.io.File(localPath)
         if (!file.exists() || !file.isFile || file.length() <= 0) return null
-        // 按路径+大小+修改时间缓存 base64：文件未变时直接复用，省去每次 LLM 调用的重读+编码。
+        // Cache base64 by path+size+modification time: when the file is unchanged, reuse it directly, saving the re-read+encode on every LLM call.
         val key = "$localPath:${file.length()}:${file.lastModified()}"
         cachedImageBase64(key)?.let { cached ->
             return com.aicode.feature.agent.domain.model.AgentImage(

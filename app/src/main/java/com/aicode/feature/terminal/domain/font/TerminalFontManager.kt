@@ -10,19 +10,19 @@ import com.aicode.core.util.FileLogger
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
-/** 一个可用的终端字体：文件绝对路径 + 展示名（文件名去扩展名）。 */
+/** An available terminal font: absolute file path + display name (file name without extension). */
 data class TerminalFont(
     val path: String,
     val displayName: String
 )
 
 /**
- * 终端自定义字体管理：导入的 ttf/otf 存放在 App 私有目录，按路径加载并缓存 Typeface。
- * 不走 Hilt，设置面板与终端渲染两侧都直接以 Context 调用。
+ * Terminal custom font management: imported ttf/otf files are stored in the app's private directory, loaded by path and cached as Typeface.
+ * Does not use Hilt; both the settings panel and terminal rendering sides call it directly with a Context.
  */
 object TerminalFontManager {
 
-    /** 内置字体的伪路径。不是真实文件路径，凡是校验 fontPath 是否存在的地方都要先放行它。 */
+    /** Pseudo-path for the built-in font. Not a real file path; anywhere that checks whether fontPath exists must allow it through first. */
     const val BUILTIN_PATH = "builtin:jetbrains-mono-nl"
 
     private const val DIR_NAME = "terminal_fonts"
@@ -40,7 +40,7 @@ object TerminalFontManager {
             ?.map { TerminalFont(path = it.absolutePath, displayName = it.nameWithoutExtension) }
             ?: emptyList()
 
-    /** 复制字体文件到私有目录并校验可解析；失败返回 null。 */
+    /** Copies a font file to the private directory and verifies it can be parsed; returns null on failure. */
     fun importFont(context: Context, uri: Uri): TerminalFont? {
         val fileName = queryDisplayName(context, uri) ?: return null
         if (File(fileName).extension.lowercase() !in SUPPORTED_EXTENSIONS) return null
@@ -51,12 +51,12 @@ object TerminalFontManager {
                 target.outputStream().use { output -> input.copyTo(output) }
             } ?: return null
 
-            // 无效字体文件会在此抛异常，避免把坏文件留在目录里
+            // An invalid font file will throw here, avoiding leaving a bad file in the directory
             Typeface.createFromFile(target)
             typefaceCache.remove(target.absolutePath)
             TerminalFont(path = target.absolutePath, displayName = target.nameWithoutExtension)
         } catch (e: Exception) {
-            FileLogger.e("TerminalFont", "导入字体失败: $fileName", e)
+            FileLogger.e("TerminalFont", "Failed to import font: $fileName", e)
             target.delete()
             null
         }
@@ -67,13 +67,13 @@ object TerminalFontManager {
         return File(path).delete()
     }
 
-    /** 加载字体；路径为空或文件损坏时返回 null，由调用方回落到系统等宽字体。 */
+    /** Load a font; returns null when the path is empty or the file is corrupted, letting the caller fall back to the system monospace font. */
     fun loadTypeface(context: Context, path: String): Typeface? {
         if (path.isBlank()) return null
         if (path == BUILTIN_PATH) {
             typefaceCache[BUILTIN_PATH]?.let { return it }
             return runCatching { ResourcesCompat.getFont(context, R.font.jetbrains_mono_nl) }
-                .onFailure { FileLogger.e("TerminalFont", "加载内置字体失败", it) }
+                .onFailure { FileLogger.e("TerminalFont", "Failed to load built-in font", it) }
                 .getOrNull()
                 ?.also { typefaceCache[BUILTIN_PATH] = it }
         }
@@ -83,7 +83,7 @@ object TerminalFontManager {
         return try {
             Typeface.createFromFile(file).also { typefaceCache[path] = it }
         } catch (e: Exception) {
-            FileLogger.e("TerminalFont", "加载字体失败: $path", e)
+            FileLogger.e("TerminalFont", "Failed to load font: $path", e)
             null
         }
     }

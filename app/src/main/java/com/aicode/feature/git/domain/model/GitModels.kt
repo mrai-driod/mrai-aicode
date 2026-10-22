@@ -1,14 +1,14 @@
 package com.aicode.feature.git.domain.model
 
 /**
- * Git 领域模型。所有字段均由 [com.aicode.feature.git.domain.GitRepository] 解析
- * `git status --porcelain` / `git log` / `git for-each-ref` 的输出得到，纯数据、无 Android 依赖。
+ * Git domain models. All fields are parsed by [com.aicode.feature.git.domain.GitRepository]
+ * from the output of `git status --porcelain` / `git log` / `git for-each-ref`. Pure data, no Android dependencies.
  */
 
-/** 单个文件的改动：路径 + git status 的 XY 两字符状态码 + 是否已暂存（由 X 列决定）。 */
+/** A single file's change: path + the two-character XY status code from git status + whether it is staged (decided by the X column). */
 data class GitFileChange(
     val path: String,
-    /** 形如 "M"/"A"/"D"/"R"/"??"，来自 porcelain 输出。 */
+    /** Of the form "M"/"A"/"D"/"R"/"??", from porcelain output. */
     val statusCode: String,
     val staged: Boolean
 )
@@ -41,7 +41,7 @@ data class GitStash(
     val date: String
 )
 
-/** `git status` 的聚合视图：分支跟踪信息 + 分组后的文件改动。 */
+/** Aggregated view of `git status`: branch tracking info + file changes grouped by category. */
 data class GitStatus(
     val branch: String,
     val ahead: Int,

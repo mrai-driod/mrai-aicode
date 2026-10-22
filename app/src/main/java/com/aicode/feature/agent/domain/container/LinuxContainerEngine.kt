@@ -33,24 +33,24 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 本地 PRoot 容器命令执行后端，实现 [CommandEngine]。
+ * Local PRoot container command execution backend, implementing [CommandEngine].
  *
- * 原有逻辑零变化——仅加 `: CommandEngine` 并给公开方法补 `override`。
- * [CommandEvent] 与 [CommandResult] 已提升为顶层类型（见 [CommandEngine.kt]），
- * 本类不再自行定义。PRoot 专属方法（[startStdioProcess]/[buildProotInvocation]/
- * [incPromptInFlight] 等）不属于接口，仅供本地 MCP stdio / 凭据 helper / 终端 PTY 使用。
+ * The original logic is unchanged - only `: CommandEngine` was added and `override` added to public methods.
+ * [CommandEvent] and [CommandResult] have been promoted to top-level types (see [CommandEngine.kt]),
+ * and this class no longer defines them itself. PRoot-specific methods ([startStdioProcess]/[buildProotInvocation]/
+ * [incPromptInFlight], etc.) are not part of the interface and are only for local MCP stdio / credential helper / terminal PTY use.
  */
 /**
- * 一次 PRoot 调用的完整描述：可执行文件 + 参数列表 + 环境变量。
+ * The complete description of one PRoot invocation: executable + argument list + environment variables.
  *
- * [argv] 的第 0 个元素即 proot 二进制路径，其余为参数。
+ * Element 0 of [argv] is the proot binary path, the rest are arguments.
  *
- * 两种消费方都要拿到「完整 argv」：
- *  - [ProcessBuilder] 直接接收 argv 列表；
- *  - Termux TerminalSession 的 cmd 仅用于 execvp 查找可执行文件，真正的 argv 由它的
- *    args 参数原样构成（native execvp(cmd, argv)，不会自动补 argv[0]），故 args 必须
- *    也是「含 argv[0]=proot 二进制」的完整 argv，否则选项整体错位一位、proot 会把
- *    rootfs 路径误当客户机程序（"is not a regular file"）。[executable] 只用于前者的 cmd 槽位。
+ * Both consumers need the "complete argv":
+ *  - [ProcessBuilder] receives the argv list directly;
+ *  - Termux TerminalSession's cmd is only used for execvp to look up the executable; the real argv is formed as-is from its
+ *    args parameter (native execvp(cmd, argv), which does not automatically add argv[0]), so args must
+ *    also be the complete argv "including argv[0]=proot binary", otherwise every option shifts by one place and proot will
+ *    mistake the rootfs path for the guest program ("is not a regular file"). [executable] is only used for the former's cmd slot.
  */
 data class ProotInvocation(
     val argv: List<String>,
@@ -59,13 +59,13 @@ data class ProotInvocation(
     val executable: String get() = argv.first()
 
     /**
-     * 供 Termux [com.termux.terminal.TerminalSession] 使用的完整环境数组（"KEY=VALUE"）。
+     * The complete environment array ("KEY=VALUE") for use by Termux [com.termux.terminal.TerminalSession].
      *
-     * [ProcessBuilder] 的 environment() 初始即为父进程（App）环境的副本，再叠加 [env]，
-     * 因此 proot 能拿到 ANDROID_ROOT/ANDROID_DATA/LD_LIBRARY_PATH 等系统变量；但
-     * TerminalSession 接收的是「完整、不继承父进程」的环境数组，只喂 [env] 会让 proot
-     * 这个动态链接的 Android 可执行文件因缺系统环境而 exec 失败、瞬间退出（终端表现为
-     * 「会话已结束」而日志无其他报错）。故在此显式合并父进程环境，复刻 ProcessBuilder 语义。
+     * [ProcessBuilder]'s environment() initially is a copy of the parent process (App) environment, with [env] overlaid,
+     * so proot can get system variables such as ANDROID_ROOT/ANDROID_DATA/LD_LIBRARY_PATH; but
+     * TerminalSession receives a "complete environment array that does not inherit the parent process", so feeding only [env] would make proot,
+     * a dynamically linked Android executable, fail to exec due to the missing system environment and exit instantly (the terminal shows
+     * "session ended" with no other error in the log). So the parent process environment is explicitly merged here, replicating ProcessBuilder semantics.
      */
     val ptyEnvArray: Array<String>
         get() = (System.getenv() + env).map { "${it.key}=${it.value}" }.toTypedArray()
@@ -79,25 +79,25 @@ class LinuxContainerEngine @Inject constructor(
     private val containerSettingsRepository: com.aicode.feature.settings.data.repository.ContainerSettingsRepository,
     private val pathHomeResolver: com.aicode.feature.workspace.domain.PathHomeResolver
 ) : CommandEngine {
-    /** 容器初始化的实时进度，供所有入口（终端页/AI/后台终端/MCP）共享同一份状态。 */
+    /** Real-time progress of container initialization, sharing one state across all entry points (terminal page/AI/background terminal/MCP). */
     private val _initProgress = MutableStateFlow<ContainerInitState>(ContainerInitState.Idle)
     override val initProgress: StateFlow<ContainerInitState> = _initProgress.asStateFlow()
 
-    /** 串行化容器初始化（含后台 initScope 内的任务创建与执行），避免多入口并发重复解压/配置。 */
+    /** Serializes container initialization (including task creation and execution inside the background initScope), avoiding duplicate extraction/configuration from concurrent entry points. */
     private val initMutex = Mutex()
 
     /**
-     * 容器初始化的独立协程作用域：不随任何页面/调用方取消而中断，
-     * 保证退出终端页后初始化仍在后台继续，下次进入可复用或等待其完成。
+     * Independent coroutine scope for container initialization: not interrupted by cancellation of any page/caller,
+     * guaranteeing that initialization continues in the background after leaving the terminal page, and can be reused or awaited on the next entry.
      */
     private val initScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** 当前在途的初始化 job（受 [initMutex] 保护），完成后置 null。 */
+    /** The currently in-flight initialization job (protected by [initMutex]), set to null on completion. */
     private var initJob: Job? = null
 
     /**
-     * 当前选中的 profile（缓存自 [containerSettingsRepository.activeProfileIdFlow]，避免同步读 DataStore）。
-     * 启动首帧为内置 Alpine（等同改动前）；profile 切换后由 flow collector 更新。fallback 到内置保证安全。
+     * The currently selected profile (cached from [containerSettingsRepository.activeProfileIdFlow], avoiding synchronous DataStore reads).
+     * The first frame at startup is the built-in Alpine (same as before the change); after a profile switch it is updated by the flow collector. Falling back to the built-in keeps it safe.
      */
     @Volatile
     private var currentProfile: ContainerProfile = ContainerProfile.BUILTIN_ALPINE
@@ -111,8 +111,8 @@ class LinuxContainerEngine @Inject constructor(
     }
 
     /**
-     * 按 id 解析 profile：从持久化列表找，找不到回退列表第一个，再兜底内置 Alpine（保证引擎始终可用）。
-     * 列表里持久化的 Alpine 覆盖项优先于 [ContainerProfile.BUILTIN_ALPINE] 常量（用户编辑过的配置生效）。
+     * Resolves a profile by id: looks it up in the persisted list, falls back to the first in the list if not found, then to the built-in Alpine (guaranteeing the engine is always usable).
+     * A persisted Alpine override in the list takes precedence over the [ContainerProfile.BUILTIN_ALPINE] constant (so user-edited configuration takes effect).
      */
     private suspend fun resolveProfile(id: String): ContainerProfile {
         val profiles = containerSettingsRepository.customProfilesFlow.first()
@@ -122,72 +122,72 @@ class LinuxContainerEngine @Inject constructor(
     }
 
     /**
-     * 当前正在途的凭据请求计数（自定义 credential helper 阻塞等 app 弹窗回填的对数）。
+     * Count of credential requests currently in flight (the number of pairs where the custom credential helper is blocked waiting for the app dialog to fill in).
      *
-     * 由 [com.aicode.feature.credentials.data.CredentialRequestBridge] 在收到 helper 的 cred-req 时 inc、
-     * 写回 cred-resp 时 dec。[launchKillWatchdog] 据此放宽超时——helper 在途时用户的 git 命令是「正等
-     * 用户填凭据」而非「卡死」，watchdog 不应按常规超时强杀，详见其改造注释。
+     * Incremented by [com.aicode.feature.credentials.data.CredentialRequestBridge] when it receives the helper's cred-req, and
+     * decremented when it writes back cred-resp. [launchKillWatchdog] relaxes the timeout based on this - while a helper is in flight, the user's git command is "waiting
+     * for the user to enter credentials" rather than "stuck", so the watchdog should not force-kill it on the normal timeout; see its change notes.
      */
     private val credentialPromptInFlight = java.util.concurrent.atomic.AtomicInteger(0)
 
-    /** 凭据请求进入途（bridge 收到 helper 的 cred-req 时调）。 */
+    /** A credential request enters flight (called when the bridge receives the helper's cred-req). */
     fun incPromptInFlight() { credentialPromptInFlight.incrementAndGet() }
 
-    /** 凭据请求结束途（bridge 写回 cred-resp 时调）。 */
+    /** A credential request leaves flight (called when the bridge writes back cred-resp). */
     fun decPromptInFlight() { credentialPromptInFlight.decrementAndGet() }
 
     companion object {
         private const val TAG = "LinuxContainerEngine"
 
         /**
-         * 子进程 stdin 的重定向目标。命令执行链路从不向子进程写输入，若留 Java 默认的空管道，
-         * 按「stdin 是否可读」决定行为的程序（无路径参数的 rg、等确认的包管理器等）会把它当
-         * 待读输入，一直阻塞到命令超时；接空设备让它们立刻拿到 EOF 并走正常分支。
+         * The redirect target for the child process's stdin. The command execution path never writes input to the child process; if Java's default empty pipe were left,
+         * programs that decide their behaviour by "whether stdin is readable" (rg with no path argument, package managers waiting for confirmation, etc.) would treat it as
+         * input to be read and block until the command times out; attaching the null device lets them get EOF immediately and take the normal branch.
          */
         private val STDIN_FROM_DEV_NULL: ProcessBuilder.Redirect =
             ProcessBuilder.Redirect.from(java.io.File("/dev/null"))
 
-        /** 命令默认超时（毫秒）：未显式指定时套用，避免命令卡死时永久占用会话。 */
+        /** Default command timeout (ms): applied when not explicitly specified, avoiding a stuck command occupying the session forever. */
         const val DEFAULT_TIMEOUT_MS = 120_000L
 
-        /** 命令超时上限（毫秒）：再大的请求也会被钳到此值，防止事实上的“无限等待”。 */
+        /** Maximum command timeout (ms): even larger requests are clamped to this value, preventing a de facto "infinite wait". */
         const val MAX_TIMEOUT_MS = 1_800_000L
 
-        /** 超时后给进程的优雅退出宽限（毫秒），过后强杀。 */
+        /** Grace period (ms) for the process to exit gracefully after a timeout, after which it is force-killed. */
         private const val TIMEOUT_KILL_GRACE_MS = 200L
 
         /**
-         * 基础包配置版本。对应 assets/aicode/provision.sh 的版本：改脚本（包清单/安装逻辑/镜像源）时同步 +1，
-         * 触发在设备上重新执行该脚本（apk add 幂等，已装包跳过）。
-         * 独立于 [ContainerInstaller] 的 rootfs INSTALL_VERSION：rootfs 版本升级会删 rootfs
-         * （连带清掉本标记），故新 rootfs 必然重跑配置；同 rootfs 下改脚本则靠本版本号触发。
-         * 标记文件由脚本自身写入（内容为下方版本号，或自定义镜像用户选择手动安装时的跳过标记
-         * provision-script-skipped），App 端仅读它判断是否完成。
+         * Base package provisioning version. Corresponds to the version of assets/aicode/provision.sh: when changing the script (package list/install logic/mirror sources), increment it in sync,
+         * triggering re-execution of the script on the device (apk add is idempotent, already-installed packages are skipped).
+         * Independent of [ContainerInstaller]'s rootfs INSTALL_VERSION: a rootfs version upgrade deletes the rootfs
+         * (taking this marker with it), so a new rootfs always reruns provisioning; changing the script under the same rootfs is triggered by this version number.
+         * The marker file is written by the script itself (its content is the version number below, or the skip marker for when a custom-image user chooses manual installation,
+         * provision-script-skipped); the App side only reads it to judge completion.
          */
-        private const val PROVISION_VERSION = "provision-script-v9"
+        private const val PROVISION_VERSION = "provision-script-v10"
     }
 
-    /** 标记基础包已按 [PROVISION_VERSION] 配置完成（内容为版本号，或用户手动安装的跳过标记），按当前 profile 的 rootfs 目录存放（内置/自定义各自独立）。 */
+    /** Marks that the base packages have been provisioned per [PROVISION_VERSION] (content is the version number, or the skip marker for manual installation by the user), stored per the current profile's rootfs directory (built-in/custom are independent). */
     private fun provisionMarker(profile: ContainerProfile): java.io.File =
         java.io.File(containerInstaller.rootfsDirFor(profile), ".provisioned")
 
     /**
-     * 在容器内流式执行命令：每读到一行就 emit 一个 [CommandEvent.Line]，命令结束 emit
-     * [CommandEvent.Exit]。首次调用会触发 rootfs 安装（幂等）。
+     * Executes a command in the container as a stream: emits one [CommandEvent.Line] per line read, and emits
+     * [CommandEvent.Exit] when the command ends. The first call triggers rootfs installation (idempotent).
      *
-     * 与 [runCommandSync] 共用同一进程构建逻辑，区别仅在于输出按行实时下发，
-     * 让终端能看到执行「过程」而非只有最终结果。
+     * Shares the same process-building logic as [runCommandSync]; the only difference is that output is delivered line by line in real time,
+     * letting the terminal see the execution "process" rather than only the final result.
      *
-     * [timeoutMs] 为命令最长执行时间（毫秒），默认 [DEFAULT_TIMEOUT_MS]，上限 [MAX_TIMEOUT_MS]。
-     * 超时后强制终止子进程并在末尾追加一行超时提示，[CommandEvent.Exit] 退出码记为 null。
-     * 由于 readLine 是阻塞读，单靠协程超时无法打断，这里用独立看门狗 destroy 进程来解除阻塞。
+     * [timeoutMs] is the maximum command execution time (ms), default [DEFAULT_TIMEOUT_MS], maximum [MAX_TIMEOUT_MS].
+     * On timeout, the child process is forcibly terminated and a timeout notice line is appended at the end; the [CommandEvent.Exit] exit code is recorded as null.
+     * Since readLine is a blocking read, a coroutine timeout alone cannot interrupt it, so an independent watchdog destroys the process to unblock it here.
      */
     override fun runCommandStream(
         command: String,
         projectPath: String?,
         timeoutMs: Long
     ): Flow<CommandEvent> = flow {
-        // 未就绪（rootfs 未解压或基础包未配置）时不自动初始化，直接提示用户去终端页完成初始化。
+        // When not ready (rootfs not extracted or base packages not provisioned), do not initialize automatically; prompt the user to complete initialization on the terminal page.
         notReadyHint()?.let {
             emit(CommandEvent.Line(it))
             emit(CommandEvent.Exit(null))
@@ -196,16 +196,16 @@ class LinuxContainerEngine @Inject constructor(
         emitAll(streamExecNoInstall(command, projectPath, timeoutMs))
     }.flowOn(Dispatchers.IO)
     /**
-     * 在容器内流式执行命令的「裸」实现：每读到一行就 emit [CommandEvent.Line]，命令结束 emit
-     * [CommandEvent.Exit]。**不触发懒安装**（不调 [ensureInstalled]），假定 rootfs 已就绪。
+     * The "raw" implementation of streaming command execution in the container: emits [CommandEvent.Line] per line read, and emits
+     * [CommandEvent.Exit] when the command ends. **Does not trigger lazy installation** (does not call [ensureInstalled]); assumes the rootfs is ready.
      *
-     * 抽出此方法供 [runCommandStream]（先 [ensureInstalled]）与初始化脚本执行（先
-     * [ContainerInstaller.installRootfsIfNeed]，不能再触发 ensureInstalled 否则递归）共用，
-     * 让初始化也能逐行拿到输出以更新进度。
+     * This method is extracted for shared use by [runCommandStream] (which calls [ensureInstalled] first) and initialization script execution (which calls
+     * [ContainerInstaller.installRootfsIfNeed] first and must not trigger ensureInstalled again or it would recurse),
+     * so initialization can also receive output line by line to update progress.
      *
-     * [timeoutMs] 为命令最长执行时间（毫秒），默认 [DEFAULT_TIMEOUT_MS]，上限 [MAX_TIMEOUT_MS]。
-     * 超时后强制终止子进程并在末尾追加一行超时提示，[CommandEvent.Exit] 退出码记为 null。
-     * 由于 readLine 是阻塞读，单靠协程超时无法打断，这里用独立看门狗 destroy 进程来解除阻塞。
+     * [timeoutMs] is the maximum command execution time (ms), default [DEFAULT_TIMEOUT_MS], maximum [MAX_TIMEOUT_MS].
+     * On timeout, the child process is forcibly terminated and a timeout notice line is appended at the end; the [CommandEvent.Exit] exit code is recorded as null.
+     * Since readLine is a blocking read, a coroutine timeout alone cannot interrupt it, so an independent watchdog destroys the process to unblock it here.
      */
     private fun streamExecNoInstall(
         command: String,
@@ -213,16 +213,16 @@ class LinuxContainerEngine @Inject constructor(
         timeoutMs: Long
     ): Flow<CommandEvent> = flow {
         val effectiveTimeout = timeoutMs.coerceIn(1L, MAX_TIMEOUT_MS)
-        FileLogger.d(TAG, "执行命令(流式) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
+        FileLogger.d(TAG, "Executing command (streaming) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
         val process = startContainerProcess(command, projectPath)
         val timedOut = AtomicBoolean(false)
-        // 看门狗跑在独立 scope（独立 Job）上：若放进包裹 emit 的 coroutineScope 里，emit 的
-        // Job 与 flow 收集者不一致会触发「Flow invariant is violated」。这里仅用它在超时时杀进程。
+        // The watchdog runs on an independent scope (independent Job): if placed inside the coroutineScope wrapping emit, emit's
+        // Job would not match the flow collector's and would trigger "Flow invariant is violated". It is only used here to kill the process on timeout.
         val watchScope = CoroutineScope(Dispatchers.IO + Job())
         val watchdog = launchKillWatchdog(watchScope, process, effectiveTimeout, timedOut, command)
         val cancellationHook = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
             if (cause is CancellationException && process.isAlive) {
-                FileLogger.i(TAG, "命令被取消，终止进程: ${sanitizeCommandForLog(command)}")
+                FileLogger.i(TAG, "Command cancelled, terminating process: ${sanitizeCommandForLog(command)}")
                 runCatching { process.destroy() }
                 runCatching { process.destroyForcibly() }
             }
@@ -236,34 +236,34 @@ class LinuxContainerEngine @Inject constructor(
             val exitCode = process.waitFor()
             watchdog.cancel()
             if (timedOut.get()) {
-                FileLogger.w(TAG, "命令超时(${effectiveTimeout}ms)已终止: ${sanitizeCommandForLog(command)}")
+                FileLogger.w(TAG, "Command timed out (${effectiveTimeout}ms) and was terminated: ${sanitizeCommandForLog(command)}")
                 emit(CommandEvent.Line(timeoutNotice(effectiveTimeout)))
                 emit(CommandEvent.Exit(null))
             } else {
-                if (exitCode != 0) FileLogger.w(TAG, "命令退出码=$exitCode: ${sanitizeCommandForLog(command)}")
-                else FileLogger.v(TAG, "命令完成(退出码 0): ${sanitizeCommandForLog(command)}")
+                if (exitCode != 0) FileLogger.w(TAG, "Command exit code=$exitCode: ${sanitizeCommandForLog(command)}")
+                else FileLogger.v(TAG, "Command completed (exit code 0): ${sanitizeCommandForLog(command)}")
                 emit(CommandEvent.Exit(exitCode))
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // 看门狗超时 destroy 进程会关闭 stdout 管道，使阻塞中的 readLine 抛 IOException
-            //（而非返回 null）。若不在此吸收，异常会让 flow 异常终止、CommandEvent.Exit 不再 emit，
-            // 上层 executeStream 的 collect 随即中断，已逐行展示给用户的输出在最终 ToolResult 里丢失。
-            // 故此处按是否超时分流：超时则 emit 超时提示 + Exit(null)，保留已 emit 的各行；
-            // 非 IO 异常也转成一行提示 + Exit，避免 flow 异常终止丢掉已输出内容。
+            // When the watchdog destroys the process on timeout it closes the stdout pipe, making the blocked readLine throw an IOException
+            // (rather than returning null). If not absorbed here, the exception would terminate the flow abnormally, CommandEvent.Exit would no longer be emitted,
+            // the upper executeStream collect would then abort, and output already shown to the user line by line would be lost from the final ToolResult.
+            // So this branches on whether it timed out: on timeout, emit the timeout notice + Exit(null), preserving the lines already emitted;
+            // non-IO exceptions are also converted to a one-line notice + Exit, avoiding the flow terminating abnormally and losing already-output content.
             watchdog.cancel()
             if (timedOut.get()) {
-                FileLogger.w(TAG, "命令超时(${effectiveTimeout}ms)已终止(readLine 异常): ${sanitizeCommandForLog(command)}", e)
+                FileLogger.w(TAG, "Command timed out (${effectiveTimeout}ms) and was terminated (readLine exception): ${sanitizeCommandForLog(command)}", e)
                 emit(CommandEvent.Line(timeoutNotice(effectiveTimeout)))
                 emit(CommandEvent.Exit(null))
             } else {
-                FileLogger.e(TAG, "命令读输出异常(已保留此前输出): ${sanitizeCommandForLog(command)}", e)
-                emit(CommandEvent.Line("[命令执行异常：${e.message}]"))
+                FileLogger.e(TAG, "Command output read error (previous output preserved): ${sanitizeCommandForLog(command)}", e)
+                emit(CommandEvent.Line("[Command execution error: ${e.message}]"))
                 emit(CommandEvent.Exit(null))
             }
         } finally {
-            // 协程取消（用户离开页面等）时确保子进程被回收，避免泄漏
+            // On coroutine cancellation (user leaves the page, etc.), ensure the child process is reclaimed to avoid leaks
             cancellationHook?.dispose()
             watchdog.cancel()
             watchScope.cancel()
@@ -273,44 +273,44 @@ class LinuxContainerEngine @Inject constructor(
     }.flowOn(Dispatchers.IO)
 
     /**
-     * 在容器内同步执行命令并返回输出。首次调用会触发 rootfs 安装（幂等）。
+     * Executes a command synchronously in the container and returns the output. The first call triggers rootfs installation (idempotent).
      *
-     * [timeoutMs] 为命令最长执行时间（毫秒），默认 [DEFAULT_TIMEOUT_MS]，上限 [MAX_TIMEOUT_MS]。
-     * 超时后强制终止子进程，返回已收集到的部分输出并在末尾追加超时提示。
+     * [timeoutMs] is the maximum command execution time (ms), default [DEFAULT_TIMEOUT_MS], maximum [MAX_TIMEOUT_MS].
+     * On timeout, the child process is forcibly terminated, the partial output collected so far is returned, and a timeout notice is appended at the end.
      */
     override suspend fun runCommandSync(
         command: String,
         projectPath: String?,
         timeoutMs: Long
     ): String = withContext(Dispatchers.IO) {
-        // 未就绪时不自动初始化，直接返回引导文案，由用户去终端页完成初始化。
+        // When not ready, do not initialize automatically; return the guidance text directly and let the user complete initialization on the terminal page.
         notReadyHint()?.let { return@withContext it }
         execCaptured(command, projectPath, timeoutMs).output
     }
 
     /**
-     * 同 [runCommandSync]，但一并返回退出码（超时/异常时为 null）。供需要据退出码判成败的调用方
-     * 使用——如 git 写操作：git 非零退出码并非进程崩溃，[runCommandSync] 仅返回文本会让上层误报成功。
+     * Same as [runCommandSync], but also returns the exit code (null on timeout/error). For callers that need to judge success or failure by the exit code
+     * - e.g. git write operations: a non-zero git exit code is not a process crash, and [runCommandSync] returning only text would make the upper layer falsely report success.
      */
     override suspend fun runCommandSyncWithExit(
         command: String,
         projectPath: String?,
         timeoutMs: Long
     ): CommandResult = withContext(Dispatchers.IO) {
-        // 未就绪时不自动初始化，直接返回引导文案，由用户去终端页完成初始化。
+        // When not ready, do not initialize automatically; return the guidance text directly and let the user complete initialization on the terminal page.
         notReadyHint()?.let { return@withContext CommandResult(it, null) }
         val r = execCaptured(command, projectPath, timeoutMs)
         CommandResult(r.output, r.exitCode, r.truncated)
     }
 
-    /** 一次容器内执行的内部结果：限幅后的完整输出 + 退出码（超时/异常时为 null）。 */
+    /** Internal result of one in-container execution: the complete capped output + exit code (null on timeout/error). */
     private data class ExecResult(val output: String, val exitCode: Int?, val truncated: Boolean = false)
 
     /**
-     * 仅在容器已就绪（rootfs 已安装）时执行命令；不会触发 rootfs 解压。
+     * Executes a command only when the container is ready (rootfs installed); does not trigger rootfs extraction.
      *
-     * 供只读工具做性能增强使用：例如 search 可优先用 rg，但不能因为一次自动批准的搜索
-     * 隐式解压容器或联网安装环境。未安装时返回 null。
+     * Used by read-only tools as a performance enhancement: e.g. search can prefer rg, but a single auto-approved search must not
+     * implicitly extract the container or install an environment over the network. Returns null when not installed.
      */
     override suspend fun runCommandSyncIfReady(
         command: String,
@@ -333,12 +333,12 @@ class LinuxContainerEngine @Inject constructor(
     }
 
     /**
-     * 在容器内同步执行命令并捕获输出。**假定 rootfs 已安装**（不做懒安装/配置），
-     * 供 [runCommandSync]（先 [ensureInstalled]）与初始化脚本执行（先 [installRootfsIfNeed]）复用，
-     * 避免配置流程反向触发 [ensureInstalled] 形成递归。
+     * Executes a command synchronously in the container and captures the output. **Assumes the rootfs is installed** (no lazy install/provisioning),
+     * shared by [runCommandSync] (which calls [ensureInstalled] first) and initialization script execution (which calls [installRootfsIfNeed] first),
+     * avoiding the provisioning flow triggering [ensureInstalled] in reverse and causing recursion.
      *
-     * [timeoutMs] 为命令最长执行时间（毫秒），钳到 [MAX_TIMEOUT_MS]。超时则强杀进程，
-     * 返回已收集的部分输出并在末尾追加超时提示，[ExecResult.exitCode] 记为 null。
+     * [timeoutMs] is the maximum command execution time (ms), clamped to [MAX_TIMEOUT_MS]. On timeout the process is force-killed,
+     * the partial output collected so far is returned with a timeout notice appended at the end, and [ExecResult.exitCode] is recorded as null.
      */
     private suspend fun execCaptured(
         command: String,
@@ -348,22 +348,22 @@ class LinuxContainerEngine @Inject constructor(
     ): ExecResult = withContext(Dispatchers.IO) {
         try {
             val effectiveTimeout = timeoutMs.coerceIn(1L, MAX_TIMEOUT_MS)
-            FileLogger.d(TAG, "执行命令(同步) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
+            FileLogger.d(TAG, "Executing command (sync) cwd=$projectPath timeout=${effectiveTimeout}ms: ${sanitizeCommandForLog(command)}")
             val process = startContainerProcess(command, projectPath)
             val timedOut = AtomicBoolean(false)
             val cancellationHook = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
                 if (cause is CancellationException && process.isAlive) {
-                    FileLogger.i(TAG, "命令被取消，终止进程: ${sanitizeCommandForLog(command)}")
+                    FileLogger.i(TAG, "Command cancelled, terminating process: ${sanitizeCommandForLog(command)}")
                     runCatching { process.destroy() }
                     runCatching { process.destroyForcibly() }
                 }
             }
 
-            // 限幅累积：超大输出只保留开头+结尾，避免撑爆内存与模型上下文。
-            // 不限幅模式（unbounded）保留连续开头、到 MAX_UNBOUNDED_CHARS 为止，
-            // 超限即停止并置 truncated（调用方如 git 据此提示「输出过大」）。
+            // Capped accumulation: for huge output only the beginning + end are kept, avoiding blowing up memory and model context.
+            // Unbounded mode keeps the continuous beginning, up to MAX_UNBOUNDED_CHARS,
+            // and stops and sets truncated once over the limit (callers such as git use this to prompt "output too large").
             val output = if (unbounded) BoundedOutput.hardCapped(MAX_UNBOUNDED_CHARS) else BoundedOutput()
-            // 看门狗与读循环并发：超时则 destroy 进程，使阻塞的 readLine 立即返回 null 退出循环。
+            // The watchdog runs concurrently with the read loop: on timeout it destroys the process, making the blocked readLine return null immediately and exit the loop.
             var exitCode: Int? = null
             try {
                 coroutineScope {
@@ -387,31 +387,31 @@ class LinuxContainerEngine @Inject constructor(
             }
 
             if (timedOut.get()) {
-                FileLogger.w(TAG, "命令超时(${effectiveTimeout}ms)已终止: ${sanitizeCommandForLog(command)}")
+                FileLogger.w(TAG, "Command timed out (${effectiveTimeout}ms) and was terminated: ${sanitizeCommandForLog(command)}")
                 output.append(timeoutNotice(effectiveTimeout))
                 output.append("\n")
                 ExecResult(output.build(), null, output.truncated)
             } else {
-                FileLogger.v(TAG, "命令完成(退出码 $exitCode，输出 ${output.totalChars} 字符): ${sanitizeCommandForLog(command)}")
+                FileLogger.v(TAG, "Command completed (exit code $exitCode, output ${output.totalChars} chars): ${sanitizeCommandForLog(command)}")
                 ExecResult(output.build(), exitCode, output.truncated)
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            FileLogger.e(TAG, "执行命令异常: ${sanitizeCommandForLog(command)}", e)
+            FileLogger.e(TAG, "Command execution error: ${sanitizeCommandForLog(command)}", e)
             ExecResult("Error: ${e.message}", null)
         }
     }
 
     /**
-     * 启动看门狗：等待 [timeoutMs] 后若进程仍存活，则标记超时并优雅→强制终止，借此解除
-     * 调用方阻塞中的 readLine。返回的 [Job] 由调用方在正常结束时 cancel 掉。
+     * Starts the watchdog: after waiting [timeoutMs], if the process is still alive, marks it timed out and terminates it gracefully then forcibly, thereby unblocking
+     * the caller's blocked readLine. The returned [Job] is cancelled by the caller on normal completion.
      *
-     * **凭据弹窗在途时暂停**：到点若 [credentialPromptInFlight] > 0（自定义 git credential helper
-     * 正阻塞等 app 弹窗回填用户的凭据请求），watchdog 不杀——这条 git 命令是「正等用户填凭据」
-     * 而非「卡死」，按常规超时强杀会让用户离开几分钟回来发现推送已失败、得重来。改为每轮重查：
-     * 在途则宽限一段（1min）再查，直至不在途才杀；绝对上限 [MAX_TIMEOUT_MS]（30min）即便在途
-     * 也兜底杀，避免事实无限等待。终端 PTY 路径不经 watchdog（[TerminalSessionManager] 裸 tty），天然最耐等。
+     * **Pauses while a credential dialog is in flight**: at the deadline, if [credentialPromptInFlight] > 0 (the custom git credential helper
+     * is blocked waiting for the app dialog to fill in the user's credential request), the watchdog does not kill - this git command is "waiting for the user to enter credentials"
+     * rather than "stuck"; force-killing it on the normal timeout would let a user who stepped away for a few minutes come back to find the push failed and have to redo it. Instead it rechecks each round:
+     * if in flight, it grants a grace period (1min) and checks again, killing only when no longer in flight; the absolute limit [MAX_TIMEOUT_MS] (30min) kills even while in flight
+     * as a backstop, avoiding a de facto infinite wait. The terminal PTY path does not go through the watchdog ([TerminalSessionManager] raw tty) and is naturally the most patient.
      */
     private fun launchKillWatchdog(
         scope: CoroutineScope,
@@ -428,14 +428,14 @@ class LinuxContainerEngine @Inject constructor(
             totalWaited += remaining
             val inflight = credentialPromptInFlight.get()
             if (inflight > 0 && totalWaited < MAX_TIMEOUT_MS) {
-                // 凭据弹窗在途：宽限 1min（不超过绝对上限），再回查。
-                FileLogger.i(TAG, "凭据弹窗在途(${inflight})，watchdog 暂缓，再等 60000ms: ${sanitizeCommandForLog(command)}")
+                // Credential dialog in flight: grant 1min grace (not exceeding the absolute limit), then recheck.
+                FileLogger.i(TAG, "Credential dialog in flight (${inflight}), watchdog deferred, waiting another 60000ms: ${sanitizeCommandForLog(command)}")
                 remaining = minOf(60_000L, MAX_TIMEOUT_MS - totalWaited)
                 continue
             }
-            // 不在途，或已达 30min 绝对上限：正常超时终止。
+            // Not in flight, or the 30min absolute limit has been reached: terminate on normal timeout.
             timedOut.set(true)
-            FileLogger.w(TAG, "命令执行超过 ${timeoutMs}ms（累计等待 ${totalWaited}ms，inflight=${inflight}），终止进程: ${sanitizeCommandForLog(command)}")
+            FileLogger.w(TAG, "Command execution exceeded ${timeoutMs}ms (total waited ${totalWaited}ms, inflight=${inflight}), terminating process: ${sanitizeCommandForLog(command)}")
             runCatching { process.destroy() }
             delay(TIMEOUT_KILL_GRACE_MS)
             if (process.isAlive) runCatching { process.destroyForcibly() }
@@ -443,26 +443,26 @@ class LinuxContainerEngine @Inject constructor(
         }
     }
 
-    /** 超时提示行（拼进输出，喂回模型/展示给用户）。 */
+    /** Timeout notice line (spliced into the output, fed back to the model / shown to the user). */
     private fun timeoutNotice(timeoutMs: Long): String =
-        "[命令执行超时：超过 ${timeoutMs}ms 已被强制终止]"
+        "[Command execution timed out: exceeded ${timeoutMs}ms and was forcibly terminated]"
 
     /**
-     * 启动进程：rootfs/proot 安装就绪则用 PRoot 进入容器；**未就绪则拒绝执行**。
+     * Starts a process: if rootfs/proot are installed and ready, enters the container with PRoot; **if not ready, refuses to execute**.
      *
-     * 这里曾经有一条「回退到 Android 原生 shell」的兜底（[buildNativeProcess]，
-     * `/system/bin/sh -c` + 工作目录设为工作区）。那是安全隐患：用户选择本地容器通道是
-     * 冲着「沙盒」来的，一旦 rootfs 没解压，命令就会**静默**落到真机 shell 上执行，
-     * 全程只有一行 warning 日志——表现为「明明用的容器通道，命令却在设备上生效」。
-     * 沙盒承诺不能被静默降级，故改为硬性失败：未就绪就抛错，由上层转成明确的错误输出。
+     * There used to be a "fall back to the Android native shell" backstop here ([buildNativeProcess],
+     * `/system/bin/sh -c` + working directory set to the workspace). That was a security hazard: users chose the local container channel
+     * for the "sandbox"; once the rootfs was not extracted, commands would **silently** land in the real device shell and execute,
+     * with only one warning log line the whole time - appearing as "clearly using the container channel, yet the command took effect on the device".
+     * The sandbox promise must not be silently downgraded, so this is now a hard failure: if not ready it throws, and the upper layer converts it into a clear error output.
      */
     private fun startContainerProcess(command: String, projectPath: String?): Process {
         val profile = currentProfile
         if (!containerInstaller.isInstalledFor(profile)) {
-            val hint = notReadyHintFor(profile) ?: "容器尚未初始化"
+            val hint = notReadyHintFor(profile) ?: "Container not yet initialized"
             FileLogger.e(
                 TAG,
-                "容器未就绪，拒绝执行（已禁止原生 shell 回退）: ${sanitizeCommandForLog(command)}"
+                "Container not ready, refusing to execute (native shell fallback is disabled): ${sanitizeCommandForLog(command)}"
             )
             throw IllegalStateException(hint)
         }
@@ -475,36 +475,36 @@ class LinuxContainerEngine @Inject constructor(
         return processBuilder.start()
     }
 
-    /** 容器是否已安装就绪（按当前 profile）。 */
+    /** Whether the container is installed and ready (for the current profile). */
     override fun isContainerInstalled(): Boolean = containerInstaller.isInstalledFor(currentProfile)
 
     /**
-     * 基础包是否已配置完成（按当前 profile 的标记）。首次进入终端时由初始化菜单
-     * （assets/aicode/provision.sh）引导安装，完成后脚本写标记；未完成时不影响进入 shell。
+     * Whether the base packages have been provisioned (by the current profile's marker). On first entering the terminal, the initialization menu
+     * (assets/aicode/provision.sh) guides installation, and the script writes the marker on completion; if not completed, entering the shell is not affected.
      */
     override fun isProvisioned(): Boolean = isProvisionedFor(currentProfile)
 
-    /** 按指定 profile 判断基础包配置是否完成（[defaultShell] 据此选 bash/sh）。 */
+    /** Judges for the specified profile whether base package provisioning is complete ([defaultShell] chooses bash/sh based on this). */
     fun isProvisionedFor(profile: ContainerProfile): Boolean {
         val marker = provisionMarker(profile)
         return marker.exists() && marker.readText().trim() == PROVISION_VERSION
     }
 
     /**
-     * 容器未就绪（rootfs 未解压）时返回引导文案，就绪返回 null。
-     * 命令执行入口据此不自动初始化、直接失败并引导用户去终端页完成初始化。
+     * Returns guidance text when the container is not ready (rootfs not extracted), and null when ready.
+     * Command execution entry points use this to not initialize automatically, fail directly, and guide the user to the terminal page to complete initialization.
      */
     override fun notReadyHint(): String? = notReadyHintFor(currentProfile)
 
-    /** 按指定 profile 判断容器是否就绪（MCP 按运行时容器启动前检查用）。 */
+    /** Judges for the specified profile whether the container is ready (used by MCP to check before starting a runtime container). */
     fun notReadyHintFor(profile: ContainerProfile): String? {
         if (containerInstaller.isInstalledFor(profile)) return null
         return context.getString(R.string.container_not_ready_hint)
     }
 
     /**
-     * 容器默认命令 shell：优先用 profile 指定的 [ContainerProfile.shellPath]；未指定时
-     * 按 provision 状态选 `/bin/bash`（脚本已安装 bash）或 `/bin/sh`。
+     * The container's default command shell: prefers the profile-specified [ContainerProfile.shellPath]; when unspecified,
+     * chooses `/bin/bash` (the script has installed bash) or `/bin/sh` according to the provisioning state.
      */
     override fun defaultShell(): String {
         val profile = currentProfile
@@ -513,75 +513,75 @@ class LinuxContainerEngine @Inject constructor(
     }
 
     /**
-     * 幂等地确保容器可用：解压 rootfs/proot（首次耗时）。所有容器（内置/自定义）一致——
-     * 基础工具安装不在此阶段自动执行，由进入终端时的初始化菜单（assets/aicode/provision.sh）
-     * 引导用户选择，装包失败也不阻塞进入 shell。
-     * 仅由终端页（[TerminalSessionManager]）作为唯一初始化入口调用；命令执行入口不再自动触发。
+     * Idempotently ensures the container is usable: extracts rootfs/proot (time-consuming the first time). Consistent for all containers (built-in/custom) -
+     * base tool installation is not performed automatically at this stage; the initialization menu on entering the terminal (assets/aicode/provision.sh)
+     * guides the user's choice, and a package installation failure does not block entering the shell.
+     * Called only by the terminal page ([TerminalSessionManager]) as the sole initialization entry point; command execution entry points no longer trigger it automatically.
      *
-     * 耗时初始化（解压）在引擎级 [initScope] 中执行，不随调用方（终端页 viewModelScope）
-     * 取消而中断——退出终端页后初始化仍在后台继续，下次进入可复用同一 job 或等待其完成。
-     * 全程通过 [initProgress] 上报阶段进度。rootfs 解压失败时置 [ContainerInitState.Failed]
-     * 并抛异常（不静默置 Ready），让终端页进入失败态、可重试。
+     * Time-consuming initialization (extraction) runs in the engine-level [initScope] and is not interrupted by caller cancellation (terminal page viewModelScope)
+     * - after leaving the terminal page, initialization continues in the background, and the next entry can reuse the same job or wait for its completion.
+     * Stage progress is reported throughout via [initProgress]. On rootfs extraction failure, sets [ContainerInitState.Failed]
+     * and throws (does not silently set Ready), putting the terminal page into a failed state that can be retried.
      */
     override suspend fun ensureInstalled() {
         val profile = currentProfile
         val startedAt = System.currentTimeMillis()
         FileLogger.i(
             TAG,
-            "ensureInstalled 开始：profile=${profile.id}(${profile.name}) mode=${profile.mode} " +
-                "已安装=${containerInstaller.isInstalledFor(profile)}"
+            "ensureInstalled starting: profile=${profile.id}(${profile.name}) mode=${profile.mode} " +
+                "installed=${containerInstaller.isInstalledFor(profile)}"
         )
-        // 每次进入终端页前确保提取最新的内置文档
+        // Before each entry to the terminal page, ensure the latest built-in docs are extracted
         containerInstaller.extractDocs()
         if (containerInstaller.isInstalledFor(profile)) {
-            // 旧 rootfs（如已导入的 Ubuntu 26.04）不会重新解压，这里兜底巡检修复已知兼容性问题
+            // An old rootfs (e.g. an imported Ubuntu 26.04) will not be re-extracted, so run a backstop inspection here to repair known compatibility issues
             containerInstaller.repairRootfsCompatibility(containerInstaller.rootfsDirFor(profile))
             _initProgress.value = ContainerInitState.Ready
             refreshContainerHome()
             detectAndCacheOsIfNeeded(profile)
-            FileLogger.i(TAG, "ensureInstalled 完成（快路径，耗时 ${System.currentTimeMillis() - startedAt}ms）")
-            logContainerDiagnostics("ensureInstalled 快路径")
+            FileLogger.i(TAG, "ensureInstalled completed (fast path, took ${System.currentTimeMillis() - startedAt}ms)")
+            logContainerDiagnostics("ensureInstalled fast path")
             return
         }
-        // 启动或复用后台初始化 job；initMutex 只保护 job 的创建/复用，真正的耗时工作在 initScope 里跑。
+        // Start or reuse the background initialization job; initMutex only protects job creation/reuse, the real time-consuming work runs in initScope.
         val job = initMutex.withLock {
             val existing = initJob
             if (existing == null || !existing.isActive) {
-                FileLogger.i(TAG, "创建后台初始化任务：profile=${profile.id}")
+                FileLogger.i(TAG, "Creating background initialization task: profile=${profile.id}")
                 initJob = initScope.launch { doInit(profile) }
             } else {
-                FileLogger.i(TAG, "复用进行中的后台初始化任务：profile=${profile.id}")
+                FileLogger.i(TAG, "Reusing in-progress background initialization task: profile=${profile.id}")
             }
             initJob!!
         }
-        // 后台 job 内部抛出的异常不会由 join 重新抛出，这里挂完成回调记录下来，
-        // 避免“日志断在开始安装”后就没了下文。
+        // Exceptions thrown inside the background job are not rethrown by join, so a completion callback is attached here to record them,
+        // avoiding the "log stops at installation start" with no follow-up.
         job.invokeOnCompletion { cause ->
-            if (cause != null) FileLogger.e(TAG, "后台初始化任务异常结束：profile=${profile.id}", cause)
+            if (cause != null) FileLogger.e(TAG, "Background initialization task ended abnormally: profile=${profile.id}", cause)
         }
-        // 等待完成；若调用方（终端页）被取消，join 抛 CancellationException，但后台 job 继续执行。
+        // Wait for completion; if the caller (terminal page) is cancelled, join throws CancellationException, but the background job keeps running.
         job.join()
         if (containerInstaller.isInstalledFor(profile)) {
             _initProgress.value = ContainerInitState.Ready
             refreshContainerHome()
             detectAndCacheOsIfNeeded(profile)
-            FileLogger.i(TAG, "ensureInstalled 完成（耗时 ${System.currentTimeMillis() - startedAt}ms）")
-            logContainerDiagnostics("ensureInstalled 完成后")
+            FileLogger.i(TAG, "ensureInstalled completed (took ${System.currentTimeMillis() - startedAt}ms)")
+            logContainerDiagnostics("after ensureInstalled completed")
         } else {
-            val reason = "容器未安装（缺少 rootfs/proot）"
-            FileLogger.e(TAG, "ensureInstalled 失败：$reason（profile=${profile.id}）")
-            logContainerDiagnostics("ensureInstalled 失败")
+            val reason = "Container not installed (missing rootfs/proot)"
+            FileLogger.e(TAG, "ensureInstalled failed: $reason (profile=${profile.id})")
+            logContainerDiagnostics("ensureInstalled failed")
             _initProgress.value = ContainerInitState.Failed(reason)
             throw IllegalStateException(reason)
         }
     }
 
     /**
-     * dump 一次容器运行环境（rootfs / proot 二进制 / 初始化脚本 / 磁盘空间）到日志。
+     * Dumps the container runtime environment (rootfs / proot binary / initialization script / disk space) to the log once.
      *
-     * 这些状态平时不打印，一旦用户报“容器起不来/终端一片空白”就只能靠猜。在初始化前后与终端
-     * 会话静默时主动各 dump 一次，日志里就有了可定位的证据。同时带上 provision.sh 自己的执行日志
-     * 尾部（由脚本写入 /root/.aicode/provision.log），用于判断初始化菜单到底有没有跑起来。
+     * These states are not normally printed; once a user reports "the container won't start / the terminal is blank", there would be only guesswork. Dump once proactively before and after initialization and when a terminal
+     * session is silent, so the log contains locatable evidence. Also include the tail of provision.sh's own execution log
+     * (written by the script to /root/.aicode/provision.log), to judge whether the initialization menu actually ran.
      */
     fun logContainerDiagnostics(reason: String) {
         runCatching {
@@ -591,49 +591,49 @@ class LinuxContainerEngine @Inject constructor(
             val provision = java.io.File(containerInstaller.aicodeDir, "provision.sh")
             fun desc(f: java.io.File?): String = when {
                 f == null -> "null"
-                !f.exists() -> "缺失(${f.absolutePath})"
-                f.isDirectory -> "目录(${f.absolutePath})"
-                else -> "${f.absolutePath}[${f.length()}B,可执行=${f.canExecute()}]"
+                !f.exists() -> "missing(${f.absolutePath})"
+                f.isDirectory -> "directory(${f.absolutePath})"
+                else -> "${f.absolutePath}[${f.length()}B, executable=${f.canExecute()}]"
             }
             val space = runCatching { rootfs.usableSpace / (1024 * 1024) }.getOrDefault(-1L)
             val ptmx = java.io.File("/dev/ptmx")
             FileLogger.i(
                 TAG,
-                "容器诊断($reason)：profile=${profile.id} mode=${profile.mode} rootfs=${desc(rootfs)} " +
-                    "标记=${if (marker.isFile) marker.readText().trim() else "无"} " +
+                "Container diagnostics ($reason): profile=${profile.id} mode=${profile.mode} rootfs=${desc(rootfs)} " +
+                    "marker=${if (marker.isFile) marker.readText().trim() else "none"} " +
                     "proot=${desc(containerInstaller.prootBin)} loader=${desc(containerInstaller.prootLoader)} " +
                     "loader32=${desc(containerInstaller.prootLoader32)} provision.sh=${desc(provision)} " +
-                    "nativeLibDir=${containerInstaller.prootBin.parentFile?.absolutePath} 可用空间=${space}MB " +
-                    "/dev/ptmx(可读=${ptmx.canRead()},可写=${ptmx.canWrite()})"
+                    "nativeLibDir=${containerInstaller.prootBin.parentFile?.absolutePath} available space=${space}MB " +
+                    "/dev/ptmx(readable=${ptmx.canRead()}, writable=${ptmx.canWrite()})"
             )
             val provisionLog = java.io.File(containerInstaller.aicodeDir, "provision.log")
             if (provisionLog.isFile) {
                 val tail = runCatching { provisionLog.readLines().takeLast(20).joinToString(" | ") }.getOrDefault("")
-                FileLogger.i(TAG, "provision 日志尾部（$reason）：$tail")
+                FileLogger.i(TAG, "provision log tail ($reason): $tail")
             } else {
-                FileLogger.i(TAG, "provision.log 不存在（初始化脚本从未执行）：${provisionLog.absolutePath}")
+                FileLogger.i(TAG, "provision.log does not exist (initialization script never ran): ${provisionLog.absolutePath}")
             }
-        }.onFailure { FileLogger.w(TAG, "输出容器诊断失败", it) }
+        }.onFailure { FileLogger.w(TAG, "Failed to output container diagnostics", it) }
     }
 
-    /** 在 [initScope] 中真正执行一次性初始化：解压 rootfs（基础工具由进入终端时的初始化菜单引导安装）。 */
+    /** Actually performs the one-time initialization in [initScope]: extracts the rootfs (base tools are installed via the initialization menu guide on entering the terminal). */
     private suspend fun doInit(profile: ContainerProfile) {
-        // installRootfsIfNeed 在真正解压/部署时回调更新进度（已安装则快路径不回调）
+        // installRootfsIfNeed calls back to update progress when actually extracting/deploying (the fast path when already installed does not call back)
         containerInstaller.installRootfsIfNeed(profile) { _initProgress.value = it }
     }
 
-    /** 查容器内 $HOME 并缓存到 [com.aicode.feature.workspace.domain.PathHomeResolver]，供各工具展开 ~。 */
+    /** Looks up $HOME inside the container and caches it in [com.aicode.feature.workspace.domain.PathHomeResolver], for tools to expand ~. */
     private suspend fun refreshContainerHome() {
         runCatching {
             val result = execCaptured("echo \$HOME", projectPath = null, timeoutMs = 3000)
             val home = result.output.trim().ifEmpty { null }
             if (home != null) pathHomeResolver.containerHome = home
-        }.onFailure { FileLogger.w(TAG, "查容器 \$HOME 失败", it) }
+        }.onFailure { FileLogger.w(TAG, "Failed to look up container \$HOME", it) }
     }
 
     /**
-     * 容器首次运行后识别系统类型（读 /etc/os-release 的 ID 字段）并写入缓存；
-     * 已有缓存或识别失败跳过，下次运行再试。远程 SSH 无本地 rootfs，不检测。
+     * After the container's first run, identifies the OS type (reads the ID field of /etc/os-release) and writes it to the cache;
+     * skips if a cache already exists or identification fails, and retries on the next run. Remote SSH has no local rootfs, so it is not detected.
      */
     private suspend fun detectAndCacheOsIfNeeded(profile: ContainerProfile) {
         if (profile.mode == ExecutionMode.REMOTE_SSH) return
@@ -647,14 +647,14 @@ class LinuxContainerEngine @Inject constructor(
             val osId = result.output.trim().lowercase().ifBlank { null }
             if (osId != null && result.exitCode == 0) {
                 containerOsDetector.cacheOs(profile.id, osId)
-                FileLogger.i(TAG, "容器系统识别: ${profile.id} -> $osId")
+                FileLogger.i(TAG, "Container OS identified: ${profile.id} -> $osId")
             }
-        }.onFailure { FileLogger.w(TAG, "容器系统识别失败: ${profile.id}", it) }
+        }.onFailure { FileLogger.w(TAG, "Container OS identification failed: ${profile.id}", it) }
     }
 
     /**
-     * 以长驻进程方式在容器内执行命令（如 `sshd -D`）。调用前需保证容器已安装。
-     * 与 [runCommandStream] 不同，这里不读取/消费输出流，由调用方决定如何处理（通常丢弃）。
+     * Executes a command in the container as a long-lived process (e.g. `sshd -D`). The container must be installed before calling.
+     * Unlike [runCommandStream], this does not read/consume the output stream; the caller decides how to handle it (usually discards it).
      */
     fun startProotProcess(command: String, projectPath: String?): Process {
         val pb = buildProcessBuilder(buildProotInvocation(command, projectPath))
@@ -664,15 +664,15 @@ class LinuxContainerEngine @Inject constructor(
     }
 
     /**
-     * 以长驻进程方式在容器内启动一个程序并保留**分离的** stdin/stdout/stderr，供调用方
-     * 双向流式通信（如 MCP stdio server：往 stdin 写 JSON-RPC、从 stdout 读 JSON-RPC）。
+     * Starts a program in the container as a long-lived process while keeping **separate** stdin/stdout/stderr, for the caller to
+     * communicate with bidirectional streaming (e.g. an MCP stdio server: writes JSON-RPC to stdin, reads JSON-RPC from stdout).
      *
-     * 与 [startProotProcess] 的关键区别：**不** redirectErrorStream，stderr 独立保留，
-     * 保证 stdout 是干净的协议流（server 的日志走 stderr，不会污染 JSON-RPC）。
+     * The key difference from [startProotProcess]: does **not** redirectErrorStream; stderr is kept separate,
+     * guaranteeing stdout is a clean protocol stream (the server's logs go to stderr and will not pollute JSON-RPC).
      *
-     * [program] 为容器内可执行文件名/路径（如 `npx`），[programArgs] 为其参数，二者经
-     * `/bin/sh -c 'exec "$0" "$@"'` 逐项透传，避免 shell 引号/转义问题。[extraEnv] 叠加到
-     * 容器默认环境（覆盖同名项）。调用前需保证容器已安装（[ensureInstalled]）。
+     * [program] is the in-container executable name/path (e.g. `npx`), [programArgs] are its arguments; both are passed through item by item via
+     * `/bin/sh -c 'exec "$0" "$@"'`, avoiding shell quoting/escaping problems. [extraEnv] is overlaid onto
+     * the container's default environment (overriding same-name entries). The container must be installed before calling ([ensureInstalled]).
      */
     fun startStdioProcess(
         program: String,
@@ -683,14 +683,14 @@ class LinuxContainerEngine @Inject constructor(
     ): Process {
         val invocation = buildStdioInvocation(program, programArgs, projectPath, extraEnv, profile)
         val pb = buildProcessBuilder(invocation)
-        // 刻意不 redirectErrorStream：stdout 留给 JSON-RPC，stderr 由调用方单独消费。
-        // 同样刻意不重定向 stdin：这里的 stdin 就是 JSON-RPC 的请求通道，接 /dev/null 会让 server 立刻收到 EOF 退出。
+        // Deliberately does not redirectErrorStream: stdout is left for JSON-RPC, stderr is consumed separately by the caller.
+        // Likewise deliberately does not redirect stdin: stdin here is the JSON-RPC request channel; attaching /dev/null would make the server receive EOF immediately and exit.
         return pb.start()
     }
 
     /**
-     * 构造「在容器内直接 exec 某程序（保留分离流）」的 PRoot 调用。
-     * 用 `sh -c 'exec "$0" "$@"' program arg1 arg2 …` 把参数原样交给 execvp，规避引号问题。
+     * Builds the PRoot invocation for "directly exec a program in the container (keeping separate streams)".
+     * Uses `sh -c 'exec "$0" "$@"' program arg1 arg2 ...` to hand the arguments as-is to execvp, avoiding quoting problems.
      */
     private fun buildStdioInvocation(
         program: String,
@@ -709,12 +709,12 @@ class LinuxContainerEngine @Inject constructor(
     }
 
     /**
-     * 构造进入容器执行 [command] 的完整 PRoot 调用（argv + env）。
-     * 暴露给终端会话：Termux TerminalSession 需要把可执行文件与参数分开传入。
+     * Builds the complete PRoot invocation (argv + env) for entering the container to execute [command].
+     * Exposed to terminal sessions: Termux TerminalSession needs the executable and arguments passed separately.
      */
     fun buildProotInvocation(command: String, projectPath: String?): ProotInvocation {
         val argv = buildBaseProotArgv(projectPath, currentProfile)
-        // 用 [defaultShell]：bash 装好后 AI 命令与终端会话都走 bash；装机期间/失败回退 /bin/sh。
+        // Uses [defaultShell]: once bash is installed, AI commands and terminal sessions both go through bash; during installation / on failure it falls back to /bin/sh.
         argv.add(defaultShell())
         argv.add("-c")
         argv.add(command)
@@ -722,16 +722,16 @@ class LinuxContainerEngine @Inject constructor(
     }
 
     /**
-     * 构造 PRoot 调用的公共前缀 argv：proot 二进制 + rootfs + 标准绑定 + 伪 root + 工作区绑定，
-     * 但**不含**最终的客户机命令（由各调用方自行追加 `/bin/sh -c …` 或 `exec` 形式）。
+     * Builds the common prefix argv of a PRoot invocation: proot binary + rootfs + standard bindings + fake root + workspace binding,
+     * but **without** the final guest command (each caller appends `/bin/sh -c ...` or the `exec` form itself).
      */
     private fun buildBaseProotArgv(projectPath: String?, profile: ContainerProfile): MutableList<String> {
         val rootfs = containerInstaller.rootfsDirFor(profile).absolutePath
         val prootBin = containerInstaller.prootBin.absolutePath
         if (!containerInstaller.prootBin.exists()) {
-            // 不可能缺失除非打包配置回退：jniLibs sourceSet 或 packaging.jniLibs.useLegacyPackaging
-            // 丢了，此时 nativeLibraryDir 为空，proot 报 ENOENT 而看不出真因。
-            FileLogger.e(TAG, "proot 不在 nativeLibraryDir：$prootBin（检查 jniLibs 与 useLegacyPackaging）")
+            // It cannot be missing unless the packaging configuration regressed: the jniLibs sourceSet or packaging.jniLibs.useLegacyPackaging
+            // was lost; then nativeLibraryDir is empty and proot reports ENOENT without revealing the real cause.
+            FileLogger.e(TAG, "proot is not in nativeLibraryDir: $prootBin (check jniLibs and useLegacyPackaging)")
         }
         val argv = mutableListOf(
             prootBin,
@@ -739,11 +739,11 @@ class LinuxContainerEngine @Inject constructor(
             "-b", "/dev",
             "-b", "/proc",
             "-b", "/sys",
-            "-b", "/system",  // 绑定 /system 让宿主动态库可用
-            "-0"              // 伪 root，apk 等需要
+            "-b", "/system",  // Bind /system so host dynamic libraries are available
+            "-0"              // Fake root, needed by apk etc.
         )
 
-        // 把当前工作区目录绑定到容器内 ~/workspace（即 /root/workspace），使命令与文件工具作用于同一目录
+        // Bind the current workspace directory to ~/workspace inside the container (i.e. /root/workspace), so commands and file tools act on the same directory
         if (projectPath != null) {
             argv.add("-b")
             argv.add("$projectPath:/root/workspace")
@@ -751,17 +751,17 @@ class LinuxContainerEngine @Inject constructor(
             argv.add("/root/workspace")
         }
 
-        // 把 AI 配置目录绑定到容器内 /root/.aicode（读写）：内含 skills/（load_skill 读到的指令常引用
-        // skill 目录里的脚本，AI 用 execute_command 执行 `python /root/.aicode/skills/<name>/x.py` 等）与
-        // mcp.json（MCP 配置）。宿主物理目录独立于 rootfs，容器升级重装不丢用户数据。
-        // 基础解释器 python3(3.12) 与 git 由进入终端时的初始化菜单（provision.sh）安装；
-        // node 等其他运行时仍由 skill / 用户自行保证。proot 的 -b 要求源路径存在，故先确保目录已建。
+        // Bind the AI configuration directory to /root/.aicode inside the container (read/write): it contains skills/ (instructions read by load_skill often reference
+        // scripts in the skill directory, which the AI executes via execute_command as `python /root/.aicode/skills/<name>/x.py`, etc.) and
+        // mcp.json (MCP configuration). The host physical directory is independent of the rootfs, so container upgrades/reinstalls do not lose user data.
+        // The base interpreter python3 (3.12) and git are installed by the initialization menu on entering the terminal (provision.sh);
+        // other runtimes such as node are still the responsibility of the skill / user. proot's -b requires the source path to exist, so ensure the directory is created first.
         val aicodeDir = containerInstaller.aicodeDir.apply { mkdirs() }
         argv.add("-b")
         argv.add("${aicodeDir.absolutePath}:/root/.aicode")
 
-        // profile 的额外绑定与参数：内置与导入容器默认也在此注入（见 ContainerProfile.DEFAULT_PROOT_ARGS），
-        // 与用户手动添加同一条路径，保证参数落在 argv 末尾。
+        // The profile's extra bindings and arguments: built-in and imported containers also inject their defaults here (see ContainerProfile.DEFAULT_PROOT_ARGS),
+        // via the same path as user manual additions, guaranteeing the arguments land at the end of argv.
         for (b in profile.extraBindings) {
             argv.add("-b")
             argv.add(b)
@@ -771,61 +771,61 @@ class LinuxContainerEngine @Inject constructor(
         return argv
     }
 
-    /** 容器内进程的标准环境变量（proot loader / 动态库 / PATH / HOME 等）。 */
+    /** Standard environment variables for in-container processes (proot loader / dynamic libraries / PATH / HOME, etc.). */
     private fun buildContainerEnv(profile: ContainerProfile): Map<String, String> {
-        // 每个容器用自己 rootfs 下的 /tmp：镜像自带该目录，但重置/删除别的容器不该影响本容器，
-        // 且 proot 要求 PROOT_TMP_DIR 已存在，故启动前确保建好（同 -b 源路径的处理）。
+        // Each container uses the /tmp under its own rootfs: the image ships that directory, but resetting/deleting another container should not affect this one,
+        // and proot requires PROOT_TMP_DIR to already exist, so ensure it is created before startup (same handling as -b source paths).
         val tmpDir = containerInstaller.prootTmpDirFor(profile).apply { mkdirs() }
         return mapOf(
-            // Android proot 必需的环境变量
-            "PROOT_TMP_DIR" to tmpDir.absolutePath, // Android 没有 /tmp
-            // Termux proot 的 loader 分离，必须用 PROOT_LOADER/_32 指向，否则无法注入子进程而起不来。
+            // Environment variables required by Android proot
+            "PROOT_TMP_DIR" to tmpDir.absolutePath, // Android has no /tmp
+            // Termux proot has a separate loader, which must be pointed to with PROOT_LOADER/_32, otherwise it cannot inject into child processes and will not start.
             "PROOT_LOADER" to containerInstaller.prootLoader.absolutePath,
             "PROOT_LOADER_32" to containerInstaller.prootLoader32.absolutePath,
-            // Termux proot 动态链接 libtalloc.so / libandroid-shmem.so（与 proot 同居 nativeLibraryDir），
-            // 需让 linker64 能找到它们；libc.so/liblog.so 走系统默认路径(/system/lib64)。
+            // Termux proot dynamically links libtalloc.so / libandroid-shmem.so (living with proot in nativeLibraryDir),
+            // so linker64 must be able to find them; libc.so/liblog.so use the system default paths (/system/lib64).
             "LD_LIBRARY_PATH" to "${containerInstaller.prootLibDir.absolutePath}:/system/lib64:/system/lib",
-            // 说明（statx / seccomp）：旧 proot 5.1.0 的 seccomp 过滤表没有 statx，Node 用 statx 解析
-            // 模块路径会拿到未翻译的 ~/workspace/xxx → ENOENT「Cannot find module」。Termux proot
-            // (5.1.107.x) 的 seccomp 过滤表已包含 statx，默认 seccomp 模式即可正确翻译，故此处
-            // **刻意不设 PROOT_NO_SECCOMP**——这正是 Termux 自己用 proot 的方式；强制全量 ptrace
-            // (PROOT_NO_SECCOMP=1) 反而在本设备触发过 ptrace(PEEKDATA) I/O error。
-            // 前缀 /root/.aicode/bin：容器内 aicode 环境工具（见 ContainerInstaller.extractEnvTool）。
+            // Note (statx / seccomp): old proot 5.1.0's seccomp filter table has no statx, so Node resolving module paths with statx
+            // would get the untranslated ~/workspace/xxx -> ENOENT "Cannot find module". Termux proot
+            // (5.1.107.x)'s seccomp filter table already includes statx, and the default seccomp mode translates correctly, so here
+            // **PROOT_NO_SECCOMP is deliberately not set** - this is exactly how Termux itself uses proot; forcing full ptrace
+            // (PROOT_NO_SECCOMP=1) has instead triggered a ptrace(PEEKDATA) I/O error on this device.
+            // Prefix /root/.aicode/bin: the in-container aicode environment tool (see ContainerInstaller.extractEnvTool).
             "PATH" to "/root/.aicode/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "HOME" to "/root",
-            // 宿主进程环境的 TMPDIR 指向 App 缓存目录（/data/user/0/<pkg>/cache），容器内 /data 未挂载、
-            // 该路径不存在——mktemp/dpkg 等会因找不到临时目录失败，故显式覆盖为容器内 /tmp。
+            // The host process environment's TMPDIR points to the App cache directory (/data/user/0/<pkg>/cache); /data is not mounted inside the container,
+            // so that path does not exist - mktemp/dpkg etc. would fail for not finding a temp directory, hence it is explicitly overridden to the in-container /tmp.
             "TMPDIR" to "/tmp",
-            // git 全局配置指向持久挂载里的 .gitconfig（/root/.aicode 绑定到宿主 filesDir/aicode，
-            // 跨 rootfs 升级不丢）。git-credentials 同放该目录，credential.helper=store 经此读；
-            // credential.helper 由 provision.sh 经 includeIf 限定 /root/workspace/ 加载（最小化注入）。
+            // The git global config points to the .gitconfig in the persistent mount (/root/.aicode is bound to the host filesDir/aicode,
+            // not lost across rootfs upgrades). git-credentials is in the same directory, read via credential.helper=store;
+            // credential.helper is loaded by provision.sh via includeIf limited to /root/workspace/ (minimized injection).
             "GIT_CONFIG_GLOBAL" to "/root/.aicode/.gitconfig",
-            // safe.directory=* 关掉 git 的 dubious ownership 检查。用户自选的外部工作区落在
-            // sdcardfs/FUSE 存储，其合成的文件属主 uid 与 proot 内 euid(0) 不一致，git 判为可疑属主
-            // 后 fatal 拒绝操作——表现为 `git init` 成功（init 不查属主）但随后 `git rev-parse` 全部失败，
-            // Git 页因此一直显示「未初始化」。容器是单用户沙盒，不存在跨用户仓库，全量放行是安全的。
-            // 用 GIT_CONFIG_COUNT 注入而非写进 .gitconfig：对已初始化的旧容器也立即生效，且不改用户配置文件。
-            // Git 页 / 终端 / agent 都经此环境启动，一处覆盖全部本地 git 入口。
+            // safe.directory=* disables git's dubious ownership check. A user-chosen external workspace sits on
+            // sdcardfs/FUSE storage, whose synthesized file owner uid does not match the euid(0) inside proot, so git judges it a dubious owner
+            // and then fatally refuses operations - appearing as `git init` succeeding (init does not check ownership) but subsequent `git rev-parse` all failing,
+            // so the Git page keeps showing "not initialized". The container is a single-user sandbox with no cross-user repositories, so allowing all is safe.
+            // Injected via GIT_CONFIG_COUNT rather than written into .gitconfig: it takes effect immediately for already-initialized old containers too, and does not modify user config files.
+            // The Git page / terminal / agent all start via this environment, so one place covers all local git entry points.
             "GIT_CONFIG_COUNT" to "1",
             "GIT_CONFIG_KEY_0" to "safe.directory",
             "GIT_CONFIG_VALUE_0" to "*",
             "TERM" to "xterm-256color",
             "LANG" to "C.UTF-8",
-            // 时区跟随手机：容器镜像默认写死 UTC（/etc/localtime → Etc/UTC），注入 TZ 后
-            // date/Python/Node/Go/JVM 等按手机当前时区显示；改手机时区后新起的命令即生效。
+            // Time zone follows the phone: the container image defaults to hardcoded UTC (/etc/localtime -> Etc/UTC); after injecting TZ,
+            // date/Python/Node/Go/JVM etc. display in the phone's current time zone; newly started commands take effect after the phone's time zone changes.
             "TZ" to containerTimeZone(profile)
-            // 全局 HTTP 代理：开启时注入 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY，
-            // 容器内 curl/git/npm/pip 等一律走代理；关闭或配置不完整时为空 map 不影响直连。
+            // Global HTTP proxy: when enabled, injects HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY,
+            // so in-container curl/git/npm/pip etc. all go through the proxy; when disabled or incompletely configured it is an empty map and does not affect direct connections.
         ) + com.aicode.core.net.AppProxy.proxyEnv(context)
     }
 
     /**
-     * 容器内时区（TZ 环境变量值），跟随手机当前系统时区。
+     * In-container time zone (TZ environment variable value), following the phone's current system time zone.
      *
-     * glibc 认 TZ 且优先于 /etc/localtime，注入后容器内所有本地命令都按手机时区显示。
-     * 优先用 IANA 名（含 DST 规则），但需 rootfs 的 /usr/share/zoneinfo 里真有该文件——Alpine
-     * 等精简镜像默认不带 tzdata，或系统返回 "GMT+08:00" 这类非 IANA 名时会缺失；此时退化成
-     * 按当前 UTC 偏移生成的 POSIX 写法（如 `<UTC+8>-8`），不处理 DST 但总能生效。
+     * glibc honours TZ and it takes precedence over /etc/localtime; after injection, all local commands in the container display in the phone's time zone.
+     * Prefer the IANA name (including DST rules), but the rootfs's /usr/share/zoneinfo must actually contain that file - Alpine
+     * and other slim images do not ship tzdata by default, or it is missing when the system returns a non-IANA name such as "GMT+08:00"; then it degrades to
+     * a POSIX form generated from the current UTC offset (e.g. `<UTC+8>-8`), which does not handle DST but always works.
      */
     private fun containerTimeZone(profile: ContainerProfile): String {
         val timeZone = java.util.TimeZone.getDefault()
@@ -835,9 +835,9 @@ class LinuxContainerEngine @Inject constructor(
         )
         if (zoneInfoFile.isFile) return timeZone.id
 
-        // localMinutes 是本地相对 UTC 的偏移（东八区 = +480）。名字按直观方向写成 UTC+8，
-        // POSIX 的 offset 符号与之相反（东八区写作 -8），若两者同号会显示成 "UTC-8" 让人误判西八区。
-        // 名字只取整小时（musl 的 std 名不接受 ':'），offset 用完整 hh:mm 保证分钟级时区也精确。
+        // localMinutes is the local offset relative to UTC (UTC+8 zone = +480). The name is written in the intuitive direction as UTC+8,
+        // but POSIX's offset sign is the opposite (the UTC+8 zone is written -8); if both had the same sign it would display as "UTC-8" and mislead people into thinking it is the UTC-8 zone.
+        // The name takes only whole hours (musl's std name does not accept ':'), and the offset uses the full hh:mm so minute-level time zones are also precise.
         val localMinutes = timeZone.getOffset(System.currentTimeMillis()) / 60_000
         if (localMinutes == 0) return "UTC0"
         val absMinutes = Math.abs(localMinutes)
@@ -855,6 +855,6 @@ class LinuxContainerEngine @Inject constructor(
         return processBuilder
     }
 
-    // 原 buildNativeProcess（/system/bin/sh 原生回退）已删除：容器通道不允许静默降级到真机 shell，
-    // 见 startContainerProcess 的注释。如需真机执行，应显式走 DeviceRootEngine（DEVICE_ROOT 通道）。
+    // The original buildNativeProcess (/system/bin/sh native fallback) has been deleted: the container channel must not silently degrade to the real device shell;
+    // see the comment on startContainerProcess. If real-device execution is needed, explicitly go through DeviceRootEngine (DEVICE_ROOT channel).
 }

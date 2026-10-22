@@ -151,7 +151,7 @@ class RemoteServerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(hostKeys = remoteSshConnection.savedHostKeys())
     }
 
-    /** 添加登录密钥（文件导入）：读取所选私钥文件复制到应用私有目录，解析公钥指纹后入库。 */
+    /** Adds a login key (file import): reads the selected private-key file, copies it to the app-private directory, parses the public-key fingerprint, and stores it. */
     fun addLoginKey(uri: Uri) {
         viewModelScope.launch {
             val staged = withContext(Dispatchers.IO) {
@@ -173,7 +173,7 @@ class RemoteServerViewModel @Inject constructor(
         }
     }
 
-    /** 添加登录密钥（粘贴内容）：将私钥文本加密写入应用私有目录，解析公钥指纹后入库。 */
+    /** Adds a login key (pasted content): writes the private-key text encrypted to the app-private directory, parses the public-key fingerprint, and stores it. */
     fun addLoginKeyFromContent(name: String, content: String, passphrase: String) {
         val bytes = content.trim().toByteArray(Charsets.UTF_8)
         if (bytes.isEmpty()) return
@@ -185,7 +185,7 @@ class RemoteServerViewModel @Inject constructor(
         }
     }
 
-    /** 将私钥字节加密写入应用私有目录，文件名冲突时自动加序号；写入失败返回 null。 */
+    /** Writes private-key bytes encrypted to the app-private directory, automatically appending a suffix on filename conflicts; returns null on write failure. */
     private fun stageLoginKey(preferredName: String, bytes: ByteArray): File? {
         if (bytes.isEmpty()) return null
         val dir = File(context.filesDir, "ssh_keys").apply { mkdirs() }
@@ -203,7 +203,7 @@ class RemoteServerViewModel @Inject constructor(
         return target
     }
 
-    /** 解析私钥指纹并写入登录密钥库，随后刷新列表。 */
+    /** Parses the private-key fingerprint and writes it to the login key store, then refreshes the list. */
     private suspend fun registerLoginKey(file: File, passphrase: String? = null) {
         val fingerprint = withContext(Dispatchers.IO) {
             privateKeyStore.fingerprint(privateKeyStore.readPem(file.absolutePath))
@@ -220,7 +220,7 @@ class RemoteServerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(loginKeys = loginKeyStore.entries())
     }
 
-    /** 编辑登录密钥：更新显示名与口令（私钥内容不可改）。 */
+    /** Edits a login key: updates the display name and passphrase (key content cannot be changed). */
     fun updateLoginKey(id: String, name: String, passphrase: String) {
         val existing = loginKeyStore.entries().firstOrNull { it.id == id } ?: return
         loginKeyStore.add(
@@ -232,7 +232,7 @@ class RemoteServerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(loginKeys = loginKeyStore.entries())
     }
 
-    /** 读取登录密钥的私钥明文 PEM（供编辑页只读查看）；失败返回 null。 */
+    /** Reads a login key's plaintext PEM (for read-only viewing on the editor page); returns null on failure. */
     fun readLoginKeyPem(id: String, onResult: (String?) -> Unit) {
         val key = loginKeyStore.entries().firstOrNull { it.id == id } ?: return onResult(null)
         viewModelScope.launch {
@@ -345,7 +345,7 @@ class RemoteServerViewModel @Inject constructor(
                     onResult(false, context.getString(R.string.remote_connect_failed, result.exceptionOrNull()?.message))
                 }
             } catch (e: HostKeyConfirmationRequiredException) {
-                // 首次连接/指纹变化：进入确认状态，由连接配置弹窗展示指纹确认区
+                // First connection / fingerprint change: enter the confirmation state; the connection settings dialog shows the fingerprint confirmation section
                 _uiState.value = _uiState.value.copy(
                     pendingHostKey = PendingHostKeyConfirmation(
                         host = e.host, port = e.port, keyType = e.keyType,
@@ -356,7 +356,7 @@ class RemoteServerViewModel @Inject constructor(
         }
     }
 
-    /** 确认主机密钥：保存指纹并清除确认状态；调用方随后重测即可直接连通。 */
+    /** Confirms the host key: saves the fingerprint and clears the confirmation state; the caller can then retest and connect directly. */
     fun confirmHostKey() {
         val pending = _uiState.value.pendingHostKey ?: return
         repository.confirmHostKey(pending.host, pending.port, pending.fingerprint)
@@ -366,7 +366,7 @@ class RemoteServerViewModel @Inject constructor(
         )
     }
 
-    /** 拒绝主机密钥：清除确认状态，不保存指纹。 */
+    /** Rejects the host key: clears the confirmation state without saving the fingerprint. */
     fun rejectHostKey() {
         _uiState.value = _uiState.value.copy(pendingHostKey = null)
     }
@@ -424,7 +424,7 @@ data class RemoteServerUiState(
     val pendingHostKey: PendingHostKeyConfirmation? = null
 )
 
-/** 待确认的主机密钥（首次连接或指纹变化），由连接配置弹窗展示。 */
+/** Host key awaiting confirmation (first connection or fingerprint change), shown by the connection settings dialog. */
 data class PendingHostKeyConfirmation(
     val host: String,
     val port: Int,

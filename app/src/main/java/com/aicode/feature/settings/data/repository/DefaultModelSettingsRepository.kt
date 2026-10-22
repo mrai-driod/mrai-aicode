@@ -18,11 +18,11 @@ private val Context.defaultModelDataStore by preferencesDataStore(
 )
 
 /**
- * 持久化「新会话默认模型」（providerId + model 两字符串）。
+ * Persists the default model for new sessions (the two strings providerId + model).
  *
- * 用户在空会话中切换模型时，除绑定当前会话外还会写入此处；之后新建会话
- * 默认绑定该模型（见 AIAgentViewModel.createSession）。未设置时新建会话不绑定，
- * 回退全局 active provider。DataStore 用法与 VisionModelSettingsRepository 一致。
+ * When the user switches the model in an empty session, it is written here in addition to being bound to the current session; new sessions created afterwards
+ * bind to that model by default (see AIAgentViewModel.createSession). When unset, new sessions bind to nothing
+ * and fall back to the global active provider. DataStore usage matches VisionModelSettingsRepository.
  */
 @Singleton
 class DefaultModelSettingsRepository @Inject constructor(
@@ -33,13 +33,13 @@ class DefaultModelSettingsRepository @Inject constructor(
         val MODEL_KEY = stringPreferencesKey("default_model")
     }
 
-    /** 当前持久化的新会话默认 providerId 流；未设置时为空字符串。 */
+    /** Flow of the currently persisted default providerId for new sessions; empty string when unset. */
     val providerIdFlow: Flow<String> = context.defaultModelDataStore.data.map { it[PROVIDER_ID_KEY] ?: "" }
 
-    /** 当前持久化的新会话默认 model 流；未设置时为空字符串。 */
+    /** Flow of the currently persisted default model for new sessions; empty string when unset. */
     val modelFlow: Flow<String> = context.defaultModelDataStore.data.map { it[MODEL_KEY] ?: "" }
 
-    /** 写入新会话默认模型（设空字符串即等同 [clear]）。 */
+    /** Writes the default model for new sessions (setting empty strings is equivalent to [clear]). */
     suspend fun setDefaultModel(providerId: String, model: String) {
         context.defaultModelDataStore.edit {
             it[PROVIDER_ID_KEY] = providerId
@@ -47,7 +47,7 @@ class DefaultModelSettingsRepository @Inject constructor(
         }
     }
 
-    /** 清空配置——新建会话回退到全局 active provider。 */
+    /** Clears the configuration; new sessions fall back to the global active provider. */
     suspend fun clear() {
         context.defaultModelDataStore.edit {
             it.remove(PROVIDER_ID_KEY)
@@ -55,9 +55,9 @@ class DefaultModelSettingsRepository @Inject constructor(
         }
     }
 
-    /** 读取一次当前新会话默认 providerId（冷读用）。 */
+    /** Reads the current default providerId for new sessions once (for cold reads). */
     suspend fun getDefaultProviderId(): String = providerIdFlow.first()
 
-    /** 读取一次当前新会话默认 model（冷读用）。 */
+    /** Reads the current default model for new sessions once (for cold reads). */
     suspend fun getDefaultModel(): String = modelFlow.first()
 }

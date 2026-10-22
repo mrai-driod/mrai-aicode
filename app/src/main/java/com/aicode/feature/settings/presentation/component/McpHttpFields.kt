@@ -32,7 +32,7 @@ import compose.icons.feathericons.Trash2
 import androidx.compose.ui.res.stringResource
 import com.aicode.R
 
-/** HTTP 形态字段：URL + 请求头键值对（按照卡片排版规范）。 */
+/** HTTP form fields: URL + header key-value pairs (following the card layout conventions). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun McpHttpFields(

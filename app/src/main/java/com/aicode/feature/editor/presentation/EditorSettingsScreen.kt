@@ -35,8 +35,9 @@ import compose.icons.feathericons.ArrowLeft
 import kotlin.math.roundToInt
 
 /**
- * 独立的编辑器设置页：字体大小、自动换行，以及缩进参考线 / 自动换行箭头 / 空白符号三个显示开关。
- * 值变化即时写入 [EditorSettingsRepository]，编辑器页通过 settingsFlow 自动响应。
+ * Standalone editor settings page: font size, word wrap, and three display toggles for
+ * indent guides / wrap arrows / whitespace symbols.
+ * Value changes are written immediately to [EditorSettingsRepository], and the editor page responds automatically via settingsFlow.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

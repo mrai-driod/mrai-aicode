@@ -41,8 +41,8 @@ import compose.icons.FeatherIcons
 import compose.icons.feathericons.ExternalLink
 
 /**
- * 新增提供商底部弹层：展示自定义提供商与内置官方 provider 列表（来自 api.official.json）。
- * 选择自定义时回调 [onSelectCustom]；选择官方预设时回调 [onSelectOfficial]。
+ * Add-provider bottom sheet: shows custom providers and the built-in official provider list (from api.official.json).
+ * Calls back [onSelectCustom] when custom is selected; calls back [onSelectOfficial] when an official preset is selected.
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,7 +53,7 @@ internal fun ProviderPresetSheet(
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    // 纯本地内存/磁盘/assets 同步直读，零延迟零等待，绝无任何网络加载与转圈
+    // Purely local synchronous direct reads from memory/disk/assets, zero latency and zero waiting, with absolutely no network loading or spinners
     val officialPresets = remember { ProviderPresetLibrary.loadOfficial(context) }
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val sheetContentHeight = screenHeight * 0.85f
@@ -78,14 +78,14 @@ internal fun ProviderPresetSheet(
                     .padding(bottom = Spacing.md)
             )
 
-            // ── 供应商列表：自定义 + 内置官方（同一列表，同一样式）──
+            // ── Provider list: custom + built-in official (same list, same style)──
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
                 contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = Spacing.xs)
             ) {
-                // 自定义提供商：作为列表第一项，样式与内置提供商一致。
+                // Custom provider: as the first item in the list, with the same style as built-in providers.
                 item(key = "__custom__") {
                     Surface(
                         onClick = onSelectCustom,

@@ -23,11 +23,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aicode.R
 
-/** 触摸热区宽度：视觉上只有一条细线，但要给手指留够可抓取的宽度。 */
+/** Touch hot-zone width: visually only a thin line, but enough grabbable width must be left for a finger. */
 private val HandleTouchWidth = 14.dp
 
 /**
- * 左右分栏之间的拖拽分割条。[onDragDelta] 收到的是水平位移像素，由调用方换算成分栏比例。
+ * Drag divider between the left and right panes. [onDragDelta] receives the horizontal displacement in pixels, which the caller converts into a pane ratio.
  */
 @Composable
 fun VerticalSplitHandle(
