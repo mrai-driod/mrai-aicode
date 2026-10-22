@@ -404,8 +404,8 @@ private fun loadAppIconBitmap(context: Context): ImageBitmap? {
     }.getOrNull()
 }
 
-private const val GITHUB_REPO_URL = "https://github.com/hwsyyds666/Aicode-Glass"
-private const val LICENSE_URL = "https://github.com/hwsyyds666/Aicode-Glass/blob/main/LICENSE"
+private const val GITHUB_REPO_URL = "https://github.com/mrai-driod/mrai-aicode"
+private const val LICENSE_URL = "https://github.com/mrai-driod/mrai-aicode/blob/main/LICENSE"
 private const val TELEGRAM_GROUP_URL = "https://t.me/maoleikernel"
 private const val ICON_PX_DP = 48
 

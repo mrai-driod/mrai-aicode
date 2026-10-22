@@ -126,7 +126,7 @@ import com.aicode.feature.terminal.data.repository.TerminalSettings
 import com.aicode.feature.terminal.presentation.component.TerminalSettingsSheet
 
 /** 使用手册在线文档站地址。 */
-private const val USER_GUIDE_DOCS_URL = "https://aicode.murk.top"
+private const val USER_GUIDE_DOCS_URL = "https://github.com/mrai-driod/mrai-aicode/tree/main/docs-site/docs"
 
 /** 大屏设置页左侧常驻菜单宽度。 */
 private val SettingsMenuWidth = 320.dp

@@ -90,4 +90,4 @@ internal fun githubReleaseUrl(tag: String?): String = when {
     else -> "$GITHUB_RELEASES_URL/tag/${Uri.encode(tag)}"
 }
 
-private const val GITHUB_RELEASES_URL = "https://github.com/hwsyyds666/Aicode-Glass/releases"
+private const val GITHUB_RELEASES_URL = "https://github.com/mrai-driod/mrai-aicode/releases"
