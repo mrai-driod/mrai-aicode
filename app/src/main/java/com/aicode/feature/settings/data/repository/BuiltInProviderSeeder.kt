@@ -1,6 +1,8 @@
 package com.aicode.feature.settings.data.repository
 
+import com.aicode.feature.settings.data.local.CustomModelMetadataStore
 import com.aicode.feature.settings.domain.model.AIProviderConfig
+import com.aicode.feature.settings.domain.model.ModelMetadata
 import com.aicode.feature.settings.domain.model.ProviderType
 import com.aicode.feature.settings.domain.repository.AIProviderRepository
 import javax.inject.Inject
@@ -20,7 +22,8 @@ import javax.inject.Singleton
 @Singleton
 class BuiltInProviderSeeder @Inject constructor(
     private val providerRepository: AIProviderRepository,
-    private val defaultModelSettings: DefaultModelSettingsRepository
+    private val defaultModelSettings: DefaultModelSettingsRepository,
+    private val customModelMetadataStore: CustomModelMetadataStore
 ) {
 
     suspend fun seedIfNeeded() {
@@ -35,6 +38,45 @@ class BuiltInProviderSeeder @Inject constructor(
         if (defaultModelSettings.getDefaultProviderId().isBlank()) {
             defaultModelSettings.setDefaultModel(MRAI_ID, MRAI_MODEL)
         }
+        seedModelMetadata()
+    }
+
+    /**
+     * Pin capability metadata for the built-in models (insert-only, same rule
+     * as the providers: a user's own Settings override is never stomped).
+     *
+     * Why: these ids are not in the models.dev catalog, so they resolve via
+     * the unknown-model fallback — tools on, vision off. That fallback happens
+     * to be right for most of them, but pinning it explicitly protects the
+     * built-ins from a future catalog refresh mis-matching an id by suffix,
+     * and it unlocks vision for the one genuinely multimodal model in the
+     * free list. Verified against the live endpoints (Oct 22, 2026):
+     * Pollinations' `openai` model accepts tool calls but rejects image
+     * input, so Mrai AI stays vision-off (the app then swaps attached images
+     * for a placeholder instead of failing the whole request).
+     */
+    private suspend fun seedModelMetadata() {
+        seedMetadata(MRAI_ID, MRAI_MODEL, supportsVision = false)
+        for (model in OPENCODE_FREE_MODELS) {
+            seedMetadata(
+                OPENCODE_FREE_ID, model,
+                supportsVision = model == VISION_MODEL
+            )
+        }
+    }
+
+    private suspend fun seedMetadata(providerId: String, model: String, supportsVision: Boolean) {
+        if (customModelMetadataStore.get(providerId, model) != null) return
+        customModelMetadataStore.put(
+            providerId, model,
+            ModelMetadata(
+                id = model,
+                // 0 keeps the auto-resolved window (unknown models get 128k).
+                contextTokens = 0,
+                supportsTools = true,
+                supportsVision = supportsVision
+            )
+        )
     }
 
     private fun mraiAiConfig() = AIProviderConfig(
@@ -66,6 +108,9 @@ class BuiltInProviderSeeder @Inject constructor(
         const val MRAI_MODEL = "mrai-auto"
         const val OPENCODE_FREE_ID = "opencode-free"
         const val KEYLESS = "keyless"
+
+        /** The one vision-language model in the OpenCode Free list. */
+        const val VISION_MODEL = "nemotron-3.5-super-vl-free"
 
         /** OpenCode Zen's free tier, as listed by its live /models catalog. */
         val OPENCODE_FREE_MODELS = listOf(
