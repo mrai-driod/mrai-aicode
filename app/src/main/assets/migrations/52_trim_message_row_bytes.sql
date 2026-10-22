@@ -1,8 +1,8 @@
--- Fallback cleanup of agent_messages rows whose total text exceeds the limit.
--- When the sum of all large text fields in a single row exceeds the SQLite CursorWindow (~2MB) safety budget, the row may fail to be
--- loaded into the window, throwing IllegalStateException "Couldn't read row N, col 0 from CursorWindow" when messages are read,
--- crashing on entering the chat page. The storage side now caps each field by UTF-8 bytes; this cleans up historical rows.
--- The character cap is one third of the byte budget (a Chinese character takes up to 3 bytes), ensuring the actual byte count after trimming falls within budget.
+-- 兜底清理 agent_messages 中文本总量超限的行。
+-- 单行所有大文本字段之和超过 SQLite CursorWindow（约 2MB）安全预算时，该行可能无法被
+-- 载入窗口，读取消息时抛 IllegalStateException「Couldn't read row N, col 0 from CursorWindow」，
+-- 进聊天页即崩。落库侧已改为按 UTF-8 字节限制各字段，此处清理历史存量。
+-- 字符上限取字节预算的三分之一（中文单字符最多 3 字节），确保削减后真实字节数落入预算。
 UPDATE agent_messages SET
     content = substr(content, 1, 50000),
     toolCallsJson = CASE WHEN toolCallsJson IS NULL THEN NULL ELSE substr(toolCallsJson, 1, 33333) END,

@@ -6,8 +6,8 @@ SET isContextSummary = 1
 WHERE role = 'ASSISTANT'
   AND content LIKE '【系统提示：早期的对话已被压缩，以下是之前的核心状态摘要】%';
 
--- Older versions used only isCompacted to exclude /usage; normally compacted originals keep that flag and are restored on rollback.
--- Old data has no per-message summary attribution, so compactedBySummaryId cannot be inferred from timestamps.
+-- 旧版仅用 isCompacted 排除 /usage；普通压缩原文保留该标记，回退时再恢复。
+-- 旧数据没有逐条摘要归属，不能按时间推断 compactedBySummaryId。
 UPDATE agent_messages
 SET isContextExcluded = 1,
     isCompacted = 0
