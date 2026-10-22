@@ -18,11 +18,10 @@
       "minimax-m3.1-flash-free"
     ],
     "isRecommended": true,
-    "badge": "Free",
+    "badge": "Free - no key needed",
     "websiteUrl": "https://opencode.ai",
     "tags": [
-      "Free models",
-      "No key needed"
+      "Keyless"
     ]
   },
   {
@@ -31,9 +30,11 @@
     "type": "OPENAI",
     "baseUrl": "https://api.openai.com/",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://platform.openai.com/api-keys",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "anthropic",
@@ -41,9 +42,11 @@
     "type": "ANTHROPIC",
     "baseUrl": "https://api.anthropic.com/",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://console.anthropic.com/settings/keys",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "deepseek",
@@ -51,9 +54,11 @@
     "type": "OPENAI",
     "baseUrl": "https://api.deepseek.com/",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://platform.deepseek.com/api_keys",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "google",
@@ -61,9 +66,11 @@
     "type": "GEMINI",
     "baseUrl": "https://generativelanguage.googleapis.com/",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://aistudio.google.com/apikey",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "xai",
@@ -71,9 +78,11 @@
     "type": "OPENAI",
     "baseUrl": "https://api.x.ai/",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://console.x.ai/",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "alibaba",
@@ -81,9 +90,11 @@
     "type": "OPENAI",
     "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://bailian.console.aliyun.com/",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "zai",
@@ -91,9 +102,11 @@
     "type": "OPENAI",
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://open.bigmodel.cn/usercenter/apikeys",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "moonshotai",
@@ -101,9 +114,11 @@
     "type": "OPENAI",
     "baseUrl": "https://api.moonshot.cn/v1",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://platform.moonshot.cn/console/api-keys",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "minimax",
@@ -111,9 +126,11 @@
     "type": "OPENAI",
     "baseUrl": "https://api.minimax.io/",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://platform.minimax.io/",
+    "tags": [
+      "Bring your own key"
+    ]
   },
   {
     "id": "xiaomi",
@@ -121,8 +138,10 @@
     "type": "OPENAI",
     "baseUrl": "https://api.xiaomimimo.com/v1",
     "isRecommended": false,
-    "badge": null,
-    "websiteUrl": null,
-    "tags": []
+    "badge": "API key required",
+    "websiteUrl": "https://xiaomimimo.com/",
+    "tags": [
+      "Bring your own key"
+    ]
   }
 ]
