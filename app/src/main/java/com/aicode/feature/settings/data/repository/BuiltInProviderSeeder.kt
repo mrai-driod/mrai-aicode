@@ -60,7 +60,7 @@ class BuiltInProviderSeeder @Inject constructor(
         for (model in OPENCODE_FREE_MODELS) {
             seedMetadata(
                 OPENCODE_FREE_ID, model,
-                supportsVision = model == VISION_MODEL
+                supportsVision = model in VISION_MODELS
             )
         }
     }
@@ -109,8 +109,19 @@ class BuiltInProviderSeeder @Inject constructor(
         const val OPENCODE_FREE_ID = "opencode-free"
         const val KEYLESS = "keyless"
 
-        /** The one vision-language model in the OpenCode Free list. */
-        const val VISION_MODEL = "nemotron-3.5-super-vl-free"
+        /**
+         * Vision-capable models in the OpenCode Free list, per models.dev
+         * input modalities (checked Oct 22, 2026) — all six also support
+         * tool calls, so they stay full agent models with images on.
+         */
+        val VISION_MODELS = setOf(
+            "mimo-v2.6-flash-free",
+            "nemotron-3.5-super-vl-free",
+            "longcat-2.5-preview-free",
+            "deepseek-v4.1-flash-free",
+            "glm-5.3-flash-free",
+            "minimax-m3.1-flash-free"
+        )
 
         /** OpenCode Zen's free tier, as listed by its live /models catalog. */
         val OPENCODE_FREE_MODELS = listOf(
