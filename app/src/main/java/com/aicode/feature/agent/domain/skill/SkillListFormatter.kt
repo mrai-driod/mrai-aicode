@@ -88,7 +88,7 @@ object SkillListFormatter {
 
     /** Omission notice: tells the model how many were left out, where to see the full list, and that unlisted skills can also be attempted by name. */
     private fun omissionNotice(omitted: Int, charBudget: Int): String =
-        "... $omitted more skills are not listed here because of the prompt budget (limit $charBudget characters); " +
-            "see the full list in ~/.aicode/skills/ and <project root>/.aicode/skills/. " +
-            "If one fits the task, load it by name with loadSkill."
+        "... $omitted more skills are not listed here (prompt budget: $charBudget chars). " +
+            "Full list: ~/.aicode/skills/ and <project root>/.aicode/skills/. " +
+            "Load one by name with loadSkill."
 }
