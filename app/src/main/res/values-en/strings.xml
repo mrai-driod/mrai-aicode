@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AiCode</string>
+    <string name="app_name">Mrai AiCode</string>
     <string name="chat_context_usage_estimated">Estimated input budget usage: %1$d%%</string>
     <string name="agent_input_budget_exceeded">Context exceeds the model input budget. Shorten the input or reduce tool definitions.</string>
 

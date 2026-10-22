@@ -107,7 +107,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.aicode"
+        applicationId = "com.mrai.aicode"
         minSdk = 26
         // 仍锁 targetSdk 28，但阻塞项已不是 PRoot：proot 全套改由 jniLibs 装到 nativeLibraryDir
         // （见 sourceSets 与 packaging.jniLibs 注释），W^X 不再挡容器启动。升级前待解决：

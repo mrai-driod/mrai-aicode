@@ -17,6 +17,7 @@ import com.aicode.feature.agent.domain.provider.AIResponse
 import com.aicode.feature.agent.domain.provider.AnthropicAdapter
 import com.aicode.feature.agent.domain.provider.fixedTemperature
 import com.aicode.feature.agent.domain.provider.GeminiAdapter
+import com.aicode.feature.agent.domain.provider.MraiChainAdapter
 import com.aicode.feature.agent.domain.provider.OpenAIAdapter
 import com.aicode.feature.agent.domain.session.SessionUseCase
 import com.aicode.feature.agent.domain.tool.AbstractContextualTool
@@ -325,8 +326,12 @@ class ViewImageTool @Inject constructor(
                 it.cacheBreakpointsEnabled = config.anthropicCacheBreakpoints
             }
             ProviderType.GEMINI -> GeminiAdapter(geminiApi)
-            else -> OpenAIAdapter(openAIApi).also {
-                it.chatCacheKeyEnabled = config.openaiChatCacheKey
+            else -> if (config.id == MraiChainAdapter.PROVIDER_ID) {
+                MraiChainAdapter(openAIApi)
+            } else {
+                OpenAIAdapter(openAIApi).also {
+                    it.chatCacheKeyEnabled = config.openaiChatCacheKey
+                }
             }
         }
         provider.apiKey = config.apiKey

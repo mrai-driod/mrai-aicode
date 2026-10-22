@@ -1,47 +1,47 @@
-为当前代码库创建或更新 `AGENTS.md`（根目录已有则就地改进；只有 `CLAUDE.md` 时改进 `CLAUDE.md`；都没有则新建 `AGENTS.md`）。
+Create or update an `AGENTS.md` for the current codebase (improve it in place if one exists at the root; if only `CLAUDE.md` exists, improve that; if neither exists, create a new `AGENTS.md`).
 
-目标是一份精简的指令文件，帮助后续 AI 会话减少错误、快速上手。每一行都须能回答「没有它，AI 是否很可能出错」，无法回答的删去。
+The goal is a lean instruction file that helps future AI sessions make fewer mistakes and get productive quickly. Every line must be able to answer "without this, would an AI quite likely go wrong?" — delete anything that cannot.
 
-用户指定的关注点或约束（必须遵守）：
+Focus areas or constraints specified by the user (must be obeyed):
 $ARGUMENTS
 
-## 先查什么
-优先读价值最高的来源：
-- `README*`、根级清单（`package.json`/`Cargo.toml`/`pyproject.toml`/`go.mod`/`build.gradle.kts` 等）、workspace 配置、锁文件
-- 构建、测试、lint、格式化、类型检查、代码生成的配置
-- CI 工作流与 pre-commit/任务运行器配置
-- 已有的指令文件（`AGENTS.md`、`CLAUDE.md`、`.cursor/rules/`、`.cursorrules`、`.github/copilot-instructions.md`）
+## What to read first
+Prefer the highest-value sources:
+- `README*`, root manifests (`package.json` / `Cargo.toml` / `pyproject.toml` / `go.mod` / `build.gradle.kts`, etc.), workspace configuration, lockfiles
+- Build, test, lint, format, type-check, and code-generation configuration
+- CI workflows and pre-commit / task-runner configuration
+- Existing instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/`, `.cursorrules`, `.github/copilot-instructions.md`)
 
-读完配置与文档后若架构仍不清楚，再挑少量有代表性的代码文件，找出入口、模块边界与执行流程；优先读能把系统串起来的文件。
+If the architecture is still unclear after the configuration and documentation, read a few representative code files to find entry points, module boundaries, and execution flow; prefer files that tie the system together.
 
-以可执行的来源为准：文档与配置或脚本冲突时信配置与脚本，只保留能核实的内容。
+Treat executable sources as truth: when documentation conflicts with configuration or scripts, trust configuration and scripts, and keep only what can be verified.
 
-## 要提炼什么
-对在本仓库工作的 AI 最有价值的事实：
-- 确切的开发命令，尤其是不显然的
-- 如何只跑单个测试、单个包或一步聚焦验证
-- 顺序有要求时的命令顺序（如 `lint -> typecheck -> test`）
-- monorepo/多包边界、主要目录归属、真正的应用或库入口
-- 框架或工具链的坑：生成代码、迁移、codegen、构建产物、环境变量加载、dev server、部署流程
-- 与语言或框架默认约定不同的仓库专属风格或流程
-- 测试相关的坑：fixture、集成测试前置条件、快照流程、依赖的服务、易抖或昂贵的套件
-- 已有指令文件里值得保留的重要约束
+## What to distil
+The facts most valuable to an AI working in this repository:
+- Exact development commands, especially non-obvious ones
+- How to run a single test, a single package, or one focused verification step
+- Command ordering where it matters (e.g. `lint -> typecheck -> test`)
+- Monorepo / multi-package boundaries, ownership of major directories, the real app or library entry points
+- Framework and toolchain pitfalls: generated code, migrations, codegen, build artefacts, environment-variable loading, dev servers, deployment flow
+- Repository-specific style or process that differs from language/framework defaults
+- Testing pitfalls: fixtures, integration-test prerequisites, snapshot processes, services depended on, flaky or expensive suites
+- Important constraints from existing instruction files that are worth keeping
 
-好的 `AGENTS.md` 内容通常是「读了多个文件才推出来」的硬信息。
+Good `AGENTS.md` content is usually hard information that took reading several files to derive.
 
-## 要不要问用户
-只有仓库确实答不上某个重要问题时才问，且最多一批简短问题：未写下的团队约定、分支/PR/发布期望、已知但没写下的环境或测试前置条件。仓库已写清楚的不要问。
+## Whether to ask the user
+Ask only when the repository genuinely cannot answer an important question, and at most one short batch: unwritten team conventions, branch/PR/release expectations, known-but-unwritten environment or test prerequisites. Never ask about anything the repository already states clearly.
 
-## 写作规则
-只写高信噪比的仓库专属内容：
-- AI 容易猜错的确切命令与快捷方式
-- 从文件名看不出来的架构说明
-- 与语言或框架默认不同的约定
-- 环境搭建要求、怪癖与运维坑
-- 值得引用的既有指令来源
+## Writing rules
+Write only high-signal, repository-specific content:
+- Exact commands and shortcuts an AI is likely to get wrong
+- Architecture notes that cannot be inferred from file names
+- Conventions that differ from language or framework defaults
+- Environment setup requirements, quirks, and operational pitfalls
+- Existing instruction sources worth citing
 
-不要写：泛泛的软件建议、长篇教程或详尽文件树、显而易见的语言约定、猜测或无法核实的内容、更适合放别处引用指过去的内容。
+Do not write: generic software advice, long tutorials or exhaustive file trees, obvious language conventions, speculation or unverifiable content, or material better referenced than repeated here.
 
-不确定则省略；优先短小节加要点。仓库简单则从简，仓库复杂则只总结真正会改变 AI 做法的少数结构性事实。
+Omit anything uncertain; prefer short sections with bullet points. Keep it as short as the repository allows; for a complex repository, summarise only the few structural facts that actually change how an AI should work.
 
-若 `AGENTS.md`（或 `CLAUDE.md`）已存在：就地改进，不盲目重写——保留已核实的有用内容，删掉空话与过时说法，并与当前代码库对齐。
+If an `AGENTS.md` (or `CLAUDE.md`) already exists: improve it in place rather than rewriting blindly — keep verified, useful content, remove empty words and stale statements, and align it with the current codebase.

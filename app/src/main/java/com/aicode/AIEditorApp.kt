@@ -156,6 +156,9 @@ class AIEditorApp : Application(), Configuration.Provider {
     @Inject
     lateinit var secretEncryptionMigrator: com.aicode.feature.settings.data.SecretEncryptionMigrator
 
+    @Inject
+    lateinit var builtInProviderSeeder: com.aicode.feature.settings.data.repository.BuiltInProviderSeeder
+
     /** git 凭据仓库：启动即把旧版明文凭据文件迁移为编码格式。 */
     @Inject
     lateinit var fileCredentialRepository: com.aicode.feature.credentials.data.repository.FileCredentialRepository
@@ -263,6 +266,12 @@ class AIEditorApp : Application(), Configuration.Provider {
         appScope.launch {
             kotlinx.coroutines.delay(800)
             com.aicode.feature.settings.data.local.ProviderPresetLibrary.refreshFromNetworkIfStale(this@AIEditorApp)
+        }
+        // Mrai fork: seed the built-in free providers (Mrai AI + OpenCode Free)
+        // so a fresh install can chat immediately, with no API key setup.
+        appScope.launch {
+            runCatching { builtInProviderSeeder.seedIfNeeded() }
+                .onFailure { FileLogger.w(TAG, "Built-in provider seeding failed", it) }
         }
         // 启动即加载持久化等级，并随设置页改动实时生效（唯一同步点）。
         appScope.launch {

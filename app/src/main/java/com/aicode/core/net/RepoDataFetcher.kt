@@ -184,8 +184,8 @@ class RepoDataFetcher(
         private const val TAG = "RepoDataFetcher"
         private const val CACHE_DIR_NAME = "repo_data_cache"
 
-        const val DEFAULT_OWNER = "hwsyyds666"
-        const val DEFAULT_REPO = "Aicode-Glass"
+        const val DEFAULT_OWNER = "mrai-driod"
+        const val DEFAULT_REPO = "mrai-aicode"
         const val DEFAULT_BRANCH = "main"
 
         /** 默认缓存 12 小时 */

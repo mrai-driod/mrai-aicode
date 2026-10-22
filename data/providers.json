@@ -1,5 +1,31 @@
 [
   {
+    "id": "opencode-free",
+    "name": "OpenCode Free",
+    "type": "OPENAI",
+    "baseUrl": "https://opencode.ai/zen/v1",
+    "models": [
+      "big-pickle",
+      "beam-free",
+      "flint-40b-free",
+      "mimo-v2.6-flash-free",
+      "nemotron-3.5-super-vl-free",
+      "nemotron-3.5-lightning-free",
+      "jev-1.13-free",
+      "longcat-2.5-preview-free",
+      "deepseek-v4.1-flash-free",
+      "glm-5.3-flash-free",
+      "minimax-m3.1-flash-free"
+    ],
+    "isRecommended": true,
+    "badge": "Free",
+    "websiteUrl": "https://opencode.ai",
+    "tags": [
+      "Free models",
+      "No key needed"
+    ]
+  },
+  {
     "id": "openai",
     "name": "OpenAI",
     "type": "OPENAI",
@@ -61,7 +87,7 @@
   },
   {
     "id": "zai",
-    "name": "Z.AI (智谱)",
+    "name": "Z.AI",
     "type": "OPENAI",
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
     "isRecommended": false,
@@ -96,21 +122,7 @@
     "baseUrl": "https://api.xiaomimimo.com/v1",
     "isRecommended": false,
     "badge": null,
-    "websiteUrl": "https://platform.xiaomimimo.com?ref=66QSUD",
-    "tags": [
-      "注册送10元"
-    ]
-  },
-  {
-    "id": "aicode",
-    "name": "AiCode",
-    "type": "OPENAI",
-    "baseUrl": "https://ai.murk.top/v1",
-    "isRecommended": true,
-    "badge": null,
-    "websiteUrl": "https://ai.murk.top",
-    "tags": [
-      "签到领额度"
-    ]
+    "websiteUrl": null,
+    "tags": []
   }
 ]

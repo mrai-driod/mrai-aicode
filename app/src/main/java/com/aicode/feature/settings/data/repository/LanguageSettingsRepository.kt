@@ -20,6 +20,9 @@ private val Context.languageDataStore by preferencesDataStore(
 private const val PREFS_NAME = "language_prefs_sync"
 private const val PREFS_KEY = "language_tag"
 
+/** Mrai fork default UI/agent language (used when no explicit choice is stored). */
+const val DEFAULT_LANGUAGE_TAG = "en"
+
 /**
  * 持久化用户选择的应用语言。
  *
@@ -49,10 +52,11 @@ class LanguageSettingsRepository @Inject constructor(
         }.apply()
     }
 
-    suspend fun snapshot(): String? = languageFlow.first()
+    /** Mrai fork: English is the default language when the user has not picked one. */
+    suspend fun snapshot(): String? = languageFlow.first() ?: DEFAULT_LANGUAGE_TAG
 
     /** 同步读取语言 tag，供 attachBaseContext 在 Activity 创建前调用（此时 Hilt 尚未注入）。 */
-    fun getLanguageSync(): String? = syncPrefs.getString(PREFS_KEY, null)
+    fun getLanguageSync(): String? = syncPrefs.getString(PREFS_KEY, null) ?: DEFAULT_LANGUAGE_TAG
 
     suspend fun restore(value: String?) {
         context.languageDataStore.edit {

@@ -56,6 +56,7 @@ import com.aicode.feature.agent.domain.provider.GeminiAdapter
 import com.aicode.feature.agent.domain.provider.AllKeysFailedException
 import com.aicode.feature.agent.domain.provider.KeySwitchOutcome
 import com.aicode.feature.agent.domain.provider.isKeySwitchFailure
+import com.aicode.feature.agent.domain.provider.MraiChainAdapter
 import com.aicode.feature.agent.domain.provider.OpenAIAdapter
 import com.aicode.feature.settings.domain.model.ProviderType
 import com.aicode.feature.settings.domain.model.ModelContextPolicy
@@ -281,8 +282,12 @@ class StatefulAgentWorkflow @Inject constructor(
                 it.cacheBreakpointsEnabled = config.anthropicCacheBreakpoints
             }
             ProviderType.GEMINI -> GeminiAdapter(geminiApi)
-            else -> OpenAIAdapter(openAIApi).also {
-                it.chatCacheKeyEnabled = config.openaiChatCacheKey
+            else -> if (config.id == MraiChainAdapter.PROVIDER_ID) {
+                MraiChainAdapter(openAIApi)
+            } else {
+                OpenAIAdapter(openAIApi).also {
+                    it.chatCacheKeyEnabled = config.openaiChatCacheKey
+                }
             }
         }
         // 多 Key 模式下由轮换器决定本次用哪个 Key（会话内粘住，Key 不可用时切下一个并重发）。
