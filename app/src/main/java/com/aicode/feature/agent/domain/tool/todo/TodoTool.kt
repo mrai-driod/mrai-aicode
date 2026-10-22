@@ -37,9 +37,9 @@ class TodoTool @Inject constructor(
     }
 
     override val name = "todo"
-    override val description = "用当前完整 items 列表替换会话任务清单。只需提交完整列表，" +
-        "无需 action、todo_id 或单项更新。items 可为空数组表示清空；每项为 " +
-        "{subject, description, status, priority}。status 可为 pending、in_progress、completed。"
+    override val description = "Replace the session task list with the current complete items list. Just submit the complete list, " +
+        "with no action, todo_id, or per-item updates needed. items can be an empty array to clear the list; each item is " +
+        "{subject, description, status, priority}. status can be pending, in_progress, or completed."
 
     override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.MODIFY_TODO_STATE)
@@ -50,20 +50,20 @@ class TodoTool @Inject constructor(
         "properties" to mapOf(
             "subject" to mapOf(
                 "type" to "string",
-                "description" to "简短的待办标题（祈使句，如「分析项目结构」）"
+                "description" to "Short todo title (imperative sentence, e.g. 「Analyze project structure」)"
             ),
             "description" to mapOf(
                 "type" to "string",
-                "description" to "详细说明（可选）"
+                "description" to "Detailed description (optional)"
             ),
             "status" to mapOf(
                 "type" to "string",
                 "enum" to listOf("pending", "in_progress", "completed"),
-                "description" to "状态，默认 pending。in_progress 表示正在处理，completed 表示已完成。"
+                "description" to "Status, defaults to pending. in_progress means in progress, completed means done."
             ),
             "priority" to mapOf(
                 "type" to "integer",
-                "description" to "优先级，0=普通，越大越优先"
+                "description" to "Priority, 0=normal, larger values mean higher priority"
             )
         ),
         "required" to listOf("subject")
@@ -73,7 +73,7 @@ class TodoTool @Inject constructor(
         "items" to ToolParameter(
             name = "items",
             type = ParameterType.ARRAY,
-            description = "当前完整待办列表。传空数组会清空任务清单；每项为含 subject 的对象。",
+            description = "The current complete todo list. Passing an empty array clears the task list; each item is an object containing subject.",
             required = true,
             itemsSchema = todoItemSchema
         )
@@ -84,19 +84,19 @@ class TodoTool @Inject constructor(
         context: AgentContext
     ): ToolResult {
         val sessionId = context.sessionId
-            ?: return ToolResult.Error("未关联会话", "NO_SESSION")
+            ?: return ToolResult.Error("No associated session", "NO_SESSION")
 
         return try {
             replaceTodos(args, sessionId)
         } catch (e: Exception) {
             FileLogger.e(TAG, "todo 工具执行失败: ${e.message}", e)
-            ToolResult.Error("待办操作失败：${e.message}")
+            ToolResult.Error("Todo operation failed: ${e.message}")
         }
     }
 
     private suspend fun replaceTodos(args: Map<String, JsonElement>, sessionId: String): ToolResult {
         val itemElements = args["items"] as? JsonArray
-            ?: return ToolResult.Error("缺少必需参数：items", "MISSING_ITEMS")
+            ?: return ToolResult.Error("Missing required parameter: items", "MISSING_ITEMS")
         val existingBySubject = todoItemDao.getBySessionOnce(sessionId)
             .groupBy { normalizeSubject(it.subject) }
             .mapValues { (_, items) -> items.toMutableList() }
@@ -105,7 +105,7 @@ class TodoTool @Inject constructor(
 
         for ((idx, element) in itemElements.withIndex()) {
             val draft = parseTodoDraft(element, idx) ?: return ToolResult.Error(
-                "第 ${idx + 1} 项缺少字符串标题或 subject 字段",
+                "Item ${idx + 1} is missing a string title or subject field",
                 "INVALID_ITEM"
             )
             val previous = existingBySubject[normalizeSubject(draft.subject)]?.removeFirstOrNull()
@@ -166,7 +166,7 @@ class TodoTool @Inject constructor(
         if (subject.isBlank()) return null
 
         val status = parseStatus(obj["status"]?.jsonPrimitive?.contentOrNull)
-            ?: throw IllegalArgumentException("第 ${index + 1} 项 status 无效")
+            ?: throw IllegalArgumentException("Item ${index + 1} has an invalid status")
 
         return TodoDraft(
             subject = subject,

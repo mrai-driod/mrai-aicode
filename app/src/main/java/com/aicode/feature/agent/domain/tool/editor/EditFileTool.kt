@@ -44,7 +44,7 @@ class EditFileTool @Inject constructor(
 ) : AgentTool() {
     override val name = "editFile"
     override val description =
-        "按精确字符串匹配局部修改已有文件，是修改文件的首选。edits 可一次提交多处修改，整批原子生效（任一处失败则全部回滚）。整文件重写用 writeFile。"
+        "Locally edit an existing file by exact string matching; this is the preferred way to modify files. edits can submit multiple changes at once, applied atomically as a batch (if any one fails, all are rolled back). Use writeFile to rewrite a whole file."
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.WRITE_WORKSPACE)
 
@@ -54,27 +54,27 @@ class EditFileTool @Inject constructor(
         "properties" to mapOf(
             "old_string" to mapOf(
                 "type" to "string",
-                "description" to "要被替换的原文，需与文件当前内容精确匹配（含缩进和换行）。带足够上下文以保证唯一。"
+                "description" to "The original text to be replaced; must exactly match the file's current content (including indentation and line breaks). Include enough context to ensure uniqueness."
             ),
             "new_string" to mapOf(
                 "type" to "string",
-                "description" to "替换后的新内容。传空字符串表示删除匹配到的内容。"
+                "description" to "The new content after replacement. Pass an empty string to delete the matched content."
             ),
             "replace_all" to mapOf(
                 "type" to "boolean",
-                "description" to "是否替换该 old_string 的全部匹配项。默认 false（要求唯一匹配）。"
+                "description" to "Whether to replace all matches of this old_string. Defaults to false (requires a unique match)."
             )
         ),
         "required" to listOf("old_string", "new_string")
     )
 
     override val parameters = mapOf(
-        "path" to ToolParameter("path", ParameterType.STRING, "文件路径：~/workspace/... 为项目文件；其它绝对路径（如 /etc/...、/root/...）为容器系统文件。", required = true),
+        "path" to ToolParameter("path", ParameterType.STRING, "File path: ~/workspace/... for project files; other absolute paths (e.g. /etc/..., /root/...) are container system files.", required = true),
         "edits" to ToolParameter(
             "edits",
             ParameterType.ARRAY,
-            "要应用的编辑列表，按顺序依次生效，每个编辑在前一个的结果上匹配。" +
-                "单处修改也用只含一个元素的数组。每个元素：{old_string, new_string, replace_all?}。",
+            "The list of edits to apply, applied in order; each edit matches against the result of the previous one." +
+                "Use a single-element array even for a single change. Each element: {old_string, new_string, replace_all?}.",
             required = true,
             itemsSchema = editItemSchema
         )
@@ -91,14 +91,14 @@ class EditFileTool @Inject constructor(
         args: Map<String, JsonElement>,
         argsPreview: String
     ): PendingToolPermission {
-        val path = args["path"]?.jsonPrimitive?.contentOrNull ?: "未知文件"
+        val path = args["path"]?.jsonPrimitive?.contentOrNull ?: "unknown file"
         val editCount = (args["edits"] as? JsonArray)?.size ?: 1
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认修改文件",
-            summary = "AI 请求修改 $path",
-            details = "编辑数量：$editCount\n工具会先完整匹配，任一编辑失败则不会写入。",
+            title = "Confirm file edit",
+            summary = "AI requests to edit $path",
+            details = "Number of edits: $editCount\nThe tool matches everything first; if any edit fails, nothing is written.",
             argsPreview = argsPreview
         )
     }
@@ -106,25 +106,25 @@ class EditFileTool @Inject constructor(
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         return try {
             val path = args["path"]?.jsonPrimitive?.contentOrNull
-                ?: return ToolResult.Error("缺少必需参数：path", "MISSING_PATH")
+                ?: return ToolResult.Error("Missing required parameter: path", "MISSING_PATH")
 
             val edits = parseEdits(args)
-                ?: return ToolResult.Error("缺少必需参数：edits", "MISSING_EDITS")
+                ?: return ToolResult.Error("Missing required parameter: edits", "MISSING_EDITS")
 
             // 逐个校验编辑本身的合法性（空 old_string / 无变化），避免无意义改动。
             edits.forEachIndexed { i, e ->
                 if (e.oldString.isEmpty()) {
-                    return ToolResult.Error("第 ${i + 1} 个编辑的 old_string 不能为空，创建文件请用 writeFile", "EMPTY_OLD_STRING")
+                    return ToolResult.Error("Edit ${i + 1}'s old_string must not be empty; use writeFile to create a file", "EMPTY_OLD_STRING")
                 }
                 if (e.oldString == e.newString) {
-                    return ToolResult.Error("第 ${i + 1} 个编辑的 old_string 与 new_string 相同，无需修改", "NO_OP")
+                    return ToolResult.Error("Edit ${i + 1}'s old_string and new_string are identical; no change needed", "NO_OP")
                 }
             }
 
             FileLogger.d(TAG, "edit_file path=$path (edits=${edits.size})")
             if (!fileAccess.exists(path)) {
                 FileLogger.w(TAG, "edit_file 文件不存在: $path")
-                return ToolResult.Error("文件不存在：$path", "FILE_NOT_FOUND")
+                return ToolResult.Error("File does not exist: $path", "FILE_NOT_FOUND")
             }
 
             // 先在内存里顺序应用所有编辑；任一失败立刻返回、绝不写盘（全有或全无）。
@@ -137,14 +137,14 @@ class EditFileTool @Inject constructor(
                 if (occurrences == 0) {
                     FileLogger.w(TAG, "edit_file 第 ${i + 1} 个编辑未匹配: $path")
                     return ToolResult.Error(
-                        "第 ${i + 1} 个编辑未在文件中找到 old_string，请确认内容（含缩进/换行）与当前文件完全一致",
+                        "Edit ${i + 1}'s old_string was not found in the file; make sure the content (including indentation/line breaks) matches the current file exactly",
                         "NO_MATCH"
                     )
                 }
                 if (occurrences > 1 && !e.replaceAll) {
                     FileLogger.w(TAG, "edit_file 第 ${i + 1} 个编辑匹配 $occurrences 处且非 replace_all: $path")
                     return ToolResult.Error(
-                        "第 ${i + 1} 个编辑的 old_string 在文件中匹配到 $occurrences 处，请提供更长的唯一上下文，或对该编辑设置 replace_all=true",
+                        "Edit ${i + 1}'s old_string matches $occurrences places in the file; provide a longer unique context, or set replace_all=true for this edit",
                         "MULTIPLE_MATCHES"
                     )
                 }
@@ -192,7 +192,7 @@ class EditFileTool @Inject constructor(
             )
         } catch (e: Exception) {
             FileLogger.e(TAG, "edit_file 异常", e)
-            ToolResult.Error(e.message ?: "编辑文件失败", "EDIT_ERROR")
+            ToolResult.Error(e.message ?: "Failed to edit file", "EDIT_ERROR")
         }
     }
 

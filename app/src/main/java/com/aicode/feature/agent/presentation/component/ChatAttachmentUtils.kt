@@ -34,6 +34,36 @@ internal data class PendingUploadAttachment(
 internal val PendingUploadAttachment.isImage: Boolean
     get() = image != null
 
+/** Max size for inlining an attached text file's contents into the request. */
+private const val INLINE_TEXT_LIMIT_BYTES = 64_000L
+
+private val INLINE_TEXT_EXTENSIONS = setOf(
+    "txt", "md", "markdown", "json", "yaml", "yml", "toml", "xml", "csv", "log",
+    "kt", "kts", "java", "py", "js", "ts", "tsx", "jsx", "sh", "bash", "html",
+    "css", "scss", "sql", "gradle", "properties", "ini", "cfg", "env"
+)
+
+private val INLINE_TEXT_MIMES = setOf(
+    "application/json", "application/xml", "application/javascript",
+    "application/x-yaml", "application/yaml", "application/toml"
+)
+
+/**
+ * Read an attachment's text content for inlining, or null when it is not a
+ * small text file. Inlining matters: the pointer line alone forces the model
+ * to spend a tool call (or fail entirely on tool-less fallbacks) before it
+ * can see a file the user already handed over.
+ */
+internal fun readInlineAttachmentText(localPath: String, mimeType: String, fileName: String, sizeBytes: Long): String? {
+    if (sizeBytes <= 0 || sizeBytes > INLINE_TEXT_LIMIT_BYTES) return null
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    val inlineable = mimeType.startsWith("text/") || mimeType in INLINE_TEXT_MIMES || ext in INLINE_TEXT_EXTENSIONS
+    if (!inlineable) return null
+    val text = runCatching { File(localPath).readText(Charsets.UTF_8) }.getOrNull() ?: return null
+    if (text.contains('\u0000')) return null
+    return text
+}
+
 private fun List<PendingUploadAttachment>.toAttachmentText(context: Context): String {
     if (isEmpty()) return ""
     return buildString {
@@ -42,8 +72,21 @@ private fun List<PendingUploadAttachment>.toAttachmentText(context: Context): St
             append('\n')
             append("- ")
             append(attachment.fileName)
-            append("：")
+            append(": ")
             append(attachment.containerPath)
+        }
+        this@toAttachmentText.forEach { attachment ->
+            if (attachment.isImage) return@forEach
+            val text = readInlineAttachmentText(
+                attachment.localPath, attachment.mimeType, attachment.fileName, attachment.sizeBytes
+            ) ?: return@forEach
+            append("\n\n--- begin attached file: ")
+            append(attachment.fileName)
+            append(" ---\n")
+            append(text)
+            append("\n--- end attached file: ")
+            append(attachment.fileName)
+            append(" ---")
         }
     }
 }

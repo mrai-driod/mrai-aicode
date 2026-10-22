@@ -65,67 +65,67 @@ class GenerateImageTool @Inject constructor(
 ) : AbstractContextualTool() {
 
     override val name = "generateImage"
-    override val description = "根据文本描述生成图片并在聊天区展示给用户。支持指定尺寸与张数，可选通过 output_path 同时保存为工作区文件。"
+    override val description = "Generate an image from a text description and display it to the user in the chat area. Supports specifying size and count, and optionally saving to a workspace file via output_path."
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.NETWORK_WRITE, ToolCapability.WRITE_WORKSPACE)
     override val parameters = mapOf(
         "prompt" to ToolParameter(
             name = "prompt",
             type = ParameterType.STRING,
-            description = "图片内容的详细描述（主体、风格、构图、色调、氛围等）。",
+            description = "Detailed description of the image content (subject, style, composition, color tone, mood, etc.).",
             required = true
         ),
         "size" to ToolParameter(
             name = "size",
             type = ParameterType.STRING,
-            description = "图片尺寸，如 1024x1024（默认）、1024x1536、1536x1024。",
+            description = "Image size, e.g. 1024x1024 (default), 1024x1536, 1536x1024.",
             required = false
         ),
         "n" to ToolParameter(
             name = "n",
             type = ParameterType.INTEGER,
-            description = "生成张数，默认 1，最多 4。dall-e-3 只支持 1 张。",
+            description = "Number of images to generate, default 1, max 4. dall-e-3 supports only 1.",
             required = false
         ),
         "quality" to ToolParameter(
             name = "quality",
             type = ParameterType.STRING,
-            description = "画质：GPT Image 系列支持 low / medium / high / auto（默认 auto）；dall-e-3 支持 standard / hd（默认 standard）。",
+            description = "Quality: GPT Image series supports low / medium / high / auto (default auto); dall-e-3 supports standard / hd (default standard).",
             required = false,
             enum = listOf("low", "medium", "high", "auto", "standard", "hd")
         ),
         "background" to ToolParameter(
             name = "background",
             type = ParameterType.STRING,
-            description = "背景：transparent / opaque / auto（默认 auto），仅 GPT Image 系列模型支持；transparent 需配合 png 或 webp 输出格式。",
+            description = "Background: transparent / opaque / auto (default auto), supported only by GPT Image series models; transparent requires png or webp output format.",
             required = false,
             enum = listOf("transparent", "opaque", "auto")
         ),
         "moderation" to ToolParameter(
             name = "moderation",
             type = ParameterType.STRING,
-            description = "内容审核级别：low / auto（默认 auto），仅 GPT Image 系列模型支持。",
+            description = "Content moderation level: low / auto (default auto), supported only by GPT Image series models.",
             required = false,
             enum = listOf("low", "auto")
         ),
         "style" to ToolParameter(
             name = "style",
             type = ParameterType.STRING,
-            description = "风格：vivid / natural，仅 dall-e-3 支持。",
+            description = "Style: vivid / natural, supported only by dall-e-3.",
             required = false,
             enum = listOf("vivid", "natural")
         ),
         "output_format" to ToolParameter(
             name = "output_format",
             type = ParameterType.STRING,
-            description = "输出格式：png / jpeg / webp（默认 png），仅 GPT Image 系列模型支持。",
+            description = "Output format: png / jpeg / webp (default png), supported only by GPT Image series models.",
             required = false,
             enum = listOf("png", "jpeg", "webp")
         ),
         "output_path" to ToolParameter(
             name = "output_path",
             type = ParameterType.STRING,
-            description = "保存路径（可选）。不传默认保存到 ~/.aicode/generated-images/；传了则保存到指定路径，如 ~/workspace/assets/image.png。",
+            description = "Save path (optional). If not provided, saves to ~/.aicode/generated-images/ by default; if provided, saves to the specified path, e.g. ~/workspace/assets/image.png.",
             required = false
         )
     )
@@ -141,12 +141,12 @@ class GenerateImageTool @Inject constructor(
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认生成图片",
-            summary = "AI 请求调用生图模型生成图片",
+            title = "Confirm image generation",
+            summary = "AI requests to call the image generation model to generate an image",
             details = if (outputPath.isBlank()) {
-                "提示词：$prompt\n数量：$count\n保存到：$DEFAULT_OUTPUT_DIR/"
+                "Prompt: $prompt\nCount: $count\nSave to: $DEFAULT_OUTPUT_DIR/"
             } else {
-                "提示词：$prompt\n数量：$count\n保存到：$outputPath"
+                "Prompt: $prompt\nCount: $count\nSave to: $outputPath"
             },
             argsPreview = argsPreview
         )
@@ -158,13 +158,13 @@ class GenerateImageTool @Inject constructor(
     ): ToolResult = withContext(Dispatchers.IO) {
         val prompt = args["prompt"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
         if (prompt.isEmpty()) {
-            return@withContext ToolResult.Error("缺少必需参数：prompt", "MISSING_PROMPT")
+            return@withContext ToolResult.Error("Missing required parameter: prompt", "MISSING_PROMPT")
         }
         val size = args["size"]?.jsonPrimitive?.contentOrNull?.trim()?.ifBlank { null }
             ?: DEFAULT_SIZE
         val n = args["n"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 1
         if (n !in 1..MAX_IMAGES) {
-            return@withContext ToolResult.Error("n 取值必须在 1 到 $MAX_IMAGES 之间，当前为 $n", "INVALID_PARAMS")
+            return@withContext ToolResult.Error("n must be between 1 and $MAX_IMAGES, currently $n", "INVALID_PARAMS")
         }
         val quality = args["quality"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()?.ifBlank { null }
         val background = args["background"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()?.ifBlank { null }
@@ -236,7 +236,7 @@ class GenerateImageTool @Inject constructor(
             }
             FileLogger.e(TAG, "generateImage 失败", enriched)
             AILogger.logError(context.sessionId, lastProviderId, enriched, seq)
-            ToolResult.Error(enriched.message ?: "生图调用失败", "IMAGE_GEN_FAILED")
+            ToolResult.Error(enriched.message ?: "Image generation failed", "IMAGE_GEN_FAILED")
         }
     }
 
@@ -244,12 +244,12 @@ class GenerateImageTool @Inject constructor(
         val providerId = imageGenModelSettingsRepository.getImageGenProviderId().trim()
         val model = imageGenModelSettingsRepository.getImageGenModel().trim()
         if (providerId.isEmpty() || model.isEmpty()) {
-            throw IllegalStateException("未配置生图模型：请到「设置 → 默认模型 → 生图模型」中选择支持图像输出的模型（如 gpt-image-1 / dall-e-3）。")
+            throw IllegalStateException("Image generation model not configured: please go to Settings → Default Model → Image Generation Model and select a model that supports image output (e.g. gpt-image-1 / dall-e-3).")
         }
         val config = aiProviderRepository.getProviderById(providerId)
-            ?: throw IllegalStateException("生图模型配置的供应商不存在或已被删除，请到「设置 → 默认模型 → 生图模型」重新选择。")
-        if (!config.isEnabled) throw IllegalStateException("生图模型配置的供应商「${config.name}」未启用。")
-        if (!config.hasUsableApiKey) throw IllegalStateException("生图模型配置的供应商「${config.name}」未填写 API Key。")
+            ?: throw IllegalStateException("The provider configured for the image generation model does not exist or has been deleted, please reselect in Settings → Default Model → Image Generation Model.")
+        if (!config.isEnabled) throw IllegalStateException("The provider \"${config.name}\" configured for the image generation model is not enabled.")
+        if (!config.hasUsableApiKey) throw IllegalStateException("The provider \"${config.name}\" configured for the image generation model has no API Key configured.")
         return config.copy(selectedModel = model)
     }
 
@@ -260,7 +260,7 @@ class GenerateImageTool @Inject constructor(
         model: String
     ): ToolResult {
         if (response.data.isEmpty()) {
-            return ToolResult.Error("生图服务未返回图片数据", "EMPTY_RESULT")
+            return ToolResult.Error("Image generation service did not return image data", "EMPTY_RESULT")
         }
         val effectiveBasePath = outputPath ?: createDefaultBasePath()
         val overwrite = outputPath != null
@@ -283,7 +283,7 @@ class GenerateImageTool @Inject constructor(
                         bytes = downloadImageBytes(item.url)
                         base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                     }
-                    else -> throw IOException("结果中缺少 base64 与 URL")
+                    else -> throw IOException("Result is missing both base64 and URL")
                 }
                 totalBytes = checkedTotalBytes(totalBytes, bytes.size)
                 persistImageBytes(
@@ -297,7 +297,7 @@ class GenerateImageTool @Inject constructor(
         }
 
         if (agentImages.isEmpty()) {
-            return ToolResult.Error("未能获取生成的图片内容（图片无效、过大或下载失败）", "EMPTY_RESULT")
+            return ToolResult.Error("Failed to obtain the generated image content (image is invalid, too large, or download failed)", "EMPTY_RESULT")
         }
         return buildImageResult(
             agentImages, savedDisplayPaths, filesList, model, requestedN,
@@ -363,7 +363,7 @@ class GenerateImageTool @Inject constructor(
                     val reason = response.get("errors")?.takeIf { it.isJsonArray }?.asJsonArray
                         ?.firstOrNull()?.takeIf { it.isJsonObject }?.asJsonObject
                         ?.get("message")?.takeIf { it.isJsonPrimitive }?.asString
-                        ?: "Gemini 生图失败（status=$status）"
+                        ?: "Gemini image generation failed (status=$status)"
                     failedCount += n - index
                     return if (agentImages.isEmpty()) {
                         ToolResult.Error(reason, "IMAGE_GEN_FAILED")
@@ -397,7 +397,7 @@ class GenerateImageTool @Inject constructor(
                     failedCount.coerceAtLeast(n - agentImages.size), enriched.message
                 )
             }
-            return ToolResult.Error(enriched.message ?: "Gemini 生图调用失败", "IMAGE_GEN_FAILED")
+            return ToolResult.Error(enriched.message ?: "Gemini image generation call failed", "IMAGE_GEN_FAILED")
         }
 
         return buildGeminiResult(agentImages, savedDisplayPaths, filesList, model, n, outputPath, failedCount)
@@ -464,7 +464,7 @@ class GenerateImageTool @Inject constructor(
                     failedCount.coerceAtLeast(n - agentImages.size), enriched.message
                 )
             }
-            return ToolResult.Error(enriched.message ?: "Gemini 生图调用失败", "IMAGE_GEN_FAILED")
+            return ToolResult.Error(enriched.message ?: "Gemini image generation call failed", "IMAGE_GEN_FAILED")
         }
 
         return buildGeminiResult(agentImages, savedDisplayPaths, filesList, model, n, outputPath, failedCount)
@@ -514,7 +514,7 @@ class GenerateImageTool @Inject constructor(
         savedDisplayPaths: MutableList<String>,
         filesList: MutableList<JsonObject>
     ) {
-        if (bytes.isEmpty()) throw IOException("图片内容为空")
+        if (bytes.isEmpty()) throw IOException("Image content is empty")
         val format = detectImageFormat(bytes)
         val targetPath = buildTargetPath(effectiveBasePath, agentImages.size, format)
         val realMime = mimeForFormat(format)
@@ -551,7 +551,7 @@ class GenerateImageTool @Inject constructor(
         failureReason: String? = null
     ): ToolResult {
         if (agentImages.isEmpty()) {
-            return ToolResult.Error("Gemini 生图未返回图片数据（模型可能只回复了文本，或图片无效或过大）", "EMPTY_RESULT")
+            return ToolResult.Error("Gemini image generation did not return image data (the model may have replied with text only, or the image is invalid or too large)", "EMPTY_RESULT")
         }
         return buildImageResult(
             agentImages, savedDisplayPaths, filesList, model, n,
@@ -572,11 +572,11 @@ class GenerateImageTool @Inject constructor(
     ): ToolResult {
         val effectiveFailedCount = failedCount.coerceAtLeast(0)
         val content = buildString {
-            append("已生成 ${agentImages.size} 张图片")
-            if (effectiveFailedCount > 0) append("，另有 $effectiveFailedCount 张失败")
-            if (!failureReason.isNullOrBlank()) append("（").append(failureReason).append("）")
-            if (outputPath == null) append("，已保存至 $DEFAULT_OUTPUT_DIR/：")
-            else append("，已保存至指定路径：")
+            append("Generated ${agentImages.size} images")
+            if (effectiveFailedCount > 0) append(", $effectiveFailedCount more failed")
+            if (!failureReason.isNullOrBlank()) append("(").append(failureReason).append(")")
+            if (outputPath == null) append(", saved to $DEFAULT_OUTPUT_DIR/:")
+            else append(", saved to the specified path:")
             savedDisplayPaths.forEach { p -> append("\n- ").append(p) }
         }
         val data = mutableMapOf<String, JsonElement>(
@@ -603,11 +603,11 @@ class GenerateImageTool @Inject constructor(
     private fun downloadImageBytes(url: String): ByteArray {
         val req = Request.Builder().url(url).build()
         httpClient.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("下载图片失败 HTTP ${resp.code}: $url")
-            val body = resp.body ?: throw IOException("图片响应体为空：$url")
+            if (!resp.isSuccessful) throw IOException("Failed to download image HTTP ${resp.code}: $url")
+            val body = resp.body ?: throw IOException("Image response body is empty: $url")
             val contentLength = body.contentLength()
             if (contentLength > MAX_IMAGE_BYTES) {
-                throw IOException("图片超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 限制")
+                throw IOException("Image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024}MB limit")
             }
             val initialSize = contentLength.takeIf { it in 1..MAX_IMAGE_BYTES }?.toInt() ?: DEFAULT_BUFFER_SIZE
             val output = ByteArrayOutputStream(initialSize)
@@ -619,7 +619,7 @@ class GenerateImageTool @Inject constructor(
                     if (read < 0) break
                     total += read
                     if (total > MAX_IMAGE_BYTES) {
-                        throw IOException("图片超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 限制")
+                        throw IOException("Image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024}MB limit")
                     }
                     output.write(buffer, 0, read)
                 }
@@ -630,11 +630,11 @@ class GenerateImageTool @Inject constructor(
 
     private fun decodeImageBase64(base64: String): ByteArray {
         if (estimatedDecodedBytes(base64.length) > MAX_IMAGE_BYTES) {
-            throw IOException("图片超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 限制")
+            throw IOException("Image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024}MB limit")
         }
         val bytes = Base64.decode(base64, Base64.DEFAULT)
         if (bytes.size > MAX_IMAGE_BYTES) {
-            throw IOException("图片超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 限制")
+            throw IOException("Image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024}MB limit")
         }
         return bytes
     }
@@ -642,7 +642,7 @@ class GenerateImageTool @Inject constructor(
     private fun checkedTotalBytes(current: Long, additional: Int): Long {
         val total = current + additional
         if (total > MAX_TOTAL_IMAGE_BYTES) {
-            throw IOException("本次图片总大小超过 ${MAX_TOTAL_IMAGE_BYTES / 1024 / 1024}MB 限制")
+            throw IOException("Total image size for this request exceeds the ${MAX_TOTAL_IMAGE_BYTES / 1024 / 1024}MB limit")
         }
         return total
     }
@@ -716,23 +716,23 @@ class GenerateImageTool @Inject constructor(
             style: String?,
             outputFormat: String?
         ): String? {
-            if (background != null && background !in BACKGROUNDS) return "background 取值 $background 不支持，可选：${BACKGROUNDS.joinToString(" / ")}。"
-            if (moderation != null && moderation !in MODERATIONS) return "moderation 取值 $moderation 不支持，可选：${MODERATIONS.joinToString(" / ")}。"
-            if (style != null && style !in STYLES) return "style 取值 $style 不支持，可选：${STYLES.joinToString(" / ")}。"
-            if (outputFormat != null && outputFormat !in OUTPUT_FORMATS) return "output_format 取值 $outputFormat 不支持，可选：${OUTPUT_FORMATS.joinToString(" / ")}。"
-            if (!isGptImage && background != null) return "background 参数仅 GPT Image 系列模型支持，当前模型 $model 不支持。"
-            if (!isGptImage && moderation != null) return "moderation 参数仅 GPT Image 系列模型支持，当前模型 $model 不支持。"
-            if (!isGptImage && outputFormat != null) return "output_format 参数仅 GPT Image 系列模型支持，当前模型 $model 不支持。"
-            if (!isDalle3 && style != null) return "style 参数仅 dall-e-3 支持，当前模型 $model 不支持。"
-            if (isDalle3 && n > 1) return "dall-e-3 一次只能生成 1 张（n=1），需要多张请改用 GPT Image 系列模型。"
+            if (background != null && background !in BACKGROUNDS) return "background value $background is not supported, options: ${BACKGROUNDS.joinToString(" / ")}."
+            if (moderation != null && moderation !in MODERATIONS) return "moderation value $moderation is not supported, options: ${MODERATIONS.joinToString(" / ")}."
+            if (style != null && style !in STYLES) return "style value $style is not supported, options: ${STYLES.joinToString(" / ")}."
+            if (outputFormat != null && outputFormat !in OUTPUT_FORMATS) return "output_format value $outputFormat is not supported, options: ${OUTPUT_FORMATS.joinToString(" / ")}."
+            if (!isGptImage && background != null) return "The background parameter is supported only by GPT Image series models, the current model $model does not support it."
+            if (!isGptImage && moderation != null) return "The moderation parameter is supported only by GPT Image series models, the current model $model does not support it."
+            if (!isGptImage && outputFormat != null) return "The output_format parameter is supported only by GPT Image series models, the current model $model does not support it."
+            if (!isDalle3 && style != null) return "The style parameter is supported only by dall-e-3, the current model $model does not support it."
+            if (isDalle3 && n > 1) return "dall-e-3 can only generate 1 image at a time (n=1); for multiple images, use a GPT Image series model."
             if (quality != null) {
                 val allowed = when {
                     isGptImage -> QUALITY_GPT_IMAGE
                     isDalle3 -> QUALITY_DALLE3
                     isDalle2 -> QUALITY_DALLE2
-                    else -> return "quality 参数仅 OpenAI 官方生图模型（gpt-image 系列 / dall-e-2 / dall-e-3）支持，当前模型 $model 不支持。"
+                    else -> return "The quality parameter is supported only by official OpenAI image generation models (gpt-image series / dall-e-2 / dall-e-3), the current model $model does not support it."
                 }
-                if (quality !in allowed) return "quality 取值 $quality 当前模型 $model 不支持，可选：${allowed.joinToString(" / ")}。"
+                if (quality !in allowed) return "quality value $quality is not supported by the current model $model, options: ${allowed.joinToString(" / ")}."
             }
             return null
         }

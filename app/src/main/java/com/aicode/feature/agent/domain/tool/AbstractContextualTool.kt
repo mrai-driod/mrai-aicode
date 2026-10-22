@@ -19,7 +19,7 @@ abstract class AbstractContextualTool : AgentTool() {
      */
     final override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         throw UnsupportedOperationException(
-            "${javaClass.simpleName} 只能通过 executeWithContext 执行，需 AgentContext。"
+            "${javaClass.simpleName} can only be executed via executeWithContext and requires AgentContext."
         )
     }
 }

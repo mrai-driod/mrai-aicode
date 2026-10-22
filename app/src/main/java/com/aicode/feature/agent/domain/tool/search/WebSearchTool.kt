@@ -43,21 +43,21 @@ class WebSearchTool @Inject constructor() : AgentTool() {
     }
 
     override val name = "websearch"
-    override val description = "通过互联网搜索获取实时信息。适用于需要最新资料或时效性信息的任务。"
+    override val description = "Search the internet for real-time information. Suitable for tasks that need the latest or time-sensitive information."
     override val capabilities = setOf(ToolCapability.NETWORK_READ)
 
     override val parameters: Map<String, ToolParameter> = mapOf(
         "query" to ToolParameter(
             name = "query",
             type = ParameterType.STRING,
-            description = "搜索关键字。请提炼出准确、易于搜索的短语。",
+            description = "Search keywords. Please distill an accurate, search-friendly phrase.",
             required = true
         )
     )
 
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         val query = args["query"]?.jsonPrimitive?.contentOrNull 
-            ?: return ToolResult.Error("缺少必需参数：query")
+            ?: return ToolResult.Error("Missing required parameter: query")
 
         return withContext(Dispatchers.IO) {
             try {
@@ -95,7 +95,7 @@ class WebSearchTool @Inject constructor() : AgentTool() {
                     if (responseCode !in 200..299) {
                         val errorStr = resp.body?.string()
                         FileLogger.e(TAG, "WebSearch 失败: HTTP $responseCode, $errorStr")
-                        return@withContext ToolResult.Error("网络搜索失败（HTTP $responseCode）")
+                        return@withContext ToolResult.Error("Web search failed (HTTP $responseCode)")
                     }
 
                     // 尝试直接读取普通 JSON 或解析 Event-Stream (SSE) 格式
@@ -105,14 +105,14 @@ class WebSearchTool @Inject constructor() : AgentTool() {
                     val rawResultText = parseMcpResponse(responseBody)
 
                     if (rawResultText.isNullOrBlank()) {
-                        ToolResult.Success(kotlinx.serialization.json.JsonPrimitive("未找到关于「$query」的搜索结果，请更换关键词重试。"))
+                        ToolResult.Success(kotlinx.serialization.json.JsonPrimitive("No search results found for 「$query」; please try different keywords and retry."))
                     } else {
                         ToolResult.Success(parseSearchResultPayload(rawResultText) ?: JsonPrimitive(rawResultText))
                     }
                 }
             } catch (e: Exception) {
                 FileLogger.e(TAG, "WebSearch 发生异常", e)
-                ToolResult.Error("搜索失败：${e.message}")
+                ToolResult.Error("Search failed: ${e.message}")
             }
         }
     }

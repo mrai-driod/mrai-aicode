@@ -41,8 +41,8 @@ class ShizukuTool @Inject constructor(
     override val name = "Shizuku"
 
     override val description =
-        "通过 Shizuku 以 adb shell（uid 2000）身份在宿主 Android 系统上执行命令（等价 `adb shell`），用于 `pm`/`am`/`cmd` 等系统操作与读写 /sdcard。" +
-            "需用户已安装并授权 Shizuku，且每次调用都会弹窗确认。"
+        "Execute commands on the host Android system via Shizuku as adb shell (uid 2000) (equivalent to `adb shell`), for system operations such as `pm`/`am`/`cmd` and reading/writing /sdcard." +
+            "The user must have Shizuku installed and authorized, and every call shows a confirmation dialog."
 
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.EXECUTE_COMMANDS)
@@ -51,13 +51,13 @@ class ShizukuTool @Inject constructor(
         "command" to ToolParameter(
             name = "command",
             type = ParameterType.STRING,
-            description = "要通过 adb shell 执行的 Shell 命令",
+            description = "Shell command to execute via adb shell",
             required = true
         ),
         "timeout" to ToolParameter(
             name = "timeout",
             type = ParameterType.INTEGER,
-            description = "命令最长执行时间（秒），超时将被强制终止。默认 $DEFAULT_TIMEOUT_SECONDS 秒，上限 $MAX_TIMEOUT_SECONDS 秒。",
+            description = "Maximum command execution time (seconds); on timeout it will be forcibly terminated. Default $DEFAULT_TIMEOUT_SECONDS seconds, maximum $MAX_TIMEOUT_SECONDS seconds.",
             required = false
         )
     )
@@ -72,25 +72,25 @@ class ShizukuTool @Inject constructor(
         args: Map<String, JsonElement>,
         argsPreview: String
     ): PendingToolPermission {
-        val command = args["command"]?.jsonPrimitive?.contentOrNull ?: "未知命令"
+        val command = args["command"]?.jsonPrimitive?.contentOrNull ?: "Unknown command"
         val timeoutSeconds = resolveTimeoutMs(args) / 1000L
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认执行 Shizuku 命令",
+            title = "Confirm Shizuku command execution",
             summary = command,
-            details = "将以 adb shell 身份在 Android 系统上执行。\n超时：${timeoutSeconds} 秒",
+            details = "Will be executed on the Android system as adb shell.\nTimeout: ${timeoutSeconds} seconds",
             argsPreview = argsPreview
         )
     }
 
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         val command = args["command"]?.jsonPrimitive?.contentOrNull
-            ?: return ToolResult.Error("缺少必需参数：command")
+            ?: return ToolResult.Error("Missing required parameter: command")
 
         val state = shizukuManager.state.value
         if (state != ShizukuState.READY) {
-            return ToolResult.Error("Shizuku 未就绪：${stateHint(state)}", code = "SHIZUKU_NOT_READY")
+            return ToolResult.Error("Shizuku is not ready: ${stateHint(state)}", code = "SHIZUKU_NOT_READY")
         }
 
         return try {
@@ -104,14 +104,14 @@ class ShizukuTool @Inject constructor(
             throw e
         } catch (e: Exception) {
             FileLogger.e(TAG, "Shizuku exec 失败: $command", e)
-            ToolResult.Error("执行 Shizuku 命令失败：${e.message}")
+            ToolResult.Error("Failed to execute Shizuku command: ${e.message}")
         }
     }
 
     private fun stateHint(state: ShizukuState): String = when (state) {
-        ShizukuState.NOT_INSTALLED -> "未安装 Shizuku，请先安装并启动 Shizuku 服务"
-        ShizukuState.NOT_RUNNING -> "Shizuku 服务未运行，请在 Shizuku 应用中启动服务"
-        ShizukuState.PERMISSION_DENIED -> "本应用尚未获得 Shizuku 授权，请在设置中授予"
+        ShizukuState.NOT_INSTALLED -> "Shizuku is not installed; please install and start the Shizuku service first"
+        ShizukuState.NOT_RUNNING -> "The Shizuku service is not running; please start the service in the Shizuku app"
+        ShizukuState.PERMISSION_DENIED -> "This app has not been granted Shizuku authorization yet; please grant it in settings"
         ShizukuState.READY -> ""
     }
 }

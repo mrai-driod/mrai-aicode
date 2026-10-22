@@ -36,7 +36,7 @@ class ListFilesTool @Inject constructor(
     }
 
     override val name = "list"
-    override val description = "按 ls 风格列出文件和目录。例：args=\"-la ~/workspace/app\"。支持追加 `| head [-n N]` 截断输出。"
+    override val description = "List files and directories in ls style. Example: args=\"-la ~/workspace/app\". Supports appending `| head [-n N]` to truncate output."
     override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.READ_WORKSPACE)
 
@@ -44,7 +44,7 @@ class ListFilesTool @Inject constructor(
         "args" to ToolParameter(
             name = "args",
             type = ParameterType.STRING,
-            description = "ls 风格参数。不填等同 ~/workspace。支持 -a -A -l -R -d -1 -h -r -t -S -v -f --。支持末尾追加 `| head [-n N]` 截断输出；其它管道命令不支持。",
+            description = "ls-style arguments. Leaving it empty is equivalent to ~/workspace. Supports -a -A -l -R -d -1 -h -r -t -S -v -f --. Supports appending `| head [-n N]` at the end to truncate output; other pipe commands are not supported.",
             required = false
         )
     )
@@ -53,15 +53,15 @@ class ListFilesTool @Inject constructor(
         return try {
             val rawArgs = args["args"]?.jsonPrimitive?.contentOrNull.orEmpty()
             val tokens = parseShellWords(rawArgs)
-                ?: return ToolResult.Error("args 中存在未闭合的引号", "INVALID_ARGS")
+                ?: return ToolResult.Error("args contains an unclosed quote", "INVALID_ARGS")
             val (lsTokens, pipeSegments) = splitPipes(tokens)
-                ?: return ToolResult.Error("管道符前缺少 ls 参数", "INVALID_PIPE")
+                ?: return ToolResult.Error("Missing ls arguments before the pipe symbol", "INVALID_PIPE")
             val headLimits = pipeSegments.map { seg ->
                 headLinesOf(seg)
-                    ?: return ToolResult.Error("list 仅支持 | head [-n N] 截断输出，不支持其它管道命令", "INVALID_PIPE")
+                    ?: return ToolResult.Error("list only supports | head [-n N] to truncate output; other pipe commands are not supported", "INVALID_PIPE")
             }
             val options = parseLsOptions(lsTokens)
-                ?: return ToolResult.Error("不支持的 ls 参数，支持：-a, -A, -l, -R, -d, -1, -h, -r, -t, -f, --", "UNSUPPORTED_OPTION")
+                ?: return ToolResult.Error("Unsupported ls argument; supported: -a, -A, -l, -R, -d, -1, -h, -r, -t, -f, --", "UNSUPPORTED_OPTION")
             options.maxLines = headLimits.minOrNull()
 
             FileLogger.d(TAG, "list args=$rawArgs paths=${options.paths}")
@@ -128,7 +128,7 @@ class ListFilesTool @Inject constructor(
             }
 
             if (truncated && options.maxLines == null) {
-                output.append("... (已达 $MAX_ENTRIES 条上限，剩余条目未列出)\n")
+                output.append("... (Reached the $MAX_ENTRIES entry limit; remaining entries not listed)\n")
             }
 
             FileLogger.v(TAG, "list 完成 entries=$entryCount truncated=$truncated")
@@ -139,7 +139,7 @@ class ListFilesTool @Inject constructor(
             )))
         } catch (e: Exception) {
             FileLogger.e(TAG, "list 异常", e)
-            ToolResult.Error(e.message ?: "列出目录失败", "LIST_ERROR")
+            ToolResult.Error(e.message ?: "Failed to list directory", "LIST_ERROR")
         }
     }
 

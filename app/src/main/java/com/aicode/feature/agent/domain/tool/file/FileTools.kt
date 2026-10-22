@@ -28,25 +28,25 @@ class ReadFileTool @Inject constructor(
     private val fileAccess: FileAccessProvider
 ) : AgentTool() {
     override val name = "readFile"
-    override val description = "读取文件内容（工作区文件或容器绝对路径的系统文件）。单次读取有行数与字节上限，超出可用 start_line 分段续读。"
+    override val description = "Read file contents (workspace files or system files at absolute container paths). A single read has line and byte limits; use start_line to continue reading in segments beyond them."
     override val capabilities = setOf(ToolCapability.READ_WORKSPACE)
     override val parameters = mapOf(
-        "path" to ToolParameter("path", ParameterType.STRING, "文件路径：~/workspace/... 为项目文件；其它绝对路径（如 /etc/...、/root/...）为容器系统文件。", required = true),
-        "start_line" to ToolParameter("start_line", ParameterType.INTEGER, "开始行号（从 1 计）。", required = false),
-        "end_line" to ToolParameter("end_line", ParameterType.INTEGER, "结束行号；与 start_line 的跨度最多 2000 行，超出按 2000 行截断。", required = false)
+        "path" to ToolParameter("path", ParameterType.STRING, "File path: ~/workspace/... for project files; other absolute paths (e.g. /etc/..., /root/...) are container system files.", required = true),
+        "start_line" to ToolParameter("start_line", ParameterType.INTEGER, "Starting line number (counting from 1).", required = false),
+        "end_line" to ToolParameter("end_line", ParameterType.INTEGER, "Ending line number; the span from start_line is at most 2000 lines, truncated at 2000 lines if exceeded.", required = false)
     )
 
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         return try {
             val path = args["path"]?.jsonPrimitive?.contentOrNull ?: run {
                 FileLogger.w(TAG, "read_file 缺少 path 参数")
-                return ToolResult.Error("缺少必需参数：path", "MISSING_PATH")
+                return ToolResult.Error("Missing required parameter: path", "MISSING_PATH")
             }
             FileLogger.d(TAG, "read_file path=$path")
 
             if (!fileAccess.exists(path)) {
                 FileLogger.w(TAG, "read_file 文件不存在: $path")
-                return ToolResult.Error("文件不存在：$path", "FILE_NOT_FOUND")
+                return ToolResult.Error("File does not exist: $path", "FILE_NOT_FOUND")
             }
 
             val startLine = args["start_line"]?.jsonPrimitive?.intOrNull?.coerceAtLeast(1) ?: 1
@@ -94,8 +94,8 @@ class ReadFileTool @Inject constructor(
             val truncated = emittedLines > 0 && lastEmittedLine < wantedEnd
             val note = when {
                 !truncated -> null
-                truncatedByBytes -> "内容超过 ${MAX_BYTES / 1024}KB 上限已截断，可从第 ${lastEmittedLine + 1} 行起用 start_line 继续读取。"
-                else -> "内容超过 $MAX_LINES 行上限已截断，可从第 ${lastEmittedLine + 1} 行起用 start_line 继续读取。"
+                truncatedByBytes -> "Content exceeded the ${MAX_BYTES / 1024}KB limit and was truncated; continue reading from line ${lastEmittedLine + 1} using start_line."
+                else -> "Content exceeded the $MAX_LINES-line limit and was truncated; continue reading from line ${lastEmittedLine + 1} using start_line."
             }
 
             FileLogger.v(TAG, "read_file 成功 path=$path total=$totalLines emitted=$emittedLines bytes=$byteCount truncated=$truncated")
@@ -111,7 +111,7 @@ class ReadFileTool @Inject constructor(
             ToolResult.Success(JsonObject(resultMap))
         } catch (e: Exception) {
             FileLogger.e(TAG, "read_file 异常", e)
-            ToolResult.Error(e.message ?: "读取文件失败", "READ_ERROR")
+            ToolResult.Error(e.message ?: "Failed to read file", "READ_ERROR")
         }
     }
 
@@ -133,13 +133,13 @@ class WriteFileTool @Inject constructor(
     private val fileAccess: FileAccessProvider
 ) : AgentTool() {
     override val name = "writeFile"
-    override val description = "写入完整文件内容，文件不存在时自动创建（含父目录）。局部修改请用 editFile。"
+    override val description = "Write the full file contents; the file is created automatically (including parent directories) if it does not exist. For partial edits, use editFile."
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.WRITE_WORKSPACE)
     override val parameters = mapOf(
-        "path" to ToolParameter("path", ParameterType.STRING, "文件路径：~/workspace/... 为项目文件；其它绝对路径（如 /etc/...、/root/...）为容器系统文件。", required = true),
-        "content" to ToolParameter("content", ParameterType.STRING, "文件内容", required = true),
-        "overwrite" to ToolParameter("overwrite", ParameterType.BOOLEAN, "目标已存在时是否覆盖。默认 true；设为 false 时若文件已存在则报错。", required = false)
+        "path" to ToolParameter("path", ParameterType.STRING, "File path: ~/workspace/... for project files; other absolute paths (e.g. /etc/..., /root/...) are container system files.", required = true),
+        "content" to ToolParameter("content", ParameterType.STRING, "File content", required = true),
+        "overwrite" to ToolParameter("overwrite", ParameterType.BOOLEAN, "Whether to overwrite if the target already exists. Defaults to true; if set to false, an error is returned when the file already exists.", required = false)
     )
 
     override fun buildPermissionRequest(
@@ -147,15 +147,15 @@ class WriteFileTool @Inject constructor(
         args: Map<String, JsonElement>,
         argsPreview: String
     ): PendingToolPermission {
-        val path = args["path"]?.jsonPrimitive?.contentOrNull ?: "未知文件"
+        val path = args["path"]?.jsonPrimitive?.contentOrNull ?: "Unknown file"
         val content = args["content"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val overwrite = args["overwrite"]?.jsonPrimitive?.booleanOrNull ?: true
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认写入文件",
-            summary = "AI 请求写入 $path",
-            details = "字符数：${content.length}\n行数：${content.lines().size}\n允许覆盖：${if (overwrite) "是" else "否"}",
+            title = "Confirm file write",
+            summary = "AI requests to write $path",
+            details = "Characters: ${content.length}\nLines: ${content.lines().size}\nAllow overwrite: ${if (overwrite) "Yes" else "No"}",
             argsPreview = argsPreview
         )
     }
@@ -164,7 +164,7 @@ class WriteFileTool @Inject constructor(
         return try {
             val path = args["path"]?.jsonPrimitive?.contentOrNull ?: run {
                 FileLogger.w(TAG, "write_file 缺少 path 参数")
-                return ToolResult.Error("缺少必需参数：path", "MISSING_PATH")
+                return ToolResult.Error("Missing required parameter: path", "MISSING_PATH")
             }
             val content = args["content"]?.jsonPrimitive?.contentOrNull ?: ""
             val overwrite = args["overwrite"]?.jsonPrimitive?.booleanOrNull ?: true
@@ -173,7 +173,7 @@ class WriteFileTool @Inject constructor(
             val existed = fileAccess.exists(path)
             if (existed && !overwrite) {
                 FileLogger.w(TAG, "write_file 文件已存在且 overwrite=false: $path")
-                return ToolResult.Error("文件已存在：$path（overwrite=false）", "FILE_EXISTS")
+                return ToolResult.Error("File already exists: $path (overwrite=false)", "FILE_EXISTS")
             }
 
             // 写前留存旧内容，供生成「旧→新」差异（与 edit_file 同构，UI 据此渲染彩色 diff）。
@@ -210,7 +210,7 @@ class WriteFileTool @Inject constructor(
             )
         } catch (e: Exception) {
             FileLogger.e(TAG, "write_file 异常", e)
-            ToolResult.Error(e.message ?: "写入文件失败", "WRITE_ERROR")
+            ToolResult.Error(e.message ?: "Failed to write file", "WRITE_ERROR")
         }
     }
 

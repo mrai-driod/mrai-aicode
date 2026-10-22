@@ -258,7 +258,7 @@ class BrowserManager @Inject constructor(
         if (tabId.isNullOrBlank()) {
             return ensureActiveTab()
         }
-        return findTab(tabId) ?: throw IllegalArgumentException("标签页不存在: $tabId")
+        return findTab(tabId) ?: throw IllegalArgumentException("Tab does not exist: $tabId")
     }
 
     private fun configureWebView(wv: WebView, tabId: String) {
@@ -303,7 +303,7 @@ class BrowserManager @Inject constructor(
             ) {
                 val tab = tabHolderRef() ?: return
                 if (request?.isForMainFrame == true) {
-                    val msg = error?.description?.toString() ?: "未知错误"
+                    val msg = error?.description?.toString() ?: "Unknown error"
                     tab.loading = false
                     tab.error = msg
                     tab.loadDeferred?.complete(Result.failure(RuntimeException(msg)))
@@ -725,7 +725,7 @@ class BrowserManager @Inject constructor(
 
     suspend fun newTab(url: String? = null): String = withContext(Dispatchers.Main) {
         if (tabs.size >= MAX_TABS) {
-            throw IllegalStateException("已达到最大标签页数量限制 ($MAX_TABS)")
+            throw IllegalStateException("Maximum number of tabs reached ($MAX_TABS)")
         }
         val id = "tab-${tabSeq++}"
         val tab = createTabInternal(id, url)
@@ -1234,7 +1234,7 @@ class BrowserManager @Inject constructor(
         }
         val result = wv.evaluateJavascriptSync(js)
         val raw = unescapeJsString(result)
-        if (raw.length > MAX_CONTENT_CHARS) raw.take(MAX_CONTENT_CHARS) + "\n\n[网页内容超长，已截断]" else raw
+        if (raw.length > MAX_CONTENT_CHARS) raw.take(MAX_CONTENT_CHARS) + "\n\n[Page content too long, truncated]" else raw
     }
 
     suspend fun getBackbone(maxDepth: Int = 15, tabId: String? = null): String = withContext(Dispatchers.Main) {

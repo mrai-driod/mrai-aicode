@@ -59,7 +59,7 @@ class ToolInvoker @Inject constructor(
     ): ToolRunResult {
         val name = toolCall.name
         if (tool == null) {
-            return ToolRunResult(ToolResult.Error("工具 $name 不存在", "TOOL_NOT_FOUND").toTransportString(), true)
+            return ToolRunResult(ToolResult.Error("Tool $name does not exist", "TOOL_NOT_FOUND").toTransportString(), true)
         }
         return try {
             withContext(Dispatchers.IO) {
@@ -73,7 +73,7 @@ class ToolInvoker @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            ToolRunResult(ToolResult.Error("工具执行失败: ${e.message}", "TOOL_EXECUTION_FAILED").toTransportString(), true)
+            ToolRunResult(ToolResult.Error("Tool execution failed: ${e.message}", "TOOL_EXECUTION_FAILED").toTransportString(), true)
         }
     }
 
@@ -109,7 +109,7 @@ class ToolInvoker @Inject constructor(
                         is ToolStreamEvent.Completed -> finalResult = ev.result
                     }
                 }
-                val result = finalResult ?: ToolResult.Error("流式工具未返回结果", "MISSING_STREAM_RESULT")
+                val result = finalResult ?: ToolResult.Error("Streaming tool did not return a result", "MISSING_STREAM_RESULT")
                 val processed = toolOutputStore.process(toolCall.name, toolCall.id, result)
                 val images = if (result is ToolResult.Success) result.images else emptyList()
                 ToolRunResult(processed.toTransportString(), processed is ToolResult.Error, images = images)
@@ -117,7 +117,7 @@ class ToolInvoker @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            ToolRunResult(ToolResult.Error("工具执行失败: ${e.message}", "TOOL_EXECUTION_FAILED").toTransportString(), true)
+            ToolRunResult(ToolResult.Error("Tool execution failed: ${e.message}", "TOOL_EXECUTION_FAILED").toTransportString(), true)
         }
     }
 

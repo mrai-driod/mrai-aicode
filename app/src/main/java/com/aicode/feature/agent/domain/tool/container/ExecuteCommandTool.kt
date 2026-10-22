@@ -49,7 +49,7 @@ class ExecuteCommandTool @Inject constructor(
     }
 
     override val name = "Bash"
-    override val description = "执行一次性 Shell 命令，同步返回输出。默认在用户设置的执行环境（当前为首选项环境）中执行；可用 env 参数显式选择执行环境：操作真机系统（/storage 文件、dumpsys/pm/am 等设备命令）用 \"device\"，需要容器内完整 Linux 工具链（git/npm/python/gcc/make 等构建环境）用 \"container\"，默认 \"auto\" 跟随用户首选项。耗时或常驻任务（安装依赖、启动服务等）请改用 `terminal`，不要用 `&` 挂后台。"
+    override val description = "Run a one-off shell command and return its output synchronously. By default it runs in the execution environment set by the user (currently the preferred environment); the env parameter can explicitly select the execution environment: use \"device\" to operate the real device system (/storage files, device commands such as dumpsys/pm/am), use \"container\" when the full Linux toolchain inside the container is needed (build environments such as git/npm/python/gcc/make), and the default \"auto\" follows the user's preference. For long-running or resident tasks (installing dependencies, starting services, etc.), use `terminal` instead; do not background with `&`."
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.EXECUTE_COMMANDS)
 
@@ -57,25 +57,25 @@ class ExecuteCommandTool @Inject constructor(
         "command" to ToolParameter(
             name = "command",
             type = ParameterType.STRING,
-            description = "要执行的 shell 命令",
+            description = "The shell command to execute",
             required = true
         ),
         "timeout" to ToolParameter(
             name = "timeout",
             type = ParameterType.INTEGER,
-            description = "命令最长执行时间（秒），超时将被强制终止。默认 $DEFAULT_TIMEOUT_SECONDS 秒，上限 $MAX_TIMEOUT_SECONDS 秒。耗时命令（如安装依赖）可适当调大。",
+            description = "Maximum command execution time (seconds); the command is forcibly terminated on timeout. Default $DEFAULT_TIMEOUT_SECONDS seconds, maximum $MAX_TIMEOUT_SECONDS seconds. Increase it for long-running commands (e.g. installing dependencies).",
             required = false
         ),
         "elevate" to ToolParameter(
             name = "elevate",
             type = ParameterType.BOOLEAN,
-            description = "提权重试：命令因内置安全防护（灾难性删除等）被拒且确有必要时，置为 true 重试，会弹窗请用户一次性授权（不可记忆）。PLAN 模式下无效。",
+            description = "Elevated retry: if the command was rejected by the built-in safety guard (e.g. catastrophic deletion) and is genuinely necessary, set to true to retry; a dialog will ask the user for one-time authorization (cannot be remembered). Ineffective in PLAN mode.",
             required = false
         ),
         "env" to ToolParameter(
             name = "env",
             type = ParameterType.STRING,
-            description = "执行环境选择。\"auto\"（默认）跟随用户设置的首选执行环境；\"device\" 在真机上直接执行（适合操作 /storage 文件、系统命令 dumpsys/pm/am、设备状态查询等宿主操作）；\"container\" 在本地 Linux 容器内执行（适合需要容器内已安装的完整工具链：git/npm/python/gcc/make 等构建与开发环境）。分清场合：日常跟随 auto，明确需要另一个环境时才显式指定。",
+            description = "Execution environment selection. \"auto\" (default) follows the user's preferred execution environment; \"device\" runs directly on the real device (suitable for host operations such as /storage files, system commands dumpsys/pm/am, device status queries); \"container\" runs inside the local Linux container (suitable when the full toolchain installed in the container is needed: git/npm/python/gcc/make and other build and development environments). Choose appropriately: follow auto in day-to-day use, and specify explicitly only when another environment is clearly needed.",
             required = false
         )
     )
@@ -102,21 +102,21 @@ class ExecuteCommandTool @Inject constructor(
         args: Map<String, JsonElement>,
         argsPreview: String
     ): PendingToolPermission {
-        val command = args["command"]?.jsonPrimitive?.contentOrNull ?: "未知命令"
+        val command = args["command"]?.jsonPrimitive?.contentOrNull ?: "Unknown command"
         val timeoutSeconds = resolveTimeoutMs(args) / 1000L
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认执行命令",
+            title = "Confirm executing command",
             summary = command,
-            details = "将在当前执行环境中执行。\n超时：${timeoutSeconds} 秒",
+            details = "Will run in the current execution environment.\nTimeout: ${timeoutSeconds} seconds",
             argsPreview = argsPreview
         )
     }
 
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         val command = args["command"]?.jsonPrimitive?.contentOrNull
-            ?: return ToolResult.Error("缺少必需参数：command")
+            ?: return ToolResult.Error("Missing required parameter: command")
 
         return try {
             val env = resolveEnv(args)
@@ -128,7 +128,7 @@ class ExecuteCommandTool @Inject constructor(
             // 显式选择环境时先做就绪检查：容器未装/未初始化时给 AI 明确原因，而不是让命令莫名失败。
             if (env != DelegatingCommandEngine.TargetEnv.AUTO) {
                 engine.notReadyHint()?.let { hint ->
-                    return ToolResult.Error("执行环境未就绪（${env.name}）：$hint")
+                    return ToolResult.Error("Execution environment not ready (${env.name}): $hint")
                 }
             }
             val timeoutMs = resolveTimeoutMs(args)
@@ -140,7 +140,7 @@ class ExecuteCommandTool @Inject constructor(
             throw e
         } catch (e: Exception) {
             FileLogger.e(TAG, "execute_command 失败: $command", e)
-            ToolResult.Error("执行命令失败: ${e.message}")
+            ToolResult.Error("Failed to execute command: ${e.message}")
         }
     }
 
@@ -155,7 +155,7 @@ class ExecuteCommandTool @Inject constructor(
     ): Flow<ToolStreamEvent> = flow {
         val command = args["command"]?.jsonPrimitive?.contentOrNull
         if (command == null) {
-            emit(ToolStreamEvent.Completed(ToolResult.Error("缺少必需参数：command")))
+            emit(ToolStreamEvent.Completed(ToolResult.Error("Missing required parameter: command")))
             return@flow
         }
 
@@ -168,7 +168,7 @@ class ExecuteCommandTool @Inject constructor(
             val engine = delegatingEngine.engineFor(env)
             if (env != DelegatingCommandEngine.TargetEnv.AUTO) {
                 engine.notReadyHint()?.let { hint ->
-                    emit(ToolStreamEvent.Completed(ToolResult.Error("执行环境未就绪（${env.name}）：$hint")))
+                    emit(ToolStreamEvent.Completed(ToolResult.Error("Execution environment not ready (${env.name}): $hint")))
                     return@flow
                 }
             }
@@ -196,7 +196,7 @@ class ExecuteCommandTool @Inject constructor(
             val result = if (saved.isNotEmpty()) {
                 ToolResult.Success(JsonPrimitive(saved))
             } else {
-                ToolResult.Error("执行命令失败：${e.message}")
+                ToolResult.Error("Failed to execute command: ${e.message}")
             }
             emit(ToolStreamEvent.Completed(result))
         }

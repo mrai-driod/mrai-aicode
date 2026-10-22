@@ -130,15 +130,15 @@ class ToolOutputStore @Inject constructor(
     private fun buildPreview(text: String, outputPath: String?): String {
         val omitted = text.length - HEAD_CHARS - TAIL_CHARS
         val storageHint = if (outputPath != null) {
-            "完整内容已保存到 $outputPath"
+            "Full content saved to $outputPath"
         } else {
-            "完整内容保存失败"
+            "Failed to save the full content"
         }
         return buildString {
             append(text.take(HEAD_CHARS))
-            append("\n\n...[输出过长，已省略中间 ")
+            append("\n\n...[Output too long, omitted ")
             append(omitted)
-            append(" 个字符；")
+            append(" characters in the middle; ")
             append(storageHint)
             append("]...\n\n")
             append(text.takeLast(TAIL_CHARS))
@@ -155,7 +155,7 @@ class ToolOutputStore @Inject constructor(
             StoredPathResult(outputPath = path)
         } catch (e: Exception) {
             FileLogger.w(TAG, "保存工具输出失败: ${e.message}", e)
-            StoredPathResult(storageError = e.message ?: "保存工具输出失败")
+            StoredPathResult(storageError = e.message ?: "Failed to save tool output")
         }
     }
 

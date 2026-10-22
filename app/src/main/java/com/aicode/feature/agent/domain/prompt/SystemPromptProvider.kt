@@ -137,7 +137,7 @@ class SystemPromptProvider @Inject constructor(
             }
 
             val list = entries.joinToString("\n") { entry ->
-                "- ${entry.definition.name}: ${entry.definition.description.ifBlank { "（无描述）" }}"
+                "- ${entry.definition.name}: ${entry.definition.description.ifBlank { "(no description)" }}"
             }
             val content = list
             cachedByKey[key] = content
@@ -175,7 +175,7 @@ class SystemPromptProvider @Inject constructor(
             if (text.isBlank()) return null
             
             cached = if (text.length > MAX_AGENTS_CHARS) {
-                text.take(MAX_AGENTS_CHARS) + "\n…（${file.second} 过长，已截断）"
+                text.take(MAX_AGENTS_CHARS) + "\n…(${file.second} was too long and has been truncated)"
             } else {
                 text
             }.trim()
@@ -187,16 +187,16 @@ class SystemPromptProvider @Inject constructor(
 
     private inner class WorkspaceSource : PromptSource {
         override fun build(ctx: AgentContext): String =
-            if (ctx.projectRoot.isNotBlank()) "~/workspace" else "（未选择工作区）"
+            if (ctx.projectRoot.isNotBlank()) "~/workspace" else "(no workspace selected)"
     }
 
     private inner class EnvironmentSource : PromptSource {
         override fun build(ctx: AgentContext): String =
             when (executionModeHolder.currentMode()) {
-                ExecutionMode.LOCAL_PROOT -> "本地容器（PRoot）"
-                ExecutionMode.REMOTE_SSH -> "远程 SSH 服务器"
+                ExecutionMode.LOCAL_PROOT -> "Local container (PRoot)"
+                ExecutionMode.REMOTE_SSH -> "Remote SSH server"
                 ExecutionMode.DEVICE_ROOT ->
-                    "真机 ROOT（命令经 su 直接在本机以 root 身份执行，非沙盒；对系统的修改真实生效且可能不可逆，务必谨慎）"
+                    "Real device ROOT (commands run via su directly on this device as root, not sandboxed; changes to the system are real and may be irreversible — be extremely careful)"
             }
     }
 
@@ -216,10 +216,10 @@ class SystemPromptProvider @Inject constructor(
             }
             val global = memories.filter { it.scope == MemoryScope.GLOBAL }
                 .takeIf { it.isNotEmpty() }
-                ?.joinToString("\n") { "- ${it.name}: ${it.description.ifBlank { "无" } }" }
+                ?.joinToString("\n") { "- ${it.name}: ${it.description.ifBlank { "None" } }" }
             val project = memories.filter { it.scope == MemoryScope.PROJECT }
                 .takeIf { it.isNotEmpty() }
-                ?.joinToString("\n") { "- ${it.name}: ${it.description.ifBlank { "无" } }" }
+                ?.joinToString("\n") { "- ${it.name}: ${it.description.ifBlank { "None" } }" }
             val result = MemoryLists(global, project)
             cachedByKey[key] = result
             trimIfNeeded()

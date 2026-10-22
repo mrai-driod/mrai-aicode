@@ -132,6 +132,15 @@ class MraiChainAdapter(api: OpenAIApi) : AIProvider {
         reasoningEffort: String?
     ): AIResponse {
         runRung1(systemPrompt, messages, tools, reasoningEffort)?.let { return it }
+        // Agent requests (tools attached) must never degrade to the text-only
+        // rungs: a tool-less answer would pretend the agent ran while the
+        // model truthfully reports it has no tools. Fail honestly instead so
+        // the user sees a clear error and can retry on a better connection.
+        if (tools.isNotEmpty()) {
+            throw IllegalStateException(
+                "Mrai AI: the tool-capable endpoint did not respond, so this agent request cannot run. Check the connection and try again."
+            )
+        }
         val text = withContext(Dispatchers.IO) { runTextRungs(systemPrompt, messages) }
         if (text != null) return AIResponse(content = stripAds(text), stopReason = "stop")
         throw IllegalStateException(
@@ -170,6 +179,13 @@ class MraiChainAdapter(api: OpenAIApi) : AIProvider {
             if (resp.content.isNotBlank()) emit(AIStreamChunk.TextDelta(resp.content))
             emit(AIStreamChunk.Final(resp))
             return@flow
+        }
+        // Same rule as complete(): tool-bearing requests never fall through
+        // to the text-only rungs.
+        if (tools.isNotEmpty()) {
+            throw IllegalStateException(
+                "Mrai AI: the tool-capable endpoint did not respond, so this agent request cannot run. Check the connection and try again."
+            )
         }
         val text = withContext(Dispatchers.IO) { runTextRungs(systemPrompt, messages) }
         if (text != null) {

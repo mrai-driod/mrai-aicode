@@ -53,7 +53,7 @@ class SendFileTool @Inject constructor(
     }
 
     override val description get() =
-        "把工作区已有文件发送到聊天区展示给用户。所有文件必须全部存在且合法，任一失败则整体失败，需修正后重新调用。仅展示，不读取内容、不进上下文。"
+        "Send existing workspace files to the chat area to show the user. All files must exist and be valid; if any fails, the whole call fails and must be fixed and retried. Display only; contents are not read and do not enter the context."
 
     override val capabilities = setOf(ToolCapability.READ_WORKSPACE)
 
@@ -61,14 +61,14 @@ class SendFileTool @Inject constructor(
         "paths" to ToolParameter(
             name = "paths",
             type = ParameterType.ARRAY,
-            description = "要发送的文件路径列表，支持 ~/workspace/... 项目文件或容器绝对路径；一次最多 $MAX_FILES 个，单个文件不超过 ${cachedMaxFileSizeMb}MB。",
+            description = "List of file paths to send; supports ~/workspace/... project files or container absolute paths; at most $MAX_FILES per call, each file no larger than ${cachedMaxFileSizeMb}MB.",
             required = true,
             itemsSchema = mapOf("type" to "string")
         ),
         "names" to ToolParameter(
             name = "names",
             type = ParameterType.ARRAY,
-            description = "可选的自定义显示名列表，与 paths 一一对应；缺省用文件名。",
+            description = "Optional list of custom display names, corresponding one-to-one with paths; defaults to the file name.",
             required = false,
             itemsSchema = mapOf("type" to "string")
         )
@@ -81,16 +81,16 @@ class SendFileTool @Inject constructor(
                 ?.filter { it.isNotBlank() }
                 .orEmpty()
             if (paths.isEmpty()) {
-                return ToolResult.Error("缺少必需参数：paths", "MISSING_PATHS")
+                return ToolResult.Error("Missing required parameter: paths", "MISSING_PATHS")
             }
             if (paths.size > MAX_FILES) {
-                return ToolResult.Error("一次最多发送 $MAX_FILES 个文件，当前 ${paths.size} 个", "TOO_MANY_FILES")
+                return ToolResult.Error("At most $MAX_FILES files can be sent at once, currently ${paths.size}", "TOO_MANY_FILES")
             }
             val names = (args["names"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }
                 ?.map { it.trim() }
                 .orEmpty()
             if (names.isNotEmpty() && names.size != paths.size) {
-                return ToolResult.Error("names 数量（${names.size}）与 paths 数量（${paths.size}）不一致", "ARGS_MISMATCH")
+                return ToolResult.Error("The number of names (${names.size}) does not match the number of paths (${paths.size})", "ARGS_MISMATCH")
             }
 
             // 原子校验：全部通过才成功，任一失败整体失败并列出所有失败项。
@@ -99,17 +99,17 @@ class SendFileTool @Inject constructor(
             val failures = mutableListOf<String>()
             paths.forEachIndexed { index, path ->
                 when {
-                    !fileAccess.exists(path) -> failures.add("文件不存在：$path")
-                    !fileAccess.isFile(path) -> failures.add("路径不是文件：$path")
+                    !fileAccess.exists(path) -> failures.add("File does not exist: $path")
+                    !fileAccess.isFile(path) -> failures.add("Path is not a file: $path")
                     fileAccess.fileSize(path) > maxSizeBytes -> {
                         val sizeMb = fileAccess.fileSize(path) / (1024 * 1024)
-                        failures.add("文件超过 ${maxSizeMb}MB 限制：$path（${sizeMb}MB）")
+                        failures.add("File exceeds the ${maxSizeMb}MB limit: $path (${sizeMb}MB)")
                     }
                 }
             }
             if (failures.isNotEmpty()) {
                 FileLogger.w(TAG, "sendFile 原子校验失败: ${failures.joinToString("；")}")
-                return ToolResult.Error(failures.joinToString("；"), "INVALID_FILE")
+                return ToolResult.Error(failures.joinToString("; "), "INVALID_FILE")
             }
 
             val files = paths.mapIndexed { index, path ->
@@ -134,12 +134,12 @@ class SendFileTool @Inject constructor(
                     mapOf(
                         "content" to JsonPrimitive(
                             buildString {
-                                append("已发送 ${files.size} 个文件：")
+                                append("Sent ${files.size} files:")
                                 files.forEach { file ->
                                     append('\n')
                                     append("- ")
                                     append(file["name"]?.jsonPrimitive?.contentOrNull)
-                                    append("：")
+                                    append(": ")
                                     append(file["path"]?.jsonPrimitive?.contentOrNull)
                                 }
                             }
@@ -151,7 +151,7 @@ class SendFileTool @Inject constructor(
             )
         } catch (e: Exception) {
             FileLogger.e(TAG, "sendFile 异常", e)
-            ToolResult.Error(e.message ?: "发送文件失败", "SEND_FILE_ERROR")
+            ToolResult.Error(e.message ?: "Failed to send file", "SEND_FILE_ERROR")
         }
     }
 

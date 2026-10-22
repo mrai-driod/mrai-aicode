@@ -140,7 +140,33 @@ class MessagePersistenceUseCase @Inject constructor(
         agentMessageDao.updateMessageContent(messageId, sanitizeContent(newContent))
     }
 
+    /** Read a small text attachment's contents for inlining into history; null when not inlineable. */
+    private fun readInlineText(att: AgentAttachment): String? {
+        if (att.sizeBytes <= 0 || att.sizeBytes > INLINE_TEXT_LIMIT_BYTES) return null
+        val ext = att.fileName.substringAfterLast('.', "").lowercase()
+        val inlineable = att.mimeType.startsWith("text/") ||
+            att.mimeType in INLINE_TEXT_MIMES || ext in INLINE_TEXT_EXTENSIONS
+        if (!inlineable) return null
+        val text = runCatching { java.io.File(att.localPath).readText(Charsets.UTF_8) }.getOrNull() ?: return null
+        if (text.contains('\u0000')) return null
+        return text
+    }
+
     companion object {
+        /** Max size for inlining an attached text file into history (mirrors ChatAttachmentUtils). */
+        const val INLINE_TEXT_LIMIT_BYTES = 64_000L
+
+        val INLINE_TEXT_EXTENSIONS = setOf(
+            "txt", "md", "markdown", "json", "yaml", "yml", "toml", "xml", "csv", "log",
+            "kt", "kts", "java", "py", "js", "ts", "tsx", "jsx", "sh", "bash", "html",
+            "css", "scss", "sql", "gradle", "properties", "ini", "cfg", "env"
+        )
+
+        val INLINE_TEXT_MIMES = setOf(
+            "application/json", "application/xml", "application/javascript",
+            "application/x-yaml", "application/yaml", "application/toml"
+        )
+
         /**
          * 单条消息各文本字段的持久化上限（UTF-8 字节数）。远小于 SQLite CursorWindow 单窗口约 2MB
          * 的硬限制，防止超大内容撑爆数据行导致读取消息时崩溃。
@@ -275,13 +301,27 @@ class MessagePersistenceUseCase @Inject constructor(
 
                     val finalContent = if (attachments.isNotEmpty()) {
                         val attachmentText = buildString {
-                            append("附件：")
+                            append("Attachments:")
                             attachments.forEach { att ->
                                 append('\n')
                                 append("- ")
                                 append(att.fileName)
-                                append("：")
+                                append(": ")
                                 append(att.containerPath)
+                            }
+                            // Inline small text attachments so the model sees the
+                            // contents in history too, not just a path pointer
+                            // (mirrors ChatAttachmentUtils on the live path).
+                            attachments.forEach { att ->
+                                if (att.isImage) return@forEach
+                                val text = readInlineText(att) ?: return@forEach
+                                append("\n\n--- begin attached file: ")
+                                append(att.fileName)
+                                append(" ---\n")
+                                append(text)
+                                append("\n--- end attached file: ")
+                                append(att.fileName)
+                                append(" ---")
                             }
                         }
                         if (rawContent.isBlank()) attachmentText else "${rawContent.trimEnd()}\n\n$attachmentText"

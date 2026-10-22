@@ -34,7 +34,7 @@ class SearchCodeTool @Inject constructor(
     }
 
     override val name = "search"
-    override val description = "使用 ripgrep（rg）搜索文本内容。例：args=\"-n \\\"fun main\\\" ~/workspace/app\"。支持追加 `| head [-n N]` 截断输出。"
+    override val description = "Search text content using ripgrep (rg). Example: args=\"-n \\\"fun main\\\" ~/workspace/app\". Supports appending `| head [-n N]` to truncate output."
     override val permissionPolicy = ToolPermissionPolicy.AUTO_APPROVE
     override val capabilities = setOf(ToolCapability.READ_WORKSPACE)
 
@@ -42,7 +42,7 @@ class SearchCodeTool @Inject constructor(
         "args" to ToolParameter(
             name = "args",
             type = ParameterType.STRING,
-            description = "ripgrep 参数。不填无效。常用：-i -F -e -g --hidden --。支持末尾追加 `| head [-n N]` 截断输出；其它管道命令（grep/sort/wc 等）不支持。",
+            description = "ripgrep arguments. Leaving it empty is invalid. Common: -i -F -e -g --hidden --. Supports appending `| head [-n N]` at the end to truncate output; other pipe commands (grep/sort/wc, etc.) are not supported.",
             required = true
         )
     )
@@ -50,28 +50,28 @@ class SearchCodeTool @Inject constructor(
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         return try {
             val rawArgs = args["args"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-            if (rawArgs.isEmpty()) return ToolResult.Error("缺少必需参数：args", "MISSING_ARGS")
+            if (rawArgs.isEmpty()) return ToolResult.Error("Missing required parameter: args", "MISSING_ARGS")
 
             val tokens = parseShellWords(rawArgs)
-                ?: return ToolResult.Error("args 中存在未闭合的引号", "INVALID_ARGS")
-            if (tokens.isEmpty()) return ToolResult.Error("缺少必需参数：args", "MISSING_ARGS")
+                ?: return ToolResult.Error("args contains an unclosed quote", "INVALID_ARGS")
+            if (tokens.isEmpty()) return ToolResult.Error("Missing required parameter: args", "MISSING_ARGS")
 
             val command = buildSearchCommand(tokens, pathHomeResolver.home())
-                ?: return ToolResult.Error("search 仅支持 | head [-n N] 截断输出，不支持其它管道命令", "INVALID_PIPE")
+                ?: return ToolResult.Error("search only supports | head [-n N] to truncate output; other pipe commands are not supported", "INVALID_PIPE")
 
             val startedAt = System.currentTimeMillis()
             val result = commandEngine.runCommandSyncIfReady(
                 command = command,
                 projectPath = workspaceRepository.currentPath(),
                 timeoutMs = SEARCH_TIMEOUT_MS
-            ) ?: return ToolResult.Error("容器未就绪，无法执行 rg", "CONTAINER_NOT_READY")
+            ) ?: return ToolResult.Error("Container is not ready, cannot run rg", "CONTAINER_NOT_READY")
 
             // 127 = shell 找不到命令；合并 stderr 后通常也能看到 command not found，双保险
             if (isRgMissing(result.output) || result.exitCode == 127) {
-                return ToolResult.Error("容器内未安装 rg", "RG_MISSING")
+                return ToolResult.Error("rg is not installed in the container", "RG_MISSING")
             }
             if (result.exitCode != null && result.exitCode > 1) {
-                return ToolResult.Error(result.output.ifBlank { "rg 执行失败" }, "RG_ERROR")
+                return ToolResult.Error(result.output.ifBlank { "rg execution failed" }, "RG_ERROR")
             }
 
             val lines = result.output.lineSequence().filter { it.isNotBlank() }.toList()
@@ -86,7 +86,7 @@ class SearchCodeTool @Inject constructor(
             throw e
         } catch (e: Exception) {
             FileLogger.e(TAG, "search 异常", e)
-            ToolResult.Error(e.message ?: "搜索失败", "SEARCH_ERROR")
+            ToolResult.Error(e.message ?: "Search failed", "SEARCH_ERROR")
         }
     }
 

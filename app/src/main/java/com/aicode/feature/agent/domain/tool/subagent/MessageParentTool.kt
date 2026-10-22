@@ -35,27 +35,27 @@ class MessageParentTool @Inject constructor(
 
     override val name = "messageParent"
 
-    override val description = "向主会话发送消息（汇报进展、求助或需协调/决策的事项）；异步不阻塞，回复作为后续消息送达。"
+    override val description = "Send a message to the parent session (report progress, ask for help, or raise items needing coordination or a decision); asynchronous and non-blocking, replies are delivered as follow-up messages."
 
     override val parameters: Map<String, ToolParameter> = mapOf(
         "message" to ToolParameter(
             name = "message",
             type = ParameterType.STRING,
-            description = "发给主会话的消息正文（进度、问题、需要协调或决策的事项）",
+            description = "Body of the message to the parent session (progress, questions, items needing coordination or a decision)",
             required = true
         )
     )
 
     override suspend fun executeWithContext(args: Map<String, JsonElement>, context: AgentContext): ToolResult {
-        val sessionId = context.sessionId ?: return ToolResult.Error("缺少会话上下文", "NO_SESSION")
+        val sessionId = context.sessionId ?: return ToolResult.Error("Missing session context", "NO_SESSION")
         val parentSessionId = sessionUseCase.getSessionById(sessionId)?.parentId
-            ?: return ToolResult.Error("当前会话不是子代理，无法向主会话发送消息", "NO_PARENT")
+            ?: return ToolResult.Error("Current session is not a subagent; cannot send a message to the parent session", "NO_PARENT")
         val message = (args["message"] as? JsonPrimitive)?.contentOrNull?.trim()
         if (message.isNullOrBlank()) {
-            return ToolResult.Error("参数无效：message 不能为空", "INVALID_ARGS")
+            return ToolResult.Error("Invalid parameter: message must not be empty", "INVALID_ARGS")
         }
         if (message.length > MESSAGE_MAX) {
-            return ToolResult.Error("消息过长（上限 $MESSAGE_MAX 字）", "INVALID_ARGS")
+            return ToolResult.Error("Message too long (limit: $MESSAGE_MAX characters)", "INVALID_ARGS")
         }
 
         eventBus.emit(
@@ -70,7 +70,7 @@ class MessageParentTool @Inject constructor(
         return ToolResult.Success(
             buildJsonObject {
                 put("state", "sent")
-                put("message", "消息已发送给主会话，可继续手头工作，主会话的回复会稍后送达。")
+                put("message", "Message sent to the parent session. You can continue your current work; the parent session's reply will arrive later.")
             }
         )
     }

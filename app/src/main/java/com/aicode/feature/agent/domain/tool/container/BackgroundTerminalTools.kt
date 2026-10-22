@@ -79,7 +79,7 @@ class TerminalSessionTool @Inject constructor(
 
     override val name = "terminal"
     override val description =
-        "管理常驻后台终端会话（启动命令、发输入/快捷键、读输出、关闭标签）。会自行结束且需等结果的任务用 start + notify=true（结束后系统主动通知，勿轮询）；常驻服务用 notify=false，需要时再 read。中断前台进程用 key=ctrl+c。"
+        "Manage persistent background terminal sessions (start commands, send input/keys, read output, close tabs). For tasks that finish on their own and whose result you need to wait for, use start + notify=true (the system notifies you when it ends; do not poll); for resident services use notify=false and read when needed. To interrupt a foreground process, use key=ctrl+c."
     override val permissionPolicy = ToolPermissionPolicy.ASK
     override val capabilities = setOf(ToolCapability.EXECUTE_COMMANDS)
 
@@ -94,57 +94,57 @@ class TerminalSessionTool @Inject constructor(
         "action" to ToolParameter(
             name = "action",
             type = ParameterType.STRING,
-            description = "操作类型：start=启动后台命令；send=向终端发输入；key=发送快捷键；read=读终端输出；close=关闭终端标签",
+            description = "Action type: start=start a background command; send=send input to a terminal; key=send a shortcut key; read=read terminal output; close=close a terminal tab",
             required = true,
             enum = listOf("start", "send", "key", "read", "close")
         ),
         "command" to ToolParameter(
             name = "command",
             type = ParameterType.STRING,
-            description = "start 必填：要在后台运行的 shell 命令，如 'npm run dev'",
+            description = "Required for start: the shell command to run in the background, e.g. 'npm run dev'",
             required = false
         ),
         "title" to ToolParameter(
             name = "title",
             type = ParameterType.STRING,
-            description = "start 可选：标签显示名；不填则用 tab id",
+            description = "Optional for start: the tab display name; defaults to the tab id if omitted",
             required = false
         ),
         "notify" to ToolParameter(
             name = "notify",
             type = ParameterType.BOOLEAN,
-            description = "start 可选：命令结束后是否由系统通知 AI。true 用于编译/测试等会自行结束的任务（start 只捕获约 5 秒初始输出，结束后通知，勿轮询）；false（默认）用于 dev server 等常驻服务，标签保活可复用。",
+            description = "Optional for start: whether the system notifies the AI when the command ends. true is for tasks that finish on their own, such as builds/tests (start only captures about 5 seconds of initial output; you are notified when it ends — do not poll); false (default) is for resident services such as dev servers, where the tab stays alive for reuse.",
             required = false
         ),
         "tab_id" to ToolParameter(
             name = "tab_id",
             type = ParameterType.STRING,
-            description = "send/key/read/close 用：目标终端标签 id，如 'term-2'；read 省略则列出所有标签",
+            description = "Used by send/key/read/close: the target terminal tab id, e.g. 'term-2'; omit for read to list all tabs",
             required = false
         ),
         "input" to ToolParameter(
             name = "input",
             type = ParameterType.STRING,
-            description = "send 必填：要发送的命令或文本",
+            description = "Required for send: the command or text to send",
             required = false
         ),
         "key" to ToolParameter(
             name = "key",
             type = ParameterType.STRING,
-            description = "key 必填：要发送的快捷键/控制字符。常用：ctrl+c 中断前台进程，ctrl+d 发送 EOF，ctrl+z 挂起，esc/tab/enter/方向键用于交互程序",
+            description = "Required for key: the shortcut key/control character to send. Common: ctrl+c interrupts the foreground process, ctrl+d sends EOF, ctrl+z suspends, esc/tab/enter/arrow keys are for interactive programs",
             required = false,
             enum = SUPPORTED_KEYS
         ),
         "submit" to ToolParameter(
             name = "submit",
             type = ParameterType.BOOLEAN,
-            description = "send 可选：是否在末尾追加回车以执行该命令，默认 true",
+            description = "Optional for send: whether to append Enter at the end to execute the command; default true",
             required = false
         ),
         "elevate" to ToolParameter(
             name = "elevate",
             type = ParameterType.BOOLEAN,
-            description = "提权重试：start/send 的命令因内置安全防护（灾难性删除等）被拒且确有必要时，置为 true 重试，会弹窗请用户一次性授权（不可记忆）。PLAN 模式下无效。",
+            description = "Elevated retry: if a start/send command was rejected by the built-in safety guard (e.g. catastrophic deletion) and is genuinely necessary, set to true to retry; a dialog will ask the user for one-time authorization (cannot be remembered). Ineffective in PLAN mode.",
             required = false
         )
     )
@@ -158,50 +158,50 @@ class TerminalSessionTool @Inject constructor(
         argsPreview: String
     ): PendingToolPermission = when (actionOf(args)) {
         "start" -> {
-            val command = args["command"]?.asPlainString() ?: "未知命令"
+            val command = args["command"]?.asPlainString() ?: "Unknown command"
             val title = args["title"]?.asPlainString()
             PendingToolPermission(
                 id = callId,
                 toolName = name,
-                title = "确认启动后台命令",
+                title = "Confirm starting background command",
                 summary = command,
-                details = "后台标签：${title?.takeIf { it.isNotBlank() } ?: "自动命名"}\n命令会持续运行，直到进程退出或手动停止。",
+                details = "Background tab: ${title?.takeIf { it.isNotBlank() } ?: "Auto-named"}\nThe command will keep running until the process exits or is stopped manually.",
                 argsPreview = argsPreview
             )
         }
         "send" -> {
-            val tabId = args["tab_id"]?.asPlainString() ?: "未知标签"
-            val input = args["input"]?.asPlainString() ?: "未知输入"
+            val tabId = args["tab_id"]?.asPlainString() ?: "Unknown tab"
+            val input = args["input"]?.asPlainString() ?: "Unknown input"
             val submit = args["submit"]?.asPlainString()?.toBooleanStrictOrNull() ?: true
             PendingToolPermission(
                 id = callId,
                 toolName = name,
-                title = "确认发送终端输入",
+                title = "Confirm sending terminal input",
                 summary = input,
-                details = "目标终端：$tabId\n自动回车执行：${if (submit) "是" else "否"}",
+                details = "Target terminal: $tabId\nAuto-submit with Enter: ${if (submit) "Yes" else "No"}",
                 argsPreview = argsPreview
             )
         }
         "key" -> {
-            val tabId = args["tab_id"]?.asPlainString() ?: "未知标签"
-            val key = args["key"]?.asPlainString() ?: "未知快捷键"
+            val tabId = args["tab_id"]?.asPlainString() ?: "Unknown tab"
+            val key = args["key"]?.asPlainString() ?: "Unknown key"
             PendingToolPermission(
                 id = callId,
                 toolName = name,
-                title = "确认发送终端快捷键",
+                title = "Confirm sending terminal key",
                 summary = key,
-                details = "目标终端：$tabId",
+                details = "Target terminal: $tabId",
                 argsPreview = argsPreview
             )
         }
         "close" -> {
-            val tabId = args["tab_id"]?.asPlainString() ?: "未知标签"
+            val tabId = args["tab_id"]?.asPlainString() ?: "Unknown tab"
             PendingToolPermission(
                 id = callId,
                 toolName = name,
-                title = "确认关闭终端标签",
+                title = "Confirm closing terminal tab",
                 summary = tabId,
-                details = "将关闭终端 $tabId，并终止其中仍在运行的进程。",
+                details = "This will close terminal $tabId and terminate any processes still running in it.",
                 argsPreview = argsPreview
             )
         }
@@ -210,9 +210,9 @@ class TerminalSessionTool @Inject constructor(
             PendingToolPermission(
                 id = callId,
                 toolName = name,
-                title = "确认读取终端输出",
-                summary = tabId?.takeIf { it.isNotBlank() } ?: "列出所有标签",
-                details = if (tabId.isNullOrBlank()) "列出当前所有终端标签及其状态" else "读取终端 $tabId 的当前输出",
+                title = "Confirm reading terminal output",
+                summary = tabId?.takeIf { it.isNotBlank() } ?: "List all tabs",
+                details = if (tabId.isNullOrBlank()) "List all current terminal tabs and their states" else "Read the current output of terminal $tabId",
                 argsPreview = argsPreview
             )
         }
@@ -233,7 +233,7 @@ class TerminalSessionTool @Inject constructor(
             "key" -> sendKey(args)
             "read" -> read(args)
             "close" -> close(args)
-            else -> ToolResult.Error("缺少或非法的 action 参数（应为 start/send/key/read/close）")
+            else -> ToolResult.Error("Missing or invalid action parameter (must be start/send/key/read/close)")
         }
 
     /**
@@ -257,7 +257,7 @@ class TerminalSessionTool @Inject constructor(
     ) {
         val command = args["command"]?.asPlainString()
         if (command == null) {
-            emit(ToolStreamEvent.Completed(ToolResult.Error("start 操作缺少必需参数：command")))
+            emit(ToolStreamEvent.Completed(ToolResult.Error("Missing required parameter for start: command")))
             return
         }
         val title = args["title"]?.asPlainString()
@@ -268,7 +268,7 @@ class TerminalSessionTool @Inject constructor(
             throw e
         } catch (e: Exception) {
             FileLogger.e(TAG, "启动后台命令失败: $command", e)
-            emit(ToolStreamEvent.Completed(ToolResult.Error("启动后台命令失败：${e.message}")))
+            emit(ToolStreamEvent.Completed(ToolResult.Error("Failed to start background command: ${e.message}")))
             return
         }
 
@@ -281,25 +281,25 @@ class TerminalSessionTool @Inject constructor(
     private suspend fun kotlinx.coroutines.flow.FlowCollector<ToolStreamEvent>.streamSend(args: Map<String, JsonElement>) {
         val tabId = args["tab_id"]?.asPlainString()
         if (tabId.isNullOrBlank()) {
-            emit(ToolStreamEvent.Completed(ToolResult.Error("send 操作缺少必需参数：tab_id")))
+            emit(ToolStreamEvent.Completed(ToolResult.Error("Missing required parameter for send: tab_id")))
             return
         }
         val input = args["input"]?.asPlainString()
         if (input == null) {
-            emit(ToolStreamEvent.Completed(ToolResult.Error("send 操作缺少必需参数：input")))
+            emit(ToolStreamEvent.Completed(ToolResult.Error("Missing required parameter for send: input")))
             return
         }
         val submit = args["submit"]?.asPlainString()?.toBooleanStrictOrNull() ?: true
 
         val before = withContext(Dispatchers.Main) { sessionManager.getTabOutput(tabId) }
         if (before == null) {
-            emit(ToolStreamEvent.Completed(ToolResult.Error("未找到终端标签：$tabId")))
+            emit(ToolStreamEvent.Completed(ToolResult.Error("Terminal tab not found: $tabId")))
             return
         }
 
         val ok = withContext(Dispatchers.Main) { sessionManager.sendInput(tabId, input, appendNewline = submit) }
         if (!ok) {
-            emit(ToolStreamEvent.Completed(ToolResult.Error("未找到终端标签：$tabId")))
+            emit(ToolStreamEvent.Completed(ToolResult.Error("Terminal tab not found: $tabId")))
             return
         }
         FileLogger.i(TAG, "向 $tabId 发送输入(流式捕获): $input")
@@ -341,7 +341,7 @@ class TerminalSessionTool @Inject constructor(
      */
     private suspend fun start(args: Map<String, JsonElement>, sourceSessionId: String?): ToolResult = withContext(Dispatchers.Main) {
         val command = args["command"]?.asPlainString()
-            ?: return@withContext ToolResult.Error("start 操作缺少必需参数：command")
+            ?: return@withContext ToolResult.Error("Missing required parameter for start: command")
         val title = args["title"]?.asPlainString()
         val notify = args["notify"]?.asPlainString()?.toBooleanStrictOrNull() ?: false
         try {
@@ -371,7 +371,7 @@ class TerminalSessionTool @Inject constructor(
             )
         } catch (e: Exception) {
             FileLogger.e(TAG, "启动后台命令失败: $command", e)
-            ToolResult.Error("启动后台命令失败：${e.message}")
+            ToolResult.Error("Failed to start background command: ${e.message}")
         }
     }
 
@@ -383,9 +383,9 @@ class TerminalSessionTool @Inject constructor(
      */
     private suspend fun send(args: Map<String, JsonElement>): ToolResult = withContext(Dispatchers.Main) {
         val tabId = args["tab_id"]?.asPlainString()
-            ?: return@withContext ToolResult.Error("send 操作缺少必需参数：tab_id")
+            ?: return@withContext ToolResult.Error("Missing required parameter for send: tab_id")
         val input = args["input"]?.asPlainString()
-            ?: return@withContext ToolResult.Error("send 操作缺少必需参数：input")
+            ?: return@withContext ToolResult.Error("Missing required parameter for send: input")
         val submit = args["submit"]?.asPlainString()?.toBooleanStrictOrNull() ?: true
         val ok = sessionManager.sendInput(tabId, input, appendNewline = submit)
         if (ok) {
@@ -399,9 +399,9 @@ class TerminalSessionTool @Inject constructor(
         } else {
             val exists = sessionManager.listTabs().any { it.id == tabId }
             if (exists) {
-                ToolResult.Error("终端 $tabId 已结束，无法发送命令，如需执行新命令请用 start 新建终端", "TERMINAL_NOT_ACTIVE")
+                ToolResult.Error("Terminal $tabId has ended and cannot accept commands; use start to create a new terminal to run a new command", "TERMINAL_NOT_ACTIVE")
             } else {
-                ToolResult.Error("未找到终端标签：$tabId", "TERMINAL_NOT_FOUND")
+                ToolResult.Error("Terminal tab not found: $tabId", "TERMINAL_NOT_FOUND")
             }
         }
     }
@@ -409,9 +409,9 @@ class TerminalSessionTool @Inject constructor(
     /** 向指定终端发送预定义快捷键/控制字符。TerminalSessionManager 需主线程。 */
     private suspend fun sendKey(args: Map<String, JsonElement>): ToolResult = withContext(Dispatchers.Main) {
         val tabId = args["tab_id"]?.asPlainString()
-            ?: return@withContext ToolResult.Error("key 操作缺少必需参数：tab_id")
+            ?: return@withContext ToolResult.Error("Missing required parameter for key: tab_id")
         val key = args["key"]?.asPlainString()
-            ?: return@withContext ToolResult.Error("key 操作缺少必需参数：key")
+            ?: return@withContext ToolResult.Error("Missing required parameter for key: key")
         val normalized = normalizeKey(key)
         val ok = when (normalized) {
             "ctrl+c" -> sessionManager.writeBytesToTab(tabId, 0x03)
@@ -427,17 +427,17 @@ class TerminalSessionTool @Inject constructor(
             "down" -> sessionManager.writeToTab(tabId, "\u001B[B")
             "right" -> sessionManager.writeToTab(tabId, "\u001B[C")
             "left" -> sessionManager.writeToTab(tabId, "\u001B[D")
-            else -> return@withContext ToolResult.Error("不支持的快捷键：$key，支持：${SUPPORTED_KEYS.joinToString(", ")}")
+            else -> return@withContext ToolResult.Error("Unsupported key: $key. Supported keys: ${SUPPORTED_KEYS.joinToString(", ")}")
         }
         if (ok) {
             FileLogger.i(TAG, "向 $tabId 发送快捷键: $normalized")
-            ToolResult.Success(JsonPrimitive("已向终端标签 $tabId 发送快捷键 $normalized，可用 terminal(action=\"read\", tab_id=\"$tabId\") 查看结果。"))
+            ToolResult.Success(JsonPrimitive("Sent key $normalized to terminal tab $tabId. Use terminal(action=\"read\", tab_id=\"$tabId\") to view the result."))
         } else {
             val exists = sessionManager.listTabs().any { it.id == tabId }
             if (exists) {
-                ToolResult.Error("终端 $tabId 已结束，无法发送快捷键", "TERMINAL_NOT_ACTIVE")
+                ToolResult.Error("Terminal $tabId has ended and cannot accept keys", "TERMINAL_NOT_ACTIVE")
             } else {
-                ToolResult.Error("未找到终端标签：$tabId", "TERMINAL_NOT_FOUND")
+                ToolResult.Error("Terminal tab not found: $tabId", "TERMINAL_NOT_FOUND")
             }
         }
     }
@@ -447,16 +447,16 @@ class TerminalSessionTool @Inject constructor(
         val tabId = args["tab_id"]?.asPlainString()
         if (tabId.isNullOrBlank()) {
             val list = sessionManager.listTabs()
-            if (list.isEmpty()) return@withContext ToolResult.Success(JsonPrimitive("当前没有终端标签。"))
+            if (list.isEmpty()) return@withContext ToolResult.Success(JsonPrimitive("There are currently no terminal tabs."))
             val text = list.joinToString("\n") {
-                val state = if (it.running) "运行中" else "已结束"
-                val kind = if (it.isBackground) "后台" else "交互"
+                val state = if (it.running) "running" else "ended"
+                val kind = if (it.isBackground) "background" else "interactive"
                 "${it.id}  [$kind/$state]  ${it.title}" + (it.command?.let { c -> "  ($c)" } ?: "")
             }
             return@withContext ToolResult.Success(JsonPrimitive(text))
         }
         val output = sessionManager.getTabOutput(tabId)
-            ?: return@withContext ToolResult.Error("未找到终端标签：$tabId")
+            ?: return@withContext ToolResult.Error("Terminal tab not found: $tabId")
         FileLogger.v(TAG, "读取 $tabId 输出 ${output.length} 字符")
         ToolResult.Success(JsonPrimitive(output))
     }
@@ -464,13 +464,13 @@ class TerminalSessionTool @Inject constructor(
     /** 关闭指定终端标签。TerminalSessionManager 需主线程。 */
     private suspend fun close(args: Map<String, JsonElement>): ToolResult = withContext(Dispatchers.Main) {
         val tabId = args["tab_id"]?.asPlainString()
-            ?: return@withContext ToolResult.Error("close 操作缺少必需参数：tab_id")
+            ?: return@withContext ToolResult.Error("Missing required parameter for close: tab_id")
         val ok = sessionManager.closeTab(tabId)
         if (ok) {
             FileLogger.i(TAG, "关闭终端标签: $tabId")
-            ToolResult.Success(JsonPrimitive("已关闭终端标签 $tabId。"))
+            ToolResult.Success(JsonPrimitive("Closed terminal tab $tabId."))
         } else {
-            ToolResult.Error("未找到终端标签：$tabId")
+            ToolResult.Error("Terminal tab not found: $tabId")
         }
     }
 
@@ -479,7 +479,7 @@ class TerminalSessionTool @Inject constructor(
 
     private fun capturedResult(tabId: String, actionLabel: String): ToolResult {
         val tab = sessionManager.listTabs().firstOrNull { it.id == tabId }
-            ?: return ToolResult.Error("未找到终端标签：$tabId")
+            ?: return ToolResult.Error("Terminal tab not found: $tabId")
         val rawOutput = sessionManager.getTabOutput(tabId) ?: ""
         FileLogger.v(
             TAG,

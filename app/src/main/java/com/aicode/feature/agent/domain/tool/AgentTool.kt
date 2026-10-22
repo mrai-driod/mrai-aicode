@@ -120,8 +120,8 @@ abstract class AgentTool {
         return PendingToolPermission(
             id = callId,
             toolName = name,
-            title = "确认执行工具",
-            summary = "AI 请求执行 $name",
+            title = "Confirm tool execution",
+            summary = "AI requests to execute $name",
             details = argsPreview,
             argsPreview = argsPreview
         )

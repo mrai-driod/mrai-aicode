@@ -182,7 +182,7 @@ class StatefulAgentWorkflow @Inject constructor(
             val toolCall: ToolCall,
             val approved: Boolean,
             val argsPreview: String,
-            val denyReason: String = "用户拒绝执行该工具",
+            val denyReason: String = "The user declined to execute this tool",
             val errorCode: String = "USER_REJECTED"
         ) : AgentAction
         data class ToolBatchFinished(
@@ -192,7 +192,7 @@ class StatefulAgentWorkflow @Inject constructor(
 
     private data class PermissionCheckResult(
         val approved: Boolean,
-        val denyReason: String = "用户拒绝执行该工具",
+        val denyReason: String = "The user declined to execute this tool",
         val errorCode: String = "USER_REJECTED"
     )
 
@@ -220,9 +220,9 @@ class StatefulAgentWorkflow @Inject constructor(
 
     private suspend fun getEffectiveProvider(sessionId: String?): AIProvider {
         val config = resolveProviderConfig(sessionId)
-            ?: throw IllegalStateException("尚未配置 AI 供应商，请到设置中添加并选择一个")
-        if (!config.hasUsableApiKey) throw IllegalStateException("「${config.name}」未填写 API Key")
-        if (config.effectiveModel.isBlank()) throw IllegalStateException("「${config.name}」未选择模型")
+            ?: throw IllegalStateException("No AI provider configured yet; add and select one in Settings")
+        if (!config.hasUsableApiKey) throw IllegalStateException("'${config.name}' has no API key set")
+        if (config.effectiveModel.isBlank()) throw IllegalStateException("'${config.name}' has no model selected")
         return createStandaloneProvider(config, sessionId)
     }
 
@@ -258,9 +258,9 @@ class StatefulAgentWorkflow @Inject constructor(
 
     override suspend fun compactSession(sessionId: String, onEvent: suspend (AgentEvent) -> Unit): Boolean {
         val config = resolveProviderConfig(sessionId)
-            ?: throw IllegalStateException("尚未配置 AI 供应商，请到设置中添加并选择一个")
-        if (!config.hasUsableApiKey) throw IllegalStateException("「${config.name}」未填写 API Key")
-        if (config.effectiveModel.isBlank()) throw IllegalStateException("「${config.name}」未选择模型")
+            ?: throw IllegalStateException("No AI provider configured yet; add and select one in Settings")
+        if (!config.hasUsableApiKey) throw IllegalStateException("'${config.name}' has no API key set")
+        if (config.effectiveModel.isBlank()) throw IllegalStateException("'${config.name}' has no model selected")
         val provider = createStandaloneProvider(config, sessionId)
         val history = messagePersistenceUseCase.buildHistory(sessionId, "__manual_compress__")
         if (history.size <= 2) return false
@@ -293,7 +293,7 @@ class StatefulAgentWorkflow @Inject constructor(
         // 多 Key 模式下由轮换器决定本次用哪个 Key（会话内粘住，Key 不可用时切下一个并重发）。
         val activeKeys = config.effectiveApiKeys
         provider.apiKey = keyRotator.activeKey(config, sessionId)
-            ?: throw IllegalStateException("「${config.name}」的 Key 均在冷却中，请稍后重试")
+            ?: throw IllegalStateException("All keys for '${config.name}' are cooling down; please retry later")
         // 只有真正的多 Key 才需要自动切换：单 Key 冷却后没有可切换目标，只会把用户锁死一段时间。
         val keySwitcher: (suspend (Throwable, String, Set<String>) -> KeySwitchOutcome?)? =
             if (activeKeys.size > 1) {
@@ -304,7 +304,7 @@ class StatefulAgentWorkflow @Inject constructor(
                         val switched = keyRotator.reportFailure(config.id, sessionId, failedKey, triedKeys)
                         if (switched == null) {
                             throw AllKeysFailedException(
-                                "「${config.name}」的 ${activeKeys.size} 个 Key 均失败：${error.message ?: error.javaClass.simpleName}",
+                                "All ${activeKeys.size} keys for '${config.name}' failed: ${error.message ?: error.javaClass.simpleName}",
                                 error
                             )
                         }
@@ -420,7 +420,7 @@ class StatefulAgentWorkflow @Inject constructor(
                                 id = call.id,
                                 toolName = call.name,
                                 result = ToolResult.Error(
-                                    "用户拒绝了本轮工具调用，该调用未执行。",
+                                    "The user declined this round of tool calls; this call was not executed.",
                                     USER_REJECTED_CODE
                                 ).toTransportString()
                             )
@@ -761,7 +761,7 @@ class StatefulAgentWorkflow @Inject constructor(
                             }
                             // 多 Key 的自动切换与重发已在 adapter 内完成（见 AIProvider.keySwitcher）；
                             // 走到这里说明不是 Key 问题、或候选 Key 已全部失败，直接上报原始错误。
-                            val errorText = "LLM 调用失败: ${e.message}"
+                            val errorText = "LLM call failed: ${e.message}"
                             actionQueue.addLast(AgentAction.LlmError(errorText))
                             callError = e.message ?: e.javaClass.simpleName
                         } finally {
@@ -823,7 +823,7 @@ class StatefulAgentWorkflow @Inject constructor(
                                     id = toolCall.id,
                                     toolName = toolCall.name,
                                     result = ToolResult.Error(
-                                        "用户拒绝了本轮工具调用，该调用未执行。",
+                                        "The user declined this round of tool calls; this call was not executed.",
                                         USER_REJECTED_CODE
                                     ).toTransportString(),
                                     isError = true
@@ -866,7 +866,7 @@ class StatefulAgentWorkflow @Inject constructor(
                         val batchResults = mutableListOf<ToolBatchResult>()
                         toolCalls.forEachIndexed { index, toolCall ->
                             val runResult = runResults.getOrNull(index)
-                                ?: ToolRunResult(ToolResult.Error("工具未执行", "TOOL_NOT_EXECUTED").toTransportString(), true)
+                                ?: ToolRunResult(ToolResult.Error("Tool not executed", "TOOL_NOT_EXECUTED").toTransportString(), true)
                             var rawResult = runResult.raw
                             var isError = runResult.isError
                             val (newCtx, updated) = checkAndUpdateMode(toolCall, isError, currentContext)
@@ -888,7 +888,7 @@ class StatefulAgentWorkflow @Inject constructor(
                                         // 用户选择继续反馈，回滚到 PLAN 模式，修正工具结果让 AI 知道切换被取消并等待用户反馈
                                         currentContext = currentContext.copy(mode = AgentMode.PLAN)
                                         rawResult = ToolResult.Error(
-                                            "用户希望补充说明或调整方案，当前保持在 PLAN 模式。请等待用户输入具体的补充或修改意见，不要自行臆测修改，待用户明确反馈后再继续。",
+                                            "The user wants to add notes or adjust the plan; stay in PLAN mode for now. Wait for the user's specific additions or changes; do not guess at revisions, and continue only after the user gives clear feedback.",
                                             "MODE_SWITCH_REJECTED"
                                         ).toTransportString()
                                         isError = true
@@ -983,7 +983,7 @@ class StatefulAgentWorkflow @Inject constructor(
             when (msg) {
                 is AgentMessage.UserMessage ->
                     if (msg.images.isEmpty()) msg
-                    else msg.copy(images = emptyList(), content = msg.content.ifBlank { "（图片已省略：当前模型不支持图片输入）" })
+                    else msg.copy(images = emptyList(), content = msg.content.ifBlank { "(image omitted: the current model does not support image input)" })
                 is AgentMessage.ToolResultMessage ->
                     if (msg.images.isEmpty()) msg else msg.copy(images = emptyList())
                 is AgentMessage.AssistantMessage -> msg
@@ -1162,7 +1162,7 @@ class StatefulAgentWorkflow @Inject constructor(
             ?.substringAfter(':')?.trim()?.takeIf { it.isNotEmpty() }
         return when (verdict) {
             "ALLOW" -> AiReviewResult.Allow
-            "DENY" -> AiReviewResult.Escalate(reason ?: "AI 审查器判定该命令存在风险")
+            "DENY" -> AiReviewResult.Escalate(reason ?: "The AI reviewer judged this command to be risky")
             else -> AiReviewResult.Escalate(reason)
         }
     }
@@ -1310,11 +1310,11 @@ class StatefulAgentWorkflow @Inject constructor(
         AgentMode.PLAN -> promptProvider.resolvePrompt(MODE_REMINDER_PLAN_FILE)
             .replace(LEADING_COMMENT, "")
             .trim()
-            .let { "【模式提醒】$it" }
+            .let { "[Mode reminder] $it" }
         AgentMode.ASK -> promptProvider.resolvePrompt(MODE_REMINDER_ASK_FILE)
             .replace(LEADING_COMMENT, "")
             .trim()
-            .let { "【模式提醒】$it" }
+            .let { "[Mode reminder] $it" }
         AgentMode.BUILD -> null
     }
 
@@ -1338,8 +1338,8 @@ class StatefulAgentWorkflow @Inject constructor(
         AgentMode.PLAN -> "\n\n" + promptProvider.resolvePrompt(MODE_REMINDER_PLAN_FILE)
             .replace(LEADING_COMMENT, "")
             .trim()
-        AgentMode.BUILD -> "\n\n【模式切换】计划已获用户批准，你已切换到 BUILD（构建）模式，可以开始执行计划。"
-        AgentMode.ASK -> "\n\n【模式切换】计划已获用户批准，你已恢复到 ASK（提问）模式：保持只读，仅围绕用户后续提问作答，不要实施变更。"
+        AgentMode.BUILD -> "\n\n[Mode switch] The plan has been approved by the user. You are now in BUILD mode and can start executing the plan."
+        AgentMode.ASK -> "\n\n[Mode switch] The plan has been approved by the user. You are back in ASK mode: stay read-only, only answer the user's follow-up questions, and do not make changes."
     }
 
     /** 用户在外部（界面）手动切换模式时拼进工具结果的提示；与 AI 自切的 [buildModeSwitchNotice] 区分，避免误称「计划已获批准」。 */
@@ -1347,8 +1347,8 @@ class StatefulAgentWorkflow @Inject constructor(
         AgentMode.PLAN -> "\n\n" + promptProvider.resolvePrompt(MODE_REMINDER_PLAN_FILE)
             .replace(LEADING_COMMENT, "")
             .trim()
-        AgentMode.BUILD -> "\n\n【模式切换】用户已将模式切换为 BUILD（构建）模式，可以正常执行写操作。"
-        AgentMode.ASK -> "\n\n【模式切换】用户已将模式切换为 ASK（提问）模式：保持只读，仅作答与探索，不要实施变更。"
+        AgentMode.BUILD -> "\n\n[Mode switch] The user switched the mode to BUILD; you may perform write operations normally."
+        AgentMode.ASK -> "\n\n[Mode switch] The user switched the mode to ASK: stay read-only, only answer and explore, and do not make changes."
     }
 
     private suspend fun requestPermissionIfNeeded(
@@ -1374,7 +1374,7 @@ class StatefulAgentWorkflow @Inject constructor(
 
         val eval = policyEngine.evaluate(tool, tool.name, arguments, mode)
         if (eval.verdict == ToolPermissionPolicyEngine.Verdict.DENY) {
-            val reason = eval.denyReason ?: "该工具被项目安全规则策略禁止执行"
+            val reason = eval.denyReason ?: "This tool is forbidden by the project's safety rule policy"
             val code = if (mode == AgentMode.PLAN) "PLAN_MODE_REJECTED" else "SYSTEM_DENIED"
             return PermissionCheckResult(false, reason, code)
         }
@@ -1408,7 +1408,7 @@ class StatefulAgentWorkflow @Inject constructor(
                     reviewNote = aiReviewNote
                 )
                 when (permissionManager.awaitApproval(request)) {
-                    PermissionChoice.REJECT -> PermissionCheckResult(false, "用户拒绝执行该工具", "USER_REJECTED")
+                    PermissionChoice.REJECT -> PermissionCheckResult(false, "The user declined to execute this tool", "USER_REJECTED")
                     PermissionChoice.ONCE -> PermissionCheckResult(true)
                     PermissionChoice.ALWAYS -> {
                         if (eval.rememberablePatterns.isNotEmpty()) {

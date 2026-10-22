@@ -154,16 +154,16 @@ object HighRiskRulePresets {
 
     const val VERSION = 2
 
-    private const val CAT_DELETE = "删除与擦除"
-    private const val CAT_DISK = "磁盘与分区"
-    private const val CAT_SYSTEM = "系统控制"
-    private const val CAT_PACKAGE = "包与权限管理"
-    private const val CAT_PROCESS = "进程管理"
-    private const val CAT_NETWORK = "网络与防火墙"
-    private const val CAT_EXFIL = "下载执行与数据外发"
-    private const val CAT_GIT = "Git 破坏性操作"
-    private const val CAT_PUBLISH = "发布与包管理变更"
-    private const val CAT_ACCOUNT = "账户与定时任务"
+    private const val CAT_DELETE = "Deletion & erasure"
+    private const val CAT_DISK = "Disk & partitions"
+    private const val CAT_SYSTEM = "System control"
+    private const val CAT_PACKAGE = "Packages & permission management"
+    private const val CAT_PROCESS = "Process management"
+    private const val CAT_NETWORK = "Network & firewall"
+    private const val CAT_EXFIL = "Download, execution & data exfiltration"
+    private const val CAT_GIT = "Destructive Git operations"
+    private const val CAT_PUBLISH = "Publishing & package changes"
+    private const val CAT_ACCOUNT = "Accounts & scheduled tasks"
 
     private fun p(id: String, pattern: String, category: String, desc: String) =
         HighRiskRule(id = "preset.$id", pattern = pattern, matchType = HighRiskMatchType.PREFIX, category = category, description = desc)
@@ -190,86 +190,86 @@ object HighRiskRulePresets {
     val UPDATES: Map<String, HighRiskRule> = mapOf(
         // v1 的 "rm" 拦所有删除；v2 只拦递归删除（-r/-R/--recursive 任一递归形态），
         // 普通 `rm 文件` 与 `rm -f 文件` 交回单次放行。
-        "preset.rm" to r("rm", "^rm\\s+(-[a-zA-Z]*[rR][a-zA-Z]*\\s|--recursive(\\s|$))", CAT_DELETE, "递归删除目录（rm -r/-R/--recursive）")
+        "preset.rm" to r("rm", "^rm\\s+(-[a-zA-Z]*[rR][a-zA-Z]*\\s|--recursive(\\s|$))", CAT_DELETE, "Recursive directory deletion (rm -r/-R/--recursive)")
     )
 
     val RULES: List<HighRiskRule> = listOf(
         // ── 删除与擦除 ──
-        r("rm", "^rm\\s+(-[a-zA-Z]*[rR][a-zA-Z]*\\s|--recursive(\\s|$))", CAT_DELETE, "递归删除目录（rm -r/-R/--recursive）"),
-        p("shred", "shred", CAT_DELETE, "安全擦除文件，不可恢复"),
+        r("rm", "^rm\\s+(-[a-zA-Z]*[rR][a-zA-Z]*\\s|--recursive(\\s|$))", CAT_DELETE, "Recursive directory deletion (rm -r/-R/--recursive)"),
+        p("shred", "shred", CAT_DELETE, "Securely erases files; unrecoverable"),
 
         // ── 磁盘与分区 ──
-        p("dd", "dd", CAT_DISK, "直接读写磁盘/设备镜像，可毁数据"),
-        r("mkfs", "mkfs(\\.[a-z0-9]+)?(\\s|$)", CAT_DISK, "格式化文件系统"),
-        p("mkswap", "mkswap", CAT_DISK, "创建交换分区"),
-        p("wipefs", "wipefs", CAT_DISK, "擦除设备文件系统签名"),
-        p("fdisk", "fdisk", CAT_DISK, "修改磁盘分区表"),
-        p("sfdisk", "sfdisk", CAT_DISK, "脚本化修改磁盘分区表"),
-        p("parted", "parted", CAT_DISK, "修改磁盘分区"),
-        p("blkdiscard", "blkdiscard", CAT_DISK, "丢弃块设备全部数据"),
-        r("dev-write", ">\\s*/dev/(sd|mmcblk|nvme|block)", CAT_DISK, "重定向直写块设备"),
+        p("dd", "dd", CAT_DISK, "Reads/writes disk/device images directly; can destroy data"),
+        r("mkfs", "mkfs(\\.[a-z0-9]+)?(\\s|$)", CAT_DISK, "Formats a filesystem"),
+        p("mkswap", "mkswap", CAT_DISK, "Creates a swap partition"),
+        p("wipefs", "wipefs", CAT_DISK, "Erases device filesystem signatures"),
+        p("fdisk", "fdisk", CAT_DISK, "Modifies the disk partition table"),
+        p("sfdisk", "sfdisk", CAT_DISK, "Scripted modification of the disk partition table"),
+        p("parted", "parted", CAT_DISK, "Modifies disk partitions"),
+        p("blkdiscard", "blkdiscard", CAT_DISK, "Discards all data on a block device"),
+        r("dev-write", ">\\s*/dev/(sd|mmcblk|nvme|block)", CAT_DISK, "Redirect writes directly to a block device"),
 
         // ── 系统控制 ──
-        p("reboot", "reboot", CAT_SYSTEM, "重启设备"),
-        p("shutdown", "shutdown", CAT_SYSTEM, "关机"),
-        p("poweroff", "poweroff", CAT_SYSTEM, "关机断电"),
-        p("halt", "halt", CAT_SYSTEM, "停机"),
-        p("setenforce", "setenforce", CAT_SYSTEM, "关闭 SELinux 强制模式，削弱系统安全"),
-        p("mount", "mount", CAT_SYSTEM, "挂载文件系统"),
-        p("umount", "umount", CAT_SYSTEM, "卸载文件系统"),
-        p("setprop", "setprop", CAT_SYSTEM, "修改 Android 系统属性"),
-        p("svc", "svc", CAT_SYSTEM, "开关 WiFi/移动数据/电源"),
-        p("settings-put", "settings put", CAT_SYSTEM, "修改系统全局设置"),
-        p("device-config-put", "device_config put", CAT_SYSTEM, "修改设备配置参数"),
+        p("reboot", "reboot", CAT_SYSTEM, "Reboots the device"),
+        p("shutdown", "shutdown", CAT_SYSTEM, "Shuts down"),
+        p("poweroff", "poweroff", CAT_SYSTEM, "Powers off"),
+        p("halt", "halt", CAT_SYSTEM, "Halts the system"),
+        p("setenforce", "setenforce", CAT_SYSTEM, "Disables SELinux enforcing mode, weakening system security"),
+        p("mount", "mount", CAT_SYSTEM, "Mounts a filesystem"),
+        p("umount", "umount", CAT_SYSTEM, "Unmounts a filesystem"),
+        p("setprop", "setprop", CAT_SYSTEM, "Modifies Android system properties"),
+        p("svc", "svc", CAT_SYSTEM, "Toggles WiFi/mobile data/power"),
+        p("settings-put", "settings put", CAT_SYSTEM, "Modifies global system settings"),
+        p("device-config-put", "device_config put", CAT_SYSTEM, "Modifies device configuration parameters"),
 
         // ── 包与权限管理 ──
-        p("pm-uninstall", "pm uninstall", CAT_PACKAGE, "卸载应用"),
-        p("pm-clear", "pm clear", CAT_PACKAGE, "清空应用数据"),
-        p("pm-disable", "pm disable", CAT_PACKAGE, "禁用应用"),
-        p("pm-grant", "pm grant", CAT_PACKAGE, "授予应用权限"),
-        p("pm-revoke", "pm revoke", CAT_PACKAGE, "撤销应用权限"),
-        p("appops-set", "appops set", CAT_PACKAGE, "修改应用 ops 权限"),
-        r("chmod-recursive", "chmod\\s+(-[a-zA-Z0-9]*R|--recursive)", CAT_PACKAGE, "递归修改文件权限"),
-        r("chown-recursive", "chown\\s+(-[a-zA-Z0-9]*R|--recursive)", CAT_PACKAGE, "递归修改文件所有者"),
+        p("pm-uninstall", "pm uninstall", CAT_PACKAGE, "Uninstalls an app"),
+        p("pm-clear", "pm clear", CAT_PACKAGE, "Clears app data"),
+        p("pm-disable", "pm disable", CAT_PACKAGE, "Disables an app"),
+        p("pm-grant", "pm grant", CAT_PACKAGE, "Grants app permissions"),
+        p("pm-revoke", "pm revoke", CAT_PACKAGE, "Revokes app permissions"),
+        p("appops-set", "appops set", CAT_PACKAGE, "Modifies app ops permissions"),
+        r("chmod-recursive", "chmod\\s+(-[a-zA-Z0-9]*R|--recursive)", CAT_PACKAGE, "Recursively changes file permissions"),
+        r("chown-recursive", "chown\\s+(-[a-zA-Z0-9]*R|--recursive)", CAT_PACKAGE, "Recursively changes file ownership"),
 
         // ── 进程管理 ──
-        r("kill-9", "kill\\s+(-[a-zA-Z]*9|-SIGKILL)\\b", CAT_PROCESS, "强制杀死进程（SIGKILL）"),
+        r("kill-9", "kill\\s+(-[a-zA-Z]*9|-SIGKILL)\\b", CAT_PROCESS, "Force-kills a process (SIGKILL)"),
 
         // ── 网络与防火墙 ──
-        p("iptables", "iptables", CAT_NETWORK, "修改防火墙规则"),
-        p("ip6tables", "ip6tables", CAT_NETWORK, "修改 IPv6 防火墙规则"),
-        p("nft", "nft", CAT_NETWORK, "修改 nftables 防火墙"),
-        p("tc", "tc", CAT_NETWORK, "修改流量控制规则"),
+        p("iptables", "iptables", CAT_NETWORK, "Modifies firewall rules"),
+        p("ip6tables", "ip6tables", CAT_NETWORK, "Modifies IPv6 firewall rules"),
+        p("nft", "nft", CAT_NETWORK, "Modifies the nftables firewall"),
+        p("tc", "tc", CAT_NETWORK, "Modifies traffic control rules"),
 
         // ── 下载执行与数据外发 ──
-        r("pipe-to-shell", "\\|\\s*(sudo\\s+)?(ba|z|fi|da)?sh\\b", CAT_EXFIL, "下载内容直接管道进 shell 执行（curl/wget … | sh）"),
-        p("ssh", "ssh", CAT_EXFIL, "连接外部主机，可外传数据"),
-        p("scp", "scp", CAT_EXFIL, "向外部主机复制文件"),
+        r("pipe-to-shell", "\\|\\s*(sudo\\s+)?(ba|z|fi|da)?sh\\b", CAT_EXFIL, "Pipes downloaded content directly into a shell (curl/wget … | sh)"),
+        p("ssh", "ssh", CAT_EXFIL, "Connects to an external host; can exfiltrate data"),
+        p("scp", "scp", CAT_EXFIL, "Copies files to an external host"),
 
         // ── Git 破坏性操作 ──
-        r("git-push-force", "git\\s+push\\s+.*(-f\\b|--force)", CAT_GIT, "强制推送，覆盖远端提交历史"),
-        p("git-reset-hard", "git reset --hard", CAT_GIT, "硬重置，丢弃工作区与暂存区全部修改"),
-        p("git-branch-force-delete", "git branch -D", CAT_GIT, "强制删除分支（含未合并提交）"),
-        p("git-filter-branch", "git filter-branch", CAT_GIT, "重写整个提交历史"),
+        r("git-push-force", "git\\s+push\\s+.*(-f\\b|--force)", CAT_GIT, "Force push; overwrites remote commit history"),
+        p("git-reset-hard", "git reset --hard", CAT_GIT, "Hard reset; discards all working-tree and staged changes"),
+        p("git-branch-force-delete", "git branch -D", CAT_GIT, "Force-deletes a branch (including unmerged commits)"),
+        p("git-filter-branch", "git filter-branch", CAT_GIT, "Rewrites the entire commit history"),
 
         // ── 发布与包管理变更 ──
-        p("npm-publish", "npm publish", CAT_PUBLISH, "公开发布 npm 包，不可撤回"),
-        p("yarn-publish", "yarn publish", CAT_PUBLISH, "公开发布 npm 包，不可撤回"),
-        p("pnpm-publish", "pnpm publish", CAT_PUBLISH, "公开发布 npm 包，不可撤回"),
-        p("cargo-publish", "cargo publish", CAT_PUBLISH, "公开发布 crate，不可撤回"),
-        p("gem-push", "gem push", CAT_PUBLISH, "公开发布 gem"),
-        p("twine-upload", "twine upload", CAT_PUBLISH, "上传发布 Python 包"),
-        p("docker-push", "docker push", CAT_PUBLISH, "推送镜像到远端仓库"),
-        r("apt-remove", "apt(-get)?\\s+(remove|purge|autoremove)", CAT_PUBLISH, "卸载系统软件包"),
-        p("apk-del", "apk del", CAT_PUBLISH, "卸载软件包"),
-        r("dnf-remove", "(dnf|yum)\\s+(remove|erase|autoremove)", CAT_PUBLISH, "卸载系统软件包"),
-        p("pacman-remove", "pacman -R", CAT_PUBLISH, "卸载软件包"),
+        p("npm-publish", "npm publish", CAT_PUBLISH, "Publishes an npm package publicly; cannot be undone"),
+        p("yarn-publish", "yarn publish", CAT_PUBLISH, "Publishes an npm package publicly; cannot be undone"),
+        p("pnpm-publish", "pnpm publish", CAT_PUBLISH, "Publishes an npm package publicly; cannot be undone"),
+        p("cargo-publish", "cargo publish", CAT_PUBLISH, "Publishes a crate publicly; cannot be undone"),
+        p("gem-push", "gem push", CAT_PUBLISH, "Publishes a gem publicly"),
+        p("twine-upload", "twine upload", CAT_PUBLISH, "Uploads and publishes a Python package"),
+        p("docker-push", "docker push", CAT_PUBLISH, "Pushes an image to a remote registry"),
+        r("apt-remove", "apt(-get)?\\s+(remove|purge|autoremove)", CAT_PUBLISH, "Uninstalls a system package"),
+        p("apk-del", "apk del", CAT_PUBLISH, "Uninstalls a package"),
+        r("dnf-remove", "(dnf|yum)\\s+(remove|erase|autoremove)", CAT_PUBLISH, "Uninstalls a system package"),
+        p("pacman-remove", "pacman -R", CAT_PUBLISH, "Uninstalls a package"),
 
         // ── 账户与定时任务 ──
-        p("crontab", "crontab", CAT_ACCOUNT, "修改定时任务（-r 直接清空）"),
-        p("passwd", "passwd", CAT_ACCOUNT, "修改账户密码"),
-        p("useradd", "useradd", CAT_ACCOUNT, "创建系统账户"),
-        p("userdel", "userdel", CAT_ACCOUNT, "删除系统账户"),
-        p("usermod", "usermod", CAT_ACCOUNT, "修改系统账户")
+        p("crontab", "crontab", CAT_ACCOUNT, "Modifies scheduled tasks (-r clears all directly)"),
+        p("passwd", "passwd", CAT_ACCOUNT, "Changes an account password"),
+        p("useradd", "useradd", CAT_ACCOUNT, "Creates a system account"),
+        p("userdel", "userdel", CAT_ACCOUNT, "Deletes a system account"),
+        p("usermod", "usermod", CAT_ACCOUNT, "Modifies a system account")
     )
 }

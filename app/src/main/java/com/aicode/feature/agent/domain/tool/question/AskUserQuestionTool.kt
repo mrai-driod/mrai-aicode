@@ -40,7 +40,7 @@ class AskUserQuestionTool @Inject constructor(
     override val capabilities = setOf(ToolCapability.USER_INTERACTION)
 
     override val description =
-        "向用户提出结构化选择题并阻塞等待选择，用于需要用户决策的场景。可一次提 1-4 个问题，每题 2-4 个选项（UI 自动追加「其他」）。"
+        "Ask the user structured multiple-choice questions and block waiting for their selection, for scenarios requiring a user decision. Can ask 1-4 questions at once, with 2-4 options per question (the UI automatically appends an 「Other」 option)."
 
     /** 单个选项的 JSON Schema */
     private val optionItemSchema: Map<String, Any> = mapOf(
@@ -48,11 +48,11 @@ class AskUserQuestionTool @Inject constructor(
         "properties" to mapOf(
             "label" to mapOf(
                 "type" to "string",
-                "description" to "选项显示文本（简短 1-5 个词），如「OkHttp（推荐）」。"
+                "description" to "Option display text (short, 1-5 words), e.g. 「OkHttp (recommended)」."
             ),
             "description" to mapOf(
                 "type" to "string",
-                "description" to "选项说明，解释选它意味着什么或有什么利弊。"
+                "description" to "Option description, explaining what choosing it means or its pros and cons."
             )
         ),
         "required" to listOf("label", "description")
@@ -64,21 +64,21 @@ class AskUserQuestionTool @Inject constructor(
         "properties" to mapOf(
             "question" to mapOf(
                 "type" to "string",
-                "description" to "完整的问题文本，应清晰、具体、以问号结尾。"
+                "description" to "The full question text; should be clear, specific, and end with a question mark."
             ),
             "header" to mapOf(
                 "type" to "string",
-                "description" to "短标签（≤12 字符），展示为标签头，如「方案」「库」「工具」。"
+                "description" to "Short label (≤12 characters), shown as a tag header, e.g. 「Plan」「Library」「Tool」."
             ),
             "options" to mapOf(
                 "type" to "array",
-                "description" to "2-4 个预设选项。UI 会自动追加一个「其他」选项供用户自由输入。" +
-                    "如果你有推荐项，放在第一位并在 label 末尾加「（推荐）」。",
+                "description" to "2-4 preset options. The UI automatically appends an 「Other」 option for free-form input." +
+                    "If you have a recommended option, put it first and add 「(recommended)」 at the end of its label.",
                 "items" to optionItemSchema
             ),
             "multiSelect" to mapOf(
                 "type" to "boolean",
-                "description" to "是否允许多选。默认 false（单选）。多选时问题表述应相应调整。"
+                "description" to "Whether to allow multiple selections. Defaults to false (single selection). When allowing multiple selections, phrase the question accordingly."
             )
         ),
         "required" to listOf("question", "header", "options")
@@ -88,7 +88,7 @@ class AskUserQuestionTool @Inject constructor(
         "questions" to ToolParameter(
             name = "questions",
             type = ParameterType.ARRAY,
-            description = "要问用户的问题列表（1-4 个问题）。每个问题包含 question、header、options 和可选的 multiSelect。",
+            description = "List of questions to ask the user (1-4 questions). Each question contains question, header, options, and an optional multiSelect.",
             required = true,
             itemsSchema = questionItemSchema
         )
@@ -97,12 +97,12 @@ class AskUserQuestionTool @Inject constructor(
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         val questionsJson = args["questions"]?.jsonArray
         if (questionsJson == null || questionsJson.isEmpty()) {
-            return ToolResult.Error("缺少必需参数：questions（至少包含一个问题）", "MISSING_QUESTIONS")
+            return ToolResult.Error("Missing required parameter: questions (must contain at least one question)", "MISSING_QUESTIONS")
         }
 
         if (questionsJson.size > MAX_QUESTIONS) {
             return ToolResult.Error(
-                "一次最多提问 $MAX_QUESTIONS 个问题，当前为 ${questionsJson.size} 个",
+                "At most $MAX_QUESTIONS questions can be asked at once; currently ${questionsJson.size}",
                 "TOO_MANY_QUESTIONS"
             )
         }
@@ -114,7 +114,7 @@ class AskUserQuestionTool @Inject constructor(
 
             val questionText = qObj["question"]?.jsonPrimitive?.contentOrNull?.trim()
             if (questionText.isNullOrEmpty()) {
-                return ToolResult.Error("第 ${idx + 1} 个问题缺少 question 字段", "INVALID_QUESTION")
+                return ToolResult.Error("Question ${idx + 1} is missing the question field", "INVALID_QUESTION")
             }
 
             val header = qObj["header"]?.jsonPrimitive?.contentOrNull?.trim() ?: ""
@@ -122,13 +122,13 @@ class AskUserQuestionTool @Inject constructor(
             val optionsJson = qObj["options"]?.jsonArray
             if (optionsJson == null || optionsJson.size < MIN_OPTIONS) {
                 return ToolResult.Error(
-                    "第 ${idx + 1} 个问题至少需要 $MIN_OPTIONS 个选项",
+                    "Question ${idx + 1} needs at least $MIN_OPTIONS options",
                     "TOO_FEW_OPTIONS"
                 )
             }
             if (optionsJson.size > MAX_OPTIONS) {
                 return ToolResult.Error(
-                    "第 ${idx + 1} 个问题最多 $MAX_OPTIONS 个选项，当前 ${optionsJson.size} 个",
+                    "Question ${idx + 1} allows at most $MAX_OPTIONS options; currently ${optionsJson.size}",
                     "TOO_MANY_OPTIONS"
                 )
             }
@@ -143,7 +143,7 @@ class AskUserQuestionTool @Inject constructor(
 
             if (options.size < MIN_OPTIONS) {
                 return ToolResult.Error(
-                    "第 ${idx + 1} 个问题有效选项不足 $MIN_OPTIONS 个",
+                    "Question ${idx + 1} has fewer than $MIN_OPTIONS valid options",
                     "INVALID_OPTIONS"
                 )
             }
@@ -175,7 +175,7 @@ class AskUserQuestionTool @Inject constructor(
         // 将用户回答序列化为文本，喂回给模型
         val resultText = buildString {
             if (answer.answers.isEmpty()) {
-                append("用户未选择预设选项，将补充说明。请根据用户后续补充的内容继续。")
+                append("The user did not select a preset option and will provide additional explanation. Continue based on what the user adds next.")
             } else {
                 for (a in answer.answers) {
                     append("「${a.question}」= ")
@@ -184,12 +184,12 @@ class AskUserQuestionTool @Inject constructor(
                         parts.addAll(a.selected)
                     }
                     if (a.customText != null) {
-                        parts.add("其他：${a.customText}")
+                        parts.add("Other: ${a.customText}")
                     }
                     if (parts.isEmpty()) {
-                        append("（未选择）")
+                        append("(not selected)")
                     } else {
-                        append(parts.joinToString("、"))
+                        append(parts.joinToString(", "))
                     }
                     append("\n")
                 }

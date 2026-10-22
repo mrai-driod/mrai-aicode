@@ -32,9 +32,9 @@ class BrowserTool @Inject constructor(
     }
 
     override val name = "browser"
-    override val description = "控制内置浏览器执行自动化操作，支持多标签与后台运行。所有操作可带 tabId（缺省作用于当前激活标签）。" +
-        "selector 支持 ref= / text= / text*= / role=button[name=xxx] / xpath= / CSS；getBackbone 返回无障碍树（role/name/ref），ref 可直接用作 selector。" +
-        "需查看页面视觉内容时显式调用 action=\"screenshot\"。"
+    override val description = "Control the built-in browser to perform automated operations, with multi-tab support and background running. All operations accept an optional tabId (defaults to the currently active tab)." +
+        "selector supports ref= / text= / text*= / role=button[name=xxx] / xpath= / CSS; getBackbone returns the accessibility tree (role/name/ref), and a ref can be used directly as a selector." +
+        "To view the page's visual content, explicitly call action=\"screenshot\"."
     override val capabilities = setOf(ToolCapability.NETWORK_READ, ToolCapability.NETWORK_WRITE)
 
     private val actionEnum = listOf(
@@ -47,28 +47,28 @@ class BrowserTool @Inject constructor(
     private val actionSchema: Map<String, Any> = mapOf(
         "type" to "string",
         "enum" to actionEnum,
-        "description" to "操作类型。navigate=导航URL(支持 http(s)/file:// 与容器路径，非网址输入按搜索关键词处理); evaluate=执行JS(支持 Promise); click/fill/hover/press=交互(兼容 React); select=下拉选择; getText/getHtml=提取内容; getBackbone=无障碍树(role/name/ref); screenshot=截图; console=控制台日志; wait=等待条件; scroll=滚动; dialog=处理confirm/prompt; back/forward/reload=导航控制; newTab/closeTab/selectTab/listTabs=标签页管理"
+        "description" to "Operation type. navigate=navigate to a URL (supports http(s)/file:// and container paths; non-URL input is treated as search keywords); evaluate=execute JS (supports Promise); click/fill/hover/press=interaction (React-compatible); select=dropdown selection; getText/getHtml=extract content; getBackbone=accessibility tree (role/name/ref); screenshot=take a screenshot; console=console logs; wait=wait for a condition; scroll=scroll; dialog=handle confirm/prompt; back/forward/reload=navigation control; newTab/closeTab/selectTab/listTabs=tab management"
     )
 
     override val parameters = mapOf(
-        "action" to ToolParameter("action", ParameterType.STRING, "操作类型，见 enum列表", true),
-        "tabId" to ToolParameter("tabId", ParameterType.STRING, "目标标签页 ID（如 tab-1），缺省时作用于当前激活的标签页", false),
-        "path" to ToolParameter("path", ParameterType.STRING, "screenshot: 截图保存路径（可选，缺省默认保存在 ~/workspace/.aicode/browser-screenshots/）", false),
-        "url" to ToolParameter("url", ParameterType.STRING, "navigate/newTab: URL。支持 http(s)；本地文件支持 file:// 或容器路径（~/workspace/…、/etc/…）；无协议头时优先 https，失败回退 http；不像网址的输入则用内置搜索引擎（Bing）搜索", false),
-        "script" to ToolParameter("script", ParameterType.STRING, "evaluate: JS 代码（支持 Promise/async）", false),
+        "action" to ToolParameter("action", ParameterType.STRING, "Operation type, see the enum list", true),
+        "tabId" to ToolParameter("tabId", ParameterType.STRING, "Target tab ID (e.g. tab-1); defaults to the currently active tab", false),
+        "path" to ToolParameter("path", ParameterType.STRING, "screenshot: path to save the screenshot (optional; defaults to ~/workspace/.aicode/browser-screenshots/)", false),
+        "url" to ToolParameter("url", ParameterType.STRING, "navigate/newTab: URL. Supports http(s); local files support file:// or container paths (~/workspace/…, /etc/…); without a scheme, https is tried first with fallback to http on failure; input that does not look like a URL is searched with the built-in search engine (Bing)", false),
+        "script" to ToolParameter("script", ParameterType.STRING, "evaluate: JS code (supports Promise/async)", false),
         "selector" to ToolParameter("selector", ParameterType.STRING,
-            "click/fill/hover/getText/getHtml/scroll/wait: 选择器。支持 ref=e22（getBackbone 返回的引用）/ text=登录 / text*=登录 / role=button[name=\"登录\"] / xpath=//a / CSS", false),
-        "value" to ToolParameter("value", ParameterType.STRING, "fill/select: 要填入的值或要选中的 option（value 或可见文本）", false),
-        "accept" to ToolParameter("accept", ParameterType.BOOLEAN, "dialog: 是否接受对话框（true=确定，false=取消），默认 true", false),
-        "text" to ToolParameter("text", ParameterType.STRING, "dialog: prompt 输入内容（accept=true 时生效）", false),
-        "level" to ToolParameter("level", ParameterType.STRING, "console: 日志级别过滤（log/warning/error/debug）", false),
-        "clear" to ToolParameter("clear", ParameterType.BOOLEAN, "console: 取完后是否清空日志，默认 false", false),
+            "click/fill/hover/getText/getHtml/scroll/wait: selector. Supports ref=e22 (a reference returned by getBackbone) / text=Login / text*=Login / role=button[name=\"Login\"] / xpath=//a / CSS", false),
+        "value" to ToolParameter("value", ParameterType.STRING, "fill/select: the value to fill in or the option to select (value or visible text)", false),
+        "accept" to ToolParameter("accept", ParameterType.BOOLEAN, "dialog: whether to accept the dialog (true=OK, false=Cancel), default true", false),
+        "text" to ToolParameter("text", ParameterType.STRING, "dialog: prompt input text (applies when accept=true)", false),
+        "level" to ToolParameter("level", ParameterType.STRING, "console: log level filter (log/warning/error/debug)", false),
+        "clear" to ToolParameter("clear", ParameterType.BOOLEAN, "console: whether to clear the logs after fetching, default false", false),
         "key" to ToolParameter("key", ParameterType.STRING,
-            "press: 键名（Enter/Escape/Tab/ArrowUp/ArrowDown/ArrowLeft/ArrowRight/Backspace/Delete/空格/普通字符）", false),
+            "press: key name (Enter/Escape/Tab/ArrowUp/ArrowDown/ArrowLeft/ArrowRight/Backspace/Delete/space/ordinary characters)", false),
         "condition" to ToolParameter("condition", ParameterType.STRING,
-            "wait: 等待条件。text=登录(精确匹配) / text*=登录(包含匹配) / selector=#result(CSS存在) / domStable(DOM稳定)", false),
-        "timeout" to ToolParameter("timeout", ParameterType.INTEGER, "wait: 超时毫秒，默认 10000", false),
-        "maxDepth" to ToolParameter("maxDepth", ParameterType.INTEGER, "getBackbone: 无障碍树最大深度，默认 15", false)
+            "wait: wait condition. text=Login (exact match) / text*=Login (contains match) / selector=#result (CSS exists) / domStable (DOM stable)", false),
+        "timeout" to ToolParameter("timeout", ParameterType.INTEGER, "wait: timeout in milliseconds, default 10000", false),
+        "maxDepth" to ToolParameter("maxDepth", ParameterType.INTEGER, "getBackbone: maximum depth of the accessibility tree, default 15", false)
     )
 
     override fun toJsonSchema(): Map<String, Any> {
@@ -98,21 +98,21 @@ class BrowserTool @Inject constructor(
 
     override suspend fun execute(args: Map<String, JsonElement>): ToolResult {
         val action = args["action"]?.jsonPrimitive?.contentOrNull?.trim()
-            ?: return ToolResult.Error("缺少必需参数：action", "MISSING_ACTION")
+            ?: return ToolResult.Error("Missing required parameter: action", "MISSING_ACTION")
         val tabId = args["tabId"]?.jsonPrimitive?.contentOrNull?.trim()
 
         return try {
             executeAction(action, tabId, args)
         } catch (e: IllegalStateException) {
             FileLogger.e(TAG, "浏览器操作失败: $action", e)
-            ToolResult.Error(e.message ?: "浏览器未初始化", "BROWSER_NOT_READY")
+            ToolResult.Error(e.message ?: "Browser not initialized", "BROWSER_NOT_READY")
         } catch (e: IllegalArgumentException) {
-            ToolResult.Error(e.message ?: "参数错误", "INVALID_ARGUMENT")
+            ToolResult.Error(e.message ?: "Invalid parameter", "INVALID_ARGUMENT")
         } catch (e: TimeoutCancellationException) {
-            ToolResult.Error("操作超时：$action", "TIMEOUT")
+            ToolResult.Error("Operation timed out: $action", "TIMEOUT")
         } catch (e: Exception) {
             FileLogger.e(TAG, "浏览器操作异常: $action", e)
-            ToolResult.Error("操作失败：${e.message}", "BROWSER_ERROR")
+            ToolResult.Error("Operation failed: ${e.message}", "BROWSER_ERROR")
         }
     }
 
@@ -144,7 +144,7 @@ class BrowserTool @Inject constructor(
 
             "selectTab" -> {
                 val targetTabId = tabId
-                    ?: return ToolResult.Error("selectTab 缺少必需参数：tabId", "MISSING_TAB_ID")
+                    ?: return ToolResult.Error("selectTab missing required parameter: tabId", "MISSING_TAB_ID")
                 FileLogger.i(TAG, "selectTab: targetTabId=$targetTabId")
                 val selected = browserManager.selectTab(targetTabId)
                 buildOk(action, mapOf(
@@ -174,7 +174,7 @@ class BrowserTool @Inject constructor(
 
             "navigate" -> {
                 val url = args["url"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("navigate 缺少必需参数：url", "MISSING_URL")
+                    ?: return ToolResult.Error("navigate missing required parameter: url", "MISSING_URL")
                 FileLogger.i(TAG, "navigate: $url (tabId=$tabId)")
                 val finalUrl = browserManager.navigate(url, tabId)
                 val targetTabId = tabId ?: browserManager.getActiveTabId()
@@ -187,7 +187,7 @@ class BrowserTool @Inject constructor(
 
             "evaluate" -> {
                 val script = args["script"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("evaluate 缺少必需参数：script", "MISSING_SCRIPT")
+                    ?: return ToolResult.Error("evaluate missing required parameter: script", "MISSING_SCRIPT")
                 FileLogger.i(TAG, "evaluate: ${script.take(100)} (tabId=$tabId)")
                 val result = browserManager.evaluateJavaScript(script, tabId)
                 val value = browserManager.parseEvalResult(result)
@@ -196,7 +196,7 @@ class BrowserTool @Inject constructor(
 
             "click" -> {
                 val selector = args["selector"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("click 缺少必需参数：selector", "MISSING_SELECTOR")
+                    ?: return ToolResult.Error("click missing required parameter: selector", "MISSING_SELECTOR")
                 FileLogger.i(TAG, "click: $selector (tabId=$tabId)")
                 val json = browserManager.clickElement(selector, tabId)
                 buildFromJson(action, json, tabId)
@@ -204,9 +204,9 @@ class BrowserTool @Inject constructor(
 
             "fill" -> {
                 val selector = args["selector"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("fill 缺少必需参数：selector", "MISSING_SELECTOR")
+                    ?: return ToolResult.Error("fill missing required parameter: selector", "MISSING_SELECTOR")
                 val value = args["value"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("fill 缺少必需参数：value", "MISSING_VALUE")
+                    ?: return ToolResult.Error("fill missing required parameter: value", "MISSING_VALUE")
                 FileLogger.i(TAG, "fill: $selector (tabId=$tabId)")
                 val json = browserManager.fillElement(selector, value, tabId)
                 buildFromJson(action, json, tabId)
@@ -214,7 +214,7 @@ class BrowserTool @Inject constructor(
 
             "hover" -> {
                 val selector = args["selector"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("hover 缺少必需参数：selector", "MISSING_SELECTOR")
+                    ?: return ToolResult.Error("hover missing required parameter: selector", "MISSING_SELECTOR")
                 FileLogger.i(TAG, "hover: $selector (tabId=$tabId)")
                 val json = browserManager.hoverElement(selector, tabId)
                 buildFromJson(action, json, tabId)
@@ -222,7 +222,7 @@ class BrowserTool @Inject constructor(
 
             "press" -> {
                 val key = args["key"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("press 缺少必需参数：key", "MISSING_KEY")
+                    ?: return ToolResult.Error("press missing required parameter: key", "MISSING_KEY")
                 FileLogger.i(TAG, "press: $key (tabId=$tabId)")
                 browserManager.pressKey(key, tabId)
                 buildOk(action, mapOf("key" to JsonPrimitive(key)), tabId = tabId)
@@ -232,7 +232,7 @@ class BrowserTool @Inject constructor(
                 val selector = args["selector"]?.jsonPrimitive?.contentOrNull
                 val text = browserManager.getText(selector, tabId)
                 val truncated = text.take(50_000)
-                val resultText = if (text.length > 50_000) "$truncated\n\n[内容超长，已截断]" else truncated
+                val resultText = if (text.length > 50_000) "$truncated\n\n[Content too long, truncated]" else truncated
                 buildOk(action, mapOf(
                     "text" to JsonPrimitive(resultText),
                     "selector" to JsonPrimitive(selector ?: "body")
@@ -282,13 +282,13 @@ class BrowserTool @Inject constructor(
                     ), tabId = tabId)
                     ToolResult.Success(data, images = listOf(image.copy(path = savePath)))
                 } else {
-                    buildError(action, "截图失败：浏览器尺寸为 0 或渲染异常。", "SCREENSHOT_FAILED", tabId = tabId)
+                    buildError(action, "Screenshot failed: browser size is 0 or rendering error.", "SCREENSHOT_FAILED", tabId = tabId)
                 }
             }
 
             "wait" -> {
                 val condition = args["condition"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("wait 缺少必需参数：condition", "MISSING_CONDITION")
+                    ?: return ToolResult.Error("wait missing required parameter: condition", "MISSING_CONDITION")
                 val timeout = args["timeout"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: DEFAULT_WAIT_TIMEOUT_MS
                 FileLogger.i(TAG, "wait: $condition, timeout=$timeout (tabId=$tabId)")
                 val met = try {
@@ -297,15 +297,15 @@ class BrowserTool @Inject constructor(
                 buildOk(action, mapOf(
                     "condition" to JsonPrimitive(condition),
                     "met" to JsonPrimitive(met),
-                    "message" to JsonPrimitive(if (met) "条件已满足" else "超时未满足")
+                    "message" to JsonPrimitive(if (met) "Condition met" else "Timed out, condition not met")
                 ), tabId = tabId)
             }
 
             "select" -> {
                 val selector = args["selector"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("select 缺少必需参数：selector", "MISSING_SELECTOR")
+                    ?: return ToolResult.Error("select missing required parameter: selector", "MISSING_SELECTOR")
                 val value = args["value"]?.jsonPrimitive?.contentOrNull
-                    ?: return ToolResult.Error("select 缺少必需参数：value", "MISSING_VALUE")
+                    ?: return ToolResult.Error("select missing required parameter: value", "MISSING_VALUE")
                 FileLogger.i(TAG, "select: $selector -> $value (tabId=$tabId)")
                 val json = browserManager.selectOption(selector, value, tabId)
                 buildFromJson(action, json, tabId)
@@ -340,7 +340,7 @@ class BrowserTool @Inject constructor(
                 val success = browserManager.goBack(tabId)
                 buildResult(success, action, mapOf(
                     "success" to JsonPrimitive(success),
-                    "message" to JsonPrimitive(if (success) "已后退" else "无法后退：无历史记录或导航未生效")
+                    "message" to JsonPrimitive(if (success) "Went back" else "Cannot go back: no history or navigation did not take effect")
                 ), tabId = tabId)
             }
 
@@ -348,7 +348,7 @@ class BrowserTool @Inject constructor(
                 val success = browserManager.goForward(tabId)
                 buildResult(success, action, mapOf(
                     "success" to JsonPrimitive(success),
-                    "message" to JsonPrimitive(if (success) "已前进" else "无法前进：无历史记录或导航未生效")
+                    "message" to JsonPrimitive(if (success) "Went forward" else "Cannot go forward: no history or navigation did not take effect")
                 ), tabId = tabId)
             }
 
@@ -361,7 +361,7 @@ class BrowserTool @Inject constructor(
                 ), tabId = targetTabId)
             }
 
-            else -> ToolResult.Error("未知的 action：$action", "UNKNOWN_ACTION")
+            else -> ToolResult.Error("Unknown action: $action", "UNKNOWN_ACTION")
         }
     }
 
