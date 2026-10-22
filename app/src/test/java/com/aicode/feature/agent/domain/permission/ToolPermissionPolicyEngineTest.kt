@@ -118,7 +118,7 @@ class ToolPermissionPolicyEngineTest {
         val e = engine(level = CommandAuthLevel.FULL_ACCESS)
         val r = e.evaluate(tool(ToolCapability.EXECUTE_COMMANDS), "Bash", bash("rm -rf /"), AgentMode.BUILD)
         assertEquals(ToolPermissionPolicyEngine.Verdict.DENY, r.verdict)
-        assertTrue(r.denyReason?.startsWith("安全防护：禁止执行高危删除操作（根目录删除）") == true)
+        assertTrue(r.denyReason?.startsWith("Safety guard: high-risk deletion is forbidden (root directory deletion)") == true)
     }
 
     @Test
@@ -556,7 +556,7 @@ class ToolPermissionPolicyEngineTest {
         val e = engine()
         val r = e.evaluate(tool(ToolCapability.EXECUTE_COMMANDS), "Bash", bash("rm -rf /tmp/build"), AgentMode.BUILD)
         assertEquals(ToolPermissionPolicyEngine.Verdict.ASK, r.verdict)
-        assertTrue(r.askTitle?.startsWith("命中高危规则") == true)
+        assertTrue(r.askTitle?.startsWith("High-risk rule hit") == true)
         // 递归删除不可记忆
         assertTrue(r.rememberablePatterns.isEmpty())
         assertNotNull(r.rememberDisabledReason)

@@ -41,7 +41,7 @@ class GenerateImageToolTest {
         )
 
         assertNotNull(error)
-        assertTrue(error!!.contains("background 取值 blurred 不支持"))
+        assertTrue(error!!.contains("background value blurred is not supported"))
     }
 
     @Test
@@ -52,7 +52,7 @@ class GenerateImageToolTest {
             n = 2
         )
 
-        assertEquals("dall-e-3 一次只能生成 1 张（n=1），需要多张请改用 GPT Image 系列模型。", error)
+        assertEquals("dall-e-3 can only generate 1 image at a time (n=1); for multiple images, use a GPT Image series model.", error)
     }
 
     private fun validate(
