@@ -4,6 +4,7 @@ name: CI
 # 目的是合入前的兜底门禁，避免编译错误/回归推迟到打 tag 发版当天才暴露。
 # 打 v* tag 的发版构建走 android-release.yml，不在这里。
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
     # 纯文档/资源改动不影响构建产物，跳过 CI 省时间（public 仓库虽不扣额度，但省 11 分钟等待）。
