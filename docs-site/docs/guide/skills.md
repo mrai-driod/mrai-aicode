@@ -1,75 +1,75 @@
-# 技能
+# Skills
 
-技能是为 AI 提供的「专项能力扩展包」——把某类任务的标准流程、最佳实践与专属知识沉淀为规范指南，AI 遇到相关任务时会自动按需加载执行，无需你在每次对话中反复交代背景规则。
+Skills are "specialized capability extension packs" for the AI — they distill the standard workflow, best practices, and dedicated knowledge for a class of tasks into a normative guide, so when the AI encounters a related task it automatically loads and executes it on demand, without you having to repeat the background rules in every conversation.
 
-入口在「设置 → 技能」。已启用的技能会出现在对话输入框的 `/` 菜单里，可以直接用 `/技能名` 触发，也可以带参数（如 `/pdf-report a4`），详见[对话与消息](./chat.md)的〈斜杠命令〉。
+The entry point is "Settings → Skills". Enabled Skills appear in the `/` menu of the chat input box, and can be triggered directly with `/skill-name`, optionally with arguments (e.g. `/pdf-report a4`) — see the 〈Slash Commands〉 section of [Chat & Messages](./chat.md).
 
-## 技能从哪里来
+## Where Skills Come From
 
-一个技能就是一个目录，其中有 `SKILL.md`（或兼容的 `CLAUDE.md`）即会被自动识别。分两级：
+A Skill is a directory containing a `SKILL.md` (or a compatible `CLAUDE.md`), which is recognized automatically. Two levels:
 
-- **全局技能**：放在 `~/.aicode/skills/`，跨项目共享，App 升级不丢失。跟随执行环境：本地模式下是容器内 `/root/.aicode/skills/`（映射至手机 App 私有目录），远程模式下指**服务器**上的 `~/.aicode/skills/`，读写经由 SSH 完成。
-- **项目级技能**：放在 `<工作区>/.aicode/skills/`，只在当前工作区生效，可以随项目提交到 git。远程模式下这里指的是**服务器上**的工作区，读写经由 SSH 完成。
+- **Global Skills**: placed in `~/.aicode/skills/`, shared across projects, and not lost on app upgrades. They follow the execution environment: in local mode it's the in-container `/root/.aicode/skills/` (mapped to the app's private directory on the phone); in remote mode it refers to the **server's** `~/.aicode/skills/`, read/written over SSH.
+- **Project-level Skills**: placed in `<workspace>/.aicode/skills/`, effective only in the current workspace, and can be committed to git with the project. In remote mode this refers to the workspace on the **server**, read/written over SSH.
 
-同名技能项目级优先。
+For Skills with the same name, project level takes precedence.
 
-你可以直接在 App 里新建技能（见下文），也可以在容器里手工创建技能目录，或交由 AI 从 GitHub 安装。本地模式下 App 会监听技能目录，手工添加、删除、改名后列表几秒内自动刷新，无需重进页面。远程模式下不会监听服务器上的文件变化，手工修改后需退出并重新进入设置页刷新列表。
+You can create Skills directly in the app (see below), manually create Skill directories in the container, or have the AI install them from GitHub. In local mode the app watches the Skills directory, so manually adding, deleting, or renaming refreshes the list automatically within a few seconds, with no need to re-enter the page. In remote mode it doesn't watch file changes on the server; after manual modifications you need to exit and re-enter the settings page to refresh the list.
 
-## 列表页
+## List Page
 
-按「当前项目 / 全局」两个可折叠分组显示，点分组标题展开或收起。
+Shown in two collapsible groups, "Current Project / Global"; tap a group title to expand or collapse it.
 
-每行是一个技能：图标、名称、描述摘要，名称右侧的彩色勋章表示启用或禁用状态。点行进详情；左滑露出删除按钮，删除会弹确认框——它会直接移除技能目录，**不可恢复**。
+Each row is a Skill: icon, name, description summary, and a colored badge to the right of the name indicating enabled or disabled state. Tap a row to enter details; swipe left to reveal the delete button — deletion pops up a confirmation dialog, and it directly removes the Skill directory, **irreversibly**.
 
-右上角「＋」添加技能（见下文〈添加技能〉）。
+The "+" at the top right adds a Skill (see 〈Add a Skill〉 below).
 
-## 添加技能
+## Adding a Skill
 
-点右上角「＋」弹出底部选择单，先选**作用域**（全局 / 当前项目，默认全局），再选添加方式：
+Tap the "+" at the top right to pop up a bottom selection sheet; first choose the **scope** (global / current project, default global), then choose the add method:
 
-- **手动新建**：进入编辑页，填写名称、描述与正文，从头创建一个技能。
-- **从文件导入**：选择一个 `.md` 文件（`.markdown` / `.txt` 也可）。App 读取文件内容，按其 frontmatter 的 `name`/`description` 建技能，缺 `name` 时用文件名兜底，写入 `<作用域>/skills/<名称>/SKILL.md`。
-- **从压缩包导入**：选择一个 `.zip`。App 解压后识别包内所有含 `SKILL.md`（或 `CLAUDE.md`）的目录，逐个导入——一个包可以包含多个技能，常见于 GitHub 仓库的打包下载。
+- **Create manually**: enter the edit page and fill in the name, description, and body to create a Skill from scratch.
+- **Import from file**: choose an `.md` file (`.markdown` / `.txt` also work). The app reads the file content and builds the Skill from its frontmatter `name`/`description`; if `name` is missing, the file name is used as a fallback. It's written to `<scope>/skills/<name>/SKILL.md`.
+- **Import from archive**: choose a `.zip`. After extracting, the app identifies all directories in the archive containing a `SKILL.md` (or `CLAUDE.md`) and imports them one by one — one archive can contain multiple Skills, which is common for packaged downloads of GitHub repositories.
 
-导入与手动新建等价：文件一律归一化为 `SKILL.md` 落盘，之后同样可以用编辑器或容器命令修改。
+Importing is equivalent to creating manually: files are always normalized to `SKILL.md` on disk, and afterwards can likewise be modified with the editor or container commands.
 
-**几种会被跳过的情况**（会弹窗逐个列出原因，不影响其余技能）：
+**Cases that get skipped** (a dialog lists the reasons one by one, without affecting the other Skills):
 
-- 技能名称不合法（含 `/` `:` 等不能做目录名的字符、为空或过长）；
-- 目标作用域下已有同名技能（不会覆盖）；
-- 技能正文为空；
-- 压缩包里没有任何含 `SKILL.md` 的目录（整体失败）。
+- The Skill name is invalid (contains characters that can't be in a directory name such as `/` or `:`, is empty, or is too long);
+- A Skill with the same name already exists in the target scope (not overwritten);
+- The Skill body is empty;
+- The archive contains no directory with a `SKILL.md` at all (the whole import fails).
 
-## 详情页
+## Details Page
 
-三张卡片：「是否启用」（名称、来源和启停开关）、「摘要」（描述）、「正文」（`SKILL.md` 的完整内容，等宽字体，可以选中复制）。
+Three cards: "Enabled" (name, source, and the enable/disable switch), "Summary" (description), and "Body" (the complete content of `SKILL.md`, in monospace font, selectable and copyable).
 
-右上角的铅笔按钮进入编辑页。
+The pencil button at the top right enters the edit page.
 
-## 新建与编辑
+## Creating & Editing
 
-编辑页有两组内容：
+The edit page has two groups of content:
 
-- **基本信息**：名称、描述、作用域。名称就是 AI 加载技能时使用的标识，建议使用英文小写加连字符（如 `pdf-report`）；描述写明「何时该使用它」，AI 依据这句话判断是否需要加载；作用域选「当前项目」或「全局」，决定技能目录落在哪一级。
-- **指令正文**：技能的完整指令，支持 Markdown。写清这类任务的标准流程、约束与注意事项。
+- **Basic info**: name, description, scope. The name is the identifier the AI uses when loading the Skill; English lowercase with hyphens is recommended (e.g. `pdf-report`); the description should state "when it should be used", and the AI judges whether to load it based on that sentence; the scope, "Current Project" or "Global", decides which level the Skill directory lands at.
+- **Instruction body**: the Skill's complete instructions, supporting Markdown. Write clearly the standard workflow, constraints, and notes for this class of tasks.
 
-名称和正文都填写后才能点击右上角「保存」。保存后会写成 `<技能目录>/SKILL.md`，与手写的技能完全等价，之后同样可以用文本编辑器或容器命令修改。
+Only after both the name and body are filled in can you tap "Save" at the top right. After saving, it's written as `<skill directory>/SKILL.md`, fully equivalent to a hand-written Skill, and can likewise be modified afterwards with a text editor or container commands.
 
-几个需要留意的地方：
+A few points to note:
 
-- **作用域只能在新建时选**。已有技能的作用域是灰的——更换作用域等于搬迁目录，需要自行在容器里移动。
-- **改名只改 `SKILL.md` 里的 `name`，不动目录名**。技能正文里常按 `~/.aicode/skills/<目录>/run.py` 引用同目录脚本，目录跟着改名会把这些引用打断。
-- 编辑的是从 GitHub 装来的技能时，如果它用的是 `CLAUDE.md` 而不是 `SKILL.md`，保存会写回原来那个文件，不会多出一份。
-- 同一作用域下已有同名技能、名称含 `/` `:` 等不能做目录名的字符、或正文为空时，保存会失败并在页面顶部给出红色提示。
+- **The scope can only be chosen when creating**. An existing Skill's scope is grayed out — changing scope means relocating the directory, which you need to do yourself in the container.
+- **Renaming only changes the `name` in `SKILL.md`, not the directory name**. Skill bodies often reference scripts in the same directory as `~/.aicode/skills/<directory>/run.py`; renaming the directory along with it would break those references.
+- When editing a Skill installed from GitHub, if it uses `CLAUDE.md` instead of `SKILL.md`, saving writes back to that original file and doesn't create an extra one.
+- If a Skill with the same name already exists in the same scope, the name contains characters like `/` or `:` that can't be in a directory name, or the body is empty, saving fails and a red prompt appears at the top of the page.
 
-## 启用与禁用
+## Enabling & Disabling
 
-详情页的开关控制该技能是否参与 AI 会话。禁用后它不再出现在系统提示的可用技能清单里，AI 也无法加载，可减少上下文占用——技能数量较多时这个开关很有用。
+The switch on the details page controls whether the Skill participates in AI sessions. Once disabled, it no longer appears in the available Skills list in the system prompt, and the AI can't load it, which reduces context usage — this switch is very useful when you have many Skills.
 
-禁用名单写在 `skills.json` 里：全局名单位于当前执行环境的 `~/.aicode/skills.json`，本地模式保存在手机 App 私有目录，远程模式保存在服务器上；两者独立，不会自动迁移或同步。项目级名单在本地模式位于 `<工作区>/.aicode/skills.json`，远程模式仍保存在手机 App 私有目录，按服务器和工作区隔离。格式是：
+The disabled list is written in `skills.json`: the global list is located at `~/.aicode/skills.json` of the current execution environment — in local mode it's stored in the app's private directory on the phone; in remote mode it's stored on the server; the two are independent and don't migrate or sync automatically. In local mode the project-level list is at `<workspace>/.aicode/skills.json`; in remote mode it's still stored in the app's private directory on the phone, isolated by server and workspace. The format is:
 
 ```json
-{ "disabled": ["技能名"] }
+{ "disabled": ["skill-name"] }
 ```
 
-两级取并集，任一作用域禁用即生效。也可以直接手工编辑名单，下次读取时生效；本地模式下列表几秒内自动刷新，远程模式下手工修改服务器上的名单后需退出并重新进入设置页刷新列表。
+The two levels are unioned — disabling in either scope takes effect. You can also edit the list manually; it takes effect on the next read. In local mode the list refreshes automatically within a few seconds; in remote mode, after manually modifying the list on the server you need to exit and re-enter the settings page to refresh the list.

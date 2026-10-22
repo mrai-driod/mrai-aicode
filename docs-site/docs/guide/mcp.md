@@ -1,59 +1,59 @@
-# MCP 服务器
+# MCP Servers
 
-MCP（Model Context Protocol）让 AI 接入外部工具——查数据库、搜网页、控制浏览器之类。连上之后这些工具会自动出现在 AI 的工具列表里，像内置工具一样调用。
+MCP (Model Context Protocol) lets the AI connect to external tools — querying databases, searching the web, controlling a browser, and so on. Once connected, these tools automatically appear in the AI's tool list and are called just like built-in tools.
 
-入口在「设置 → MCP 服务器」。
+The entry point is "Settings → MCP Servers".
 
-## 两级作用域
+## Two Levels of Scope
 
-MCP 配置分全局和项目两级：
+MCP configuration has two levels, global and project:
 
-- **全局**：所有项目共享，配置存在 `~/.aicode/mcp.json`。
-- **项目级**：只在当前工作区生效，配置存在 `<工作区>/.aicode/mcp.json`，可以随项目一起提交到 git。
+- **Global**: shared by all projects; configuration stored in `~/.aicode/mcp.json`.
+- **Project level**: only effective in the current workspace; configuration stored in `<workspace>/.aicode/mcp.json`, and can be committed to git together with the project.
 
-实际生效的是两者合并的结果，**项目级优先**——同名的服务器，项目里的配置会覆盖全局的。
+What actually takes effect is the merge of both, with **project level taking precedence** — for a server with the same name, the project configuration overrides the global one.
 
-## 服务器列表
+## Server List
 
-每行显示服务器名称、来源（全局 / 项目）、类型（内置 / HTTP）、连接状态，已连接时还会显示工具数量，本地 stdio 服务未连接时显示启动命令。
+Each row shows the server name, source (global / project), type (built-in / HTTP), and connection status; when connected it also shows the tool count, and for a local stdio service that isn't connected it shows the launch command.
 
-- 点行进入编辑。
-- 左滑露出删除按钮，删除作用于该行标注的作用域。
-- 右上角「重新连接」一键重连所有服务器，「+」添加新服务器。
+- Tap a row to edit.
+- Swipe left to reveal the delete button; deletion applies to the scope marked on that row.
+- "Reconnect" at the top right reconnects all servers with one tap; "+" adds a new server.
 
-如果你在容器内或用外部编辑器直接改了 `mcp.json`，App 会在几秒内自动发现并刷新：新增或启用的自动连接，删除或禁用的自动断开，不需要重启。
+If you edit `mcp.json` directly inside the container or with an external editor, the app automatically discovers and refreshes within a few seconds: newly added or enabled servers connect automatically, deleted or disabled ones disconnect automatically — no restart needed.
 
-## 添加服务器
+## Adding a Server
 
-编辑页顶部先选**作用域**（新增时默认「项目」，编辑已有条目保持原作用域），下面的「是否启用」控制它是否参与连接。剩下的字段按传输类型分两种。
+At the top of the edit page, first select the **scope** (defaults to "Project" when adding new; editing an existing entry keeps its original scope). The "Enabled" option below controls whether it participates in connections. The remaining fields fall into two kinds by transport type.
 
-**名称**只作别名，但它会拼进给模型的工具名（`mcp__名称__工具名`），因此只能含字母、数字、下划线、连字符；填了中文之类的字符会提示错误且无法保存。
+The **name** is only an alias, but it's spliced into the tool names given to the model (`mcp__name__toolname`), so it can only contain letters, digits, underscores, and hyphens; entering characters like Chinese will trigger an error and prevent saving.
 
-### 远程 HTTP
+### Remote HTTP
 
-- **名称**：别名，例如 `fetch`、`github`。
-- **服务器地址**：远程服务端的 Streamable HTTP 链接。
-- **自定义请求头**：键值对，用来填认证 Token 这类固定头部。
+- **Name**: an alias, e.g. `fetch`, `github`.
+- **Server address**: the remote server's Streamable HTTP link.
+- **Custom headers**: key-value pairs, for fixed headers such as authentication tokens.
 
-### 本地 stdio
+### Local stdio
 
-- **名称**：别名。
-- **启动命令**：`npx`、`node`、`python` 之类。
-- **命令参数**：逐项添加，例如 `-y`、`@modelcontextprotocol/server-xxx`。
-- **环境变量**：传给该进程的键值对，例如 API_KEY。
+- **Name**: an alias.
+- **Launch command**: `npx`, `node`, `python`, etc.
+- **Command arguments**: added item by item, e.g. `-y`, `@modelcontextprotocol/server-xxx`.
+- **Environment variables**: key-value pairs passed to the process, e.g. API_KEY.
 
-stdio 服务器需要在容器里运行：本地模式下运行在当前容器上，远程 SSH 模式下运行在「默认容器」上。切换容器后所有 stdio 服务器会自动断开并用新容器重连，HTTP 服务器不受影响。
+stdio servers need to run inside the container: in local mode they run on the current container; in remote SSH mode they run on the "default container". After switching containers, all stdio servers automatically disconnect and reconnect with the new container; HTTP servers are unaffected.
 
-## 工具管理
+## Tool Management
 
-连接成功后，编辑页的「工具」标签页会列出这个服务器提供的所有工具，每个工具一张卡片，显示描述和参数名。
+After a successful connection, the "Tools" tab of the edit page lists all tools provided by this server, one card per tool, showing the description and parameter names.
 
-- 右上角的开关可以**单独禁用某个工具**，禁用后它不再提供给模型，能省一些上下文。
-- MCP 工具和内置工具走同一套权限机制：默认每次调用都要你确认，可以在授权弹窗里选「始终允许」记住。
-- 没检测到工具时点右上角刷新重新拉取。
+- The switch at the top right can **disable an individual tool**; once disabled it's no longer offered to the model, saving some context.
+- MCP tools use the same permission mechanism as built-in tools: by default each call needs your confirmation, and you can choose "Always allow" in the authorization dialog to remember it.
+- If no tools are detected, tap refresh at the top right to fetch again.
 
-编辑页右上角的日志按钮可以跳到「日志」页并自动按这个服务器名过滤，排查连接失败问题时很有用。
+The log button at the top right of the edit page jumps to the "Logs" page automatically filtered by this server's name — very useful when troubleshooting connection failures.
 
-## 让 AI 代为配置
+## Letting the AI Configure It for You
 
-复杂的 MCP 配置可以直接交由 AI 完成，其管理工具可指定安装到全局或项目。新增或移除后配置**在下一次会话生效**（新建会话时会自动连接未连接的服务器）。
+Complex MCP configurations can be handed to the AI to complete; its management tool can specify installing to global or project scope. After adding or removing, the configuration **takes effect in the next session** (when a new session is created, unconnected servers are connected automatically).

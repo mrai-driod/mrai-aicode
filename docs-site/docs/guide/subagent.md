@@ -1,89 +1,89 @@
-# 子代理
+# Sub-Agents
 
-::: tip 版本说明
-子代理从 1.11.0 起提供。
+::: tip Version note
+Sub-agents are available from 1.11.0.
 :::
 
-子代理是由主会话派生出的独立工作会话。当你面临耗时较长的调研、多模块并行审查或架构对比等复杂任务时，可以让 AI 派发子代理并行处理，**不阻塞当前主对话**。
+A sub-agent is an independent work session spawned by the main session. When you face complex tasks such as time-consuming research, parallel review of multiple modules, or architecture comparison, you can have the AI dispatch sub-agents to handle them in parallel, **without blocking the current main conversation**.
 
-子代理拥有自己独立的上下文与工具能力。派发后它会在后台独立工作，你可以留在主会话继续讨论，也能随时点进子会话查看实时进度、补充提问或手动暂停。
+A sub-agent has its own independent context and tool capabilities. After dispatch, it works independently in the background; you can stay in the main session and keep discussing, or tap into the sub-session at any time to view real-time progress, add questions, or pause it manually.
 
-子代理分为两种：
-- **默认通用子代理**：自动继承父会话的模型配置与全部可用工具；
-- **自定义子代理**：支持自由指定模型、工具白名单/黑名单以及专属提示词。
+There are two kinds of sub-agents:
+- **Default general sub-agent**: automatically inherits the parent session's model configuration and all available tools;
+- **Custom sub-agent**: freely specify the model, tool whitelist/blacklist, and a dedicated prompt.
 
-## 使用方法
+## Usage
 
-在主会话中直接向 AI 提出派发需求即可，例如：
+Just ask the AI in the main session to dispatch, for example:
 
-- 「派个子代理去审查 `app/build.gradle.kts`，把潜在问题列出来」
-- 「同时派两个子代理，一个调研数据库迁移方案，一个调研 UI 组件库选型」
-- 「派一个只读调研子代理查清当前的登录与鉴权流程」
+- "Dispatch a sub-agent to review `app/build.gradle.kts` and list the potential problems"
+- "Dispatch two sub-agents at the same time, one to research the database migration plan, one to research UI component library selection"
+- "Dispatch a read-only research sub-agent to figure out the current login and authentication flow"
 
-AI 在派发前会弹窗向你确认授权；获得同意后子代理将在后台启动，主会话随即恢复空闲，可继续接收你的其它指令。
+Before dispatching, the AI pops up a dialog asking for your authorization; after you agree, the sub-agent starts in the background, and the main session immediately returns to idle and can receive your other instructions.
 
-## 侧边栏中的位置与管理
+## Position & Management in the Sidebar
 
-侧边栏会话列表清晰展示了主会话与子代理的父子归属关系：
+The session list in the sidebar clearly shows the parent-child relationship between main sessions and sub-agents:
 
-- **展开与收起**：派生过子代理的会话，行尾会显示子代理数量与展开折叠箭头。点击箭头可展开查看其下属的所有子代理；
-- **状态指示**：正在运行中的子代理会显示绿色的运行状态指示灯；
-- **独立交互**：点击子代理即可切换进入其会话页，界面与常规会话完全一致，可独立对话、暂停或重新生成；
-- **会话操作**：长按子代理项可进行重命名、导出与删除；删除主会话时，其名下的所有子代理会随之一同清理。
+- **Expand & collapse**: a session that has spawned sub-agents shows the sub-agent count and an expand/collapse arrow at the end of the row. Tap the arrow to expand and view all its sub-agents;
+- **Status indicator**: a running sub-agent shows a green running status light;
+- **Independent interaction**: tap a sub-agent to switch into its session page, with an interface identical to a regular session — you can converse independently, pause, or regenerate;
+- **Session operations**: long-press a sub-agent item to rename, export, or delete it; when the main session is deleted, all its sub-agents are cleaned up along with it.
 
-## 上下文与信息传递
+## Context & Information Passing
 
-::: tip 上下文独立与双向同步
-子代理与主会话的对话上下文完全隔离，它默认不会自动加载主会话的历史对话，保证轻量与专注：
+::: tip Independent context with two-way sync
+A sub-agent's conversation context is completely isolated from the main session; by default it doesn't automatically load the main session's conversation history, keeping it lightweight and focused:
 
-- **任务派发**：AI 在派发子代理时，会自动提炼当前任务的明确目标、关键文件路径、已核实的背景以及约束条件，打包作为初始指令交给子代理。如果你在主会话中手动指示派发，也建议交代清楚关键背景与期望产出；
-- **结果汇总**：子代理执行完毕后，主会话会自动收到完成通知，并读取其最终产出为你进行汇总；若主会话当时正在调用其它工具，卡片下方会提示子代理已就绪，并在当前操作后自动跟进处理；
-- **全流程追溯**：主会话通常只读取子代理的最终结论，如果你想查看子代理完整的工具调用日志、推导轨迹或中间输出，直接在侧边栏点击进入该子会话即可查看全部详情。
+- **Task dispatch**: when dispatching a sub-agent, the AI automatically distills the current task's clear goal, key file paths, verified background, and constraints, packaging them as the initial instructions for the sub-agent. If you manually instruct a dispatch in the main session, it's also recommended to state the key background and expected output clearly;
+- **Result summary**: when the sub-agent finishes executing, the main session automatically receives a completion notification and reads its final output to summarize for you; if the main session is calling other tools at the time, a hint below the card shows the sub-agent is ready, and it's followed up automatically after the current operation;
+- **Full-process traceability**: the main session usually only reads the sub-agent's final conclusion; if you want to view the sub-agent's complete tool call logs, reasoning traces, or intermediate output, just tap into that sub-session in the sidebar to see all the details.
 :::
 
-## 与主会话的双向通讯
+## Two-Way Communication with the Main Session
 
-子代理与主会话之间支持双向异步通讯，互不阻塞：
+Two-way asynchronous communication is supported between a sub-agent and the main session, without blocking each other:
 
-- **主会话 → 子代理**：主会话可以随时向某个子代理追加消息（补充指令、纠偏，或对已有结果继续追问），**可反复发送**。运行中的子代理会在下一轮操作里收到该消息；已完成或暂停的子代理会被重新唤醒并继续工作；
-- **子代理 → 主会话**：子代理在运行中可以主动向主会话汇报关键进展、求助，或提交需要协调、决策的事项。主会话会收到一条系统通知，并可直接回复。
+- **Main session → sub-agent**: the main session can append messages to a sub-agent at any time (supplementary instructions, corrections, or follow-ups on existing results), and **can send repeatedly**. A running sub-agent receives the message in its next round of operation; a completed or paused sub-agent is reawakened and continues working;
+- **Sub-agent → main session**: while running, a sub-agent can proactively report key progress to the main session, ask for help, or submit matters needing coordination or decisions. The main session receives a system notification and can reply directly.
 
-这些消息在界面上以轻量提示条呈现，不占用普通聊天气泡；主会话忙碌时消息会在当前操作结束后自动跟进处理，空闲时则立即触发新一轮。
+These messages are presented in the UI as lightweight hint bars, not occupying ordinary chat bubbles; when the main session is busy, messages are followed up automatically after the current operation ends, and when idle, they trigger a new round immediately.
 
-## 自动派发与手动指定
+## Automatic Dispatch & Manual Specification
 
-主会话 AI 了解当前所有可用的子代理及其擅长领域：
+The main session AI knows all currently available sub-agents and their areas of expertise:
 
-- **自动匹配**：当你的需求与某个子代理的用途描述（`description`）相符时，AI 会主动选用该专属子代理；
-- **手动指定**：你也可以在指令中明确指定，例如「使用 Explore 子代理检索所有网络请求的入口」。
+- **Automatic matching**: when your need matches a sub-agent's purpose description (`description`), the AI proactively selects that dedicated sub-agent;
+- **Manual specification**: you can also specify explicitly in your instruction, e.g. "Use the Explore sub-agent to search for the entry points of all network requests".
 
-## 内置子代理：Explore
+## Built-in Sub-Agent: Explore
 
-初次启动时，系统会自动在全局目录释放内置的 **Explore** 只读探索子代理（位于 `~/.aicode/agents/explore.md`），开箱即用。
+On first startup, the system automatically releases the built-in **Explore** read-only exploration sub-agent in the global directory (located at `~/.aicode/agents/explore.md`), ready to use out of the box.
 
-它的核心用途是只读的代码库探索与逻辑梳理：
-- **纯只读安全**：仅开放了代码与文件检索工具（`readFile`、`list`、`search`、`websearch`、`webfetch`、`loadSkill`），**不包含任何写文件与执行终端命令的工具**，不会对项目造成改动，也不需要频繁弹窗授权；
-- **模型定制**：默认继承当前会话的模型。如果想为它配置更经济的模型，只需在 `explore.md` 中填入对应的 `provider` 与 `model`；
-- **持久保留**：此文件仅在首次不存在时释放，你所做的个性化修改在 App 升级时均会完整保留。
+Its core purpose is read-only codebase exploration and logic mapping:
+- **Pure read-only safety**: only code and file search tools are open (`readFile`, `list`, `search`, `websearch`, `webfetch`, `loadSkill`), **including no file-writing or terminal command execution tools at all**, so it won't make changes to the project, and doesn't need frequent authorization popups;
+- **Model customization**: inherits the current session's model by default. To configure a more economical model for it, just fill in the corresponding `provider` and `model` in `explore.md`;
+- **Persistent retention**: this file is only released when it doesn't exist for the first time; your personalized modifications are preserved completely across app upgrades.
 
-## 自定义子代理
+## Custom Sub-Agents
 
-创建自定义子代理有两种方式，效果完全等价（App 内保存后写出的就是同一份 `.md` 文件）：
+There are two ways to create a custom sub-agent, with completely equivalent effect (what the app saves is the same `.md` file):
 
-- **在 App 内新建**（推荐）：「设置 → 子代理」右上角的「＋」，填表单即可，模型可以直接从已配置的供应商里选；
-- **手写定义文件**：自行把 Markdown 文件放进对应目录，适合从其它项目拿现成定义或用 git 管理。
+- **Create in the app** (recommended): the "+" at the top right of "Settings → Sub-Agents" — fill in the form; the model can be selected directly from configured providers;
+- **Write the definition file by hand**: put a Markdown file into the corresponding directory yourself, suitable for taking ready-made definitions from other projects or managing with git.
 
-两个可选目录：
+Two optional directories:
 
-- **全局配置**：`~/.aicode/agents/<name>.md`，所有项目共享，升级不丢失。跟随执行环境：本地模式下是容器内 `/root/.aicode/agents/`（映射至手机 App 私有目录），远程模式下指**服务器**上的 `~/.aicode/agents/`，读写经由 SSH 完成；
-- **项目级配置**：`<项目工作区>/.aicode/agents/<name>.md`，仅对当前工作区生效，可随代码库一同提交到版本控制中。远程模式下这里指的是**服务器上**的工作区，读写经由 SSH 完成。
+- **Global configuration**: `~/.aicode/agents/<name>.md`, shared by all projects, not lost on upgrade. Follows the execution environment: in local mode it's the in-container `/root/.aicode/agents/` (mapped to the app's private directory on the phone); in remote mode it refers to the **server's** `~/.aicode/agents/`, read/written over SSH;
+- **Project-level configuration**: `<project workspace>/.aicode/agents/<name>.md`, effective only for the current workspace, and can be committed to version control with the codebase. In remote mode this refers to the workspace on the **server**, read/written over SSH.
 
-同名定义时项目级优先。文件由顶部的 YAML 配置（frontmatter）与正文提示词组成：
+For definitions with the same name, project level takes precedence. A file consists of YAML configuration (frontmatter) at the top and the body prompt:
 
 ```markdown
 ---
 name: researcher
-description: 只读代码与技术调研：广泛检索代码、查阅网络资料并汇总结论，不修改文件
+description: Read-only code and technical research: search code widely, consult online materials, and summarize conclusions, without modifying files
 provider: DeepSeek
 model: deepseek-reasoner
 reasoningEffort: high
@@ -92,58 +92,58 @@ tools: [readFile, list, search, websearch, webfetch]
 disallowedTools: [Bash, terminal]
 inject: [base, projectRules]
 ---
-你是资深代码调研专家。请先使用 search 定位入口，再用 readFile 深入核实。
-输出结论时请务必标注准确的 `文件路径:行号` 引用；未核实推断需如实注明。
+You are a senior code research expert. First use search to locate entry points, then use readFile to verify in depth.
+When outputting conclusions, be sure to mark accurate `file path:line number` citations; unverified inferences must be noted as such honestly.
 ```
 
-### 配置项说明
+### Configuration Field Reference
 
-| 字段 | 是否必填 | 说明 |
+| Field | Required | Description |
 | --- | --- | --- |
-| `name` | 否 | 子代理标识名称，省略时取文件名 |
-| `description` | 建议填写 | 简述适用场景与专长，主会话 AI 依据此描述判断何时选用该子代理 |
-| `provider` | 否 | AI 供应商名称，省略时继承父会话配置 |
-| `model` | 否 | 模型名称，省略时继承父会话配置 |
-| `reasoningEffort` | 否 | 思考强度：`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` |
-| `mode` | 否 | 默认运行模式：`build` / `plan` / `auto`，省略时继承父会话当前模式 |
-| `tools` | 否 | 工具白名单。**省略时代表开放全部可用工具** |
-| `disallowedTools` | 否 | 工具黑名单，优先级高于白名单，支持 `mcp__*` 前缀通配 |
-| `inject` | 否 | 注入的系统规则片段，详见下表 |
+| `name` | No | Sub-agent identifier name; the file name is used when omitted |
+| `description` | Recommended | Briefly describes the applicable scenarios and expertise; the main session AI judges when to select this sub-agent based on this description |
+| `provider` | No | AI provider name; inherits the parent session's configuration when omitted |
+| `model` | No | Model name; inherits the parent session's configuration when omitted |
+| `reasoningEffort` | No | Thinking intensity: `none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` |
+| `mode` | No | Default run mode: `build` / `plan` / `auto`; inherits the parent session's current mode when omitted |
+| `tools` | No | Tool whitelist. **When omitted, all available tools are open** |
+| `disallowedTools` | No | Tool blacklist, taking precedence over the whitelist, supporting `mcp__*` prefix wildcards |
+| `inject` | No | Injected system rule fragments — see the table below |
 
-### inject 规则片段
+### inject Rule Fragments
 
-| 取值 | 含义 |
+| Value | Meaning |
 | --- | --- |
-| `base` | 子代理专用轻量基线：包含工具使用规范与路径约定，轻量且省 token |
-| `mainRules` | 完整通用规则：与主会话保持完全一致的行为准则与规则基线 |
-| `skills` | 技能支持：注入可用技能清单，允许子代理加载并执行项目技能 |
-| `memory` | 记忆支持：注入全局与项目长期记忆摘要，见 [记忆与项目规则](/guide/memory) |
-| `projectRules` | 项目规则：注入工作区内的 `AGENTS.md` 或 `CLAUDE.md` 约束，见 [记忆与项目规则](/guide/memory) |
+| `base` | Sub-agent dedicated lightweight baseline: includes tool usage rules and path conventions; lightweight and token-saving |
+| `mainRules` | Complete general rules: a behavior standard and rule baseline completely consistent with the main session |
+| `skills` | Skills support: injects the available Skills list, allowing the sub-agent to load and execute project Skills |
+| `memory` | Memory support: injects global and project long-term memory summaries — see [Memory & Project Rules](/guide/memory) |
+| `projectRules` | Project rules: injects the workspace's `AGENTS.md` or `CLAUDE.md` constraints — see [Memory & Project Rules](/guide/memory) |
 
-`base` 与 `mainRules` 是同一套规则的简版与完整版，**正常只选一个**。两个同时开启不会报错，但会把相互重叠的规则文本注入两遍，徒增上下文占用。
+`base` and `mainRules` are the abridged and complete versions of the same rule set; **normally choose only one**. Enabling both at the same time doesn't error, but injects overlapping rule text twice, needlessly increasing context usage.
 
-若省略 `inject` 字段，默认等同于 `[base, skills, memory, projectRules]`。如果填写 `inject: [none]`，则仅使用你在 Markdown 正文中编写的提示词。
+If the `inject` field is omitted, it defaults to `[base, skills, memory, projectRules]`. If you fill in `inject: [none]`, only the prompt you wrote in the Markdown body is used.
 
-## 在设置中管理
+## Managing in Settings
 
-进入「设置 → 子代理」，可以按「当前项目 / 全局」分组浏览所有已识别的子代理。
+Enter "Settings → Sub-Agents" to browse all recognized sub-agents grouped by "Current Project / Global".
 
-- **新建**：点右上角的「＋」。表单里可以填名称与用途描述、选作用域（当前项目 / 全局）、从已配置的供应商中**选定模型与思考强度**、勾选工具白名单与黑名单、开关要注入的提示词片段，最后写 agent 提示词正文；
-- **编辑**：点击进入某个子代理的详情页，再点右上角的铅笔图标。修改名称会连带重命名它的定义文件；
-- **启用 / 禁用**：详情页顶部的开关。禁用后它不再出现在主会话 AI 的可派发清单里，AI 也无法再指名派发它，但定义文件保留，已在运行的子会话也不受影响；
-- **删除**：列表里左滑条目，会删掉对应的 `.md` 定义文件，不可恢复。
+- **Create**: tap the "+" at the top right. In the form you can fill in the name and purpose description, choose the scope (current project / global), **select the model and thinking intensity** from configured providers, check the tool whitelist and blacklist, toggle the prompt fragments to inject, and finally write the agent prompt body;
+- **Edit**: tap into a sub-agent's details page, then tap the pencil icon at the top right. Modifying the name also renames its definition file;
+- **Enable / Disable**: the switch at the top of the details page. Once disabled, it no longer appears in the main session AI's dispatchable list, and the AI can't dispatch it by name, but the definition file is kept, and sub-sessions already running are unaffected;
+- **Delete**: swipe an entry left in the list; this deletes the corresponding `.md` definition file, irreversibly.
 
-启停状态存在 `agents.json`，与技能的停用名单同一套约定：全局名单位于当前执行环境的 `~/.aicode/agents.json`，本地模式保存在手机 App 私有目录，远程模式保存在服务器上；两者独立，不会自动迁移或同步。项目级名单在本地模式位于 `<工作区>/.aicode/agents.json`，远程模式仍保存在手机 App 私有目录，按服务器和工作区隔离。两级取并集，任一作用域禁用即生效。
+The enable/disable state is stored in `agents.json`, using the same convention as the Skills disable list: the global list is at `~/.aicode/agents.json` of the current execution environment — in local mode stored in the app's private directory on the phone, in remote mode stored on the server; the two are independent and don't migrate or sync automatically. In local mode the project-level list is at `<workspace>/.aicode/agents.json`; in remote mode it's still stored in the app's private directory on the phone, isolated by server and workspace. The two levels are unioned — disabling in either scope takes effect.
 
-在 App 中切换启停状态后列表会刷新。本地模式下手工修改定义或名单，列表几秒内自动刷新；远程模式下不会监听服务器上的文件变化，手工修改后需退出并重新进入设置页刷新列表。
+After toggling the enable/disable state in the app, the list refreshes. In local mode, manually modifying definitions or the list refreshes automatically within a few seconds; in remote mode it doesn't watch file changes on the server, and after manual modification you need to exit and re-enter the settings page to refresh the list.
 
-## 运行机制与限制
+## Runtime Mechanics & Limitations
 
-- **并发上限**：系统最多支持 **5 个子代理同时运行**，超出时需等待已有任务完成或手动暂停；
-- **防嵌套**：子代理不能再派生下一级子代理；
-- **双向通讯**：主会话可随时向运行中或已完成的子代理追加消息（可重复发送），子代理运行中也能主动向主会话汇报或求助；消息异步送达、互不阻塞。
-- **默认模式**：子代理默认继承派发它时主会话的模式。在计划（PLAN）模式下派出的子代理同样只能只读探索，在自动（AUTO）模式下也和主会话一样不再逐次弹窗。自定义子代理可用 `mode` 字段覆盖这一默认值，例如给只读子代理固定 `mode: plan`，让它无论何时被派发都保持只读；
-- **授权管控**：子代理与主会话遵循相同的工具授权安全机制。如果子代理尝试执行写文件或系统命令，同样会触发授权确认弹窗（弹窗会清晰标明来源于哪个子代理）；
-- **你手动停止也会告知主会话**：在子会话里点停止、或直接删掉一个正在运行的子代理时，主会话会收到一条「已被手动终止」的通知（而不是执行失败），AI 不会自行重新派发；并发名额也会立即释放；
-- **生命周期**：删除父会话时，其包含的所有子代理会话将一并级联清理；
-- **定义改动的生效时机**：新增、改名或修改子代理定义后，已打开的会话仍沿用开场时的清单，**新开一个会话**才能让 AI 看到改动。
+- **Concurrency limit**: the system supports at most **5 sub-agents running simultaneously**; beyond that you need to wait for existing tasks to complete or pause them manually;
+- **Anti-nesting**: a sub-agent cannot spawn a next level of sub-agents;
+- **Two-way communication**: the main session can append messages to a running or completed sub-agent at any time (repeatable), and a running sub-agent can also proactively report to or ask the main session for help; messages are delivered asynchronously without blocking each other.
+- **Default mode**: a sub-agent inherits the main session's mode at the time of dispatch by default. A sub-agent dispatched in plan (PLAN) mode can likewise only explore read-only; in auto (AUTO) mode it also no longer pops up dialogs one by one, like the main session. A custom sub-agent can override this default with the `mode` field — e.g. fix a read-only sub-agent to `mode: plan` so it stays read-only whenever it's dispatched;
+- **Authorization control**: sub-agents follow the same tool authorization safety mechanism as the main session. If a sub-agent attempts to execute a file write or system command, it likewise triggers an authorization confirmation dialog (the dialog clearly marks which sub-agent it comes from);
+- **Your manual stop is also reported to the main session**: when you tap stop in a sub-session, or directly delete a running sub-agent, the main session receives a "manually terminated" notification (rather than an execution failure), the AI won't re-dispatch on its own, and the concurrency slot is released immediately;
+- **Lifecycle**: when a parent session is deleted, all its sub-agent sessions are cascade-cleaned along with it;
+- **When definition changes take effect**: after adding, renaming, or modifying a sub-agent definition, sessions already open still use the list from when they started; **open a new session** for the AI to see the changes.

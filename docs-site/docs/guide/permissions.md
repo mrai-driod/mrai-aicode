@@ -1,63 +1,63 @@
-# 工具授权
+# Tool Authorization
 
-AI 要执行命令、写文件之前需要你授权。本页管理已经保存下来的授权规则，入口在「设置 → 工具授权」。
+Before the AI executes commands or writes files, it needs your authorization. This page manages the authorization rules that have been saved; the entry point is "Settings → Tool Authorization".
 
-## 规则的来源
+## Where Rules Come From
 
-对话中 AI 请求调用工具时会弹出授权弹窗，你有两个选择：
+When the AI requests a tool call in conversation, an authorization dialog pops up, and you have two choices:
 
-- **始终允许**：在**当前项目**记住一条允许规则，以后符合规则的调用自动放行。规则为精准匹配（例如 `git pull`、`rm temp.log`）。如果命令里含管道、重定向、命令替换，无法被记住，只能单次放行。
-- **拒绝**：只拒绝这一次，不产生规则。
+- **Always allow**: remembers an allow rule in the **current project**; future calls matching the rule are let through automatically. Rules are exact matches (e.g. `git pull`, `rm temp.log`). If a command contains pipes, redirection, or command substitution, it can't be remembered and can only be allowed once.
+- **Deny**: denies just this once, producing no rule.
 
-另外系统有一份内置白名单：少量完全无害、只读、不派生子进程的命令（`ls`、`pwd`、`cat`、`grep`、`ps`、`top`、`git status` 等）不弹窗直接放行。
+Additionally, the system has a built-in whitelist: a small number of completely harmless, read-only commands that don't spawn subprocesses (`ls`, `pwd`, `cat`, `grep`, `ps`, `top`, `git status`, etc.) are let through without a dialog.
 
-例外：`Shizuku` 工具（以 adb shell 身份操作宿主 Android 系统）属高危，任何命令都会弹窗确认且不支持「始终允许」，也不适用内置白名单，详见 [Shizuku 工具](/guide/shizuku)。
+Exception: the `Shizuku` tool (operating the host Android system with the adb shell identity) is high-risk — any command pops up a confirmation, "Always allow" is not supported, and the built-in whitelist doesn't apply. See the [Shizuku Tool](/guide/shizuku).
 
-## 多会话并行时的授权
+## Authorization with Multiple Sessions in Parallel
 
-多个会话（含子代理）同时工作时，每个会话可以各自挂起一个授权请求，互不阻塞：
+When multiple sessions (including sub-agents) work simultaneously, each session can have its own pending authorization request without blocking each other:
 
-- 授权弹窗顶部会标注**发起该请求的会话标题**（如「会话「重构登录模块」」），可明确区分弹窗属于哪个会话。
-- 弹窗在任意会话界面都会展示，处理完自动切到下一个待授权请求。
-- 侧边栏会话列表里，**正在等待授权**的会话行左侧指示灯是**橙色常亮**（执行中是绿色脉冲）。据此可以发现被挂起等待授权的后台会话，点进去处理。
+- The top of the authorization dialog marks **the title of the session that initiated the request** (e.g. "Session 'Refactor the login module'"), so you can clearly tell which session a dialog belongs to.
+- The dialog is shown in any session's interface; after handling one, it automatically switches to the next pending authorization request.
+- In the sidebar session list, a session **waiting for authorization** has an **orange steady** indicator light on the left of its row (executing is a green pulse). This lets you spot background sessions suspended waiting for authorization and tap in to handle them.
 
-## 页面结构
+## Page Structure
 
-规则分「当前项目」和「全局」两组，点标题可折叠。
+Rules are divided into two groups, "Current Project" and "Global"; tap a title to collapse it.
 
-每条规则显示判定图标（对勾是允许，叉是禁止）、工具名、匹配范围与判定，例如 `git pull · 允许`、`整个工具 · 允许`。
+Each rule shows a verdict icon (a check mark means allow, a cross means deny), the tool name, the match scope, and the verdict — e.g. `git pull · Allowed`, `Whole tool · Allowed`.
 
-- 项目规则右侧有个加号图标，可以把这条规则**提升为全局**，对所有项目生效；提升后它从本项目列表消失。
-- 规则行左滑露出红色删除按钮。
+- The plus icon on the right of a project rule can **promote the rule to global**, effective for all projects; after promotion it disappears from this project's list.
+- Swipe a rule row left to reveal the red delete button.
 
-## 禁用安全拦截
+## Disable Safety Interception
 
-页面顶部有一项「禁用安全拦截」开关，默认关闭。
+At the top of the page there's a "Disable safety interception" switch, off by default.
 
-- 关闭（默认）：AUTO（自动）模式下仍会拦截灾难性删除——`rm` 删除根目录、系统关键目录（`/etc`、`/usr` 等）、工作区根目录或用户主目录等操作会被直接拒绝；含命令替换、子 shell、绝对路径重定向等无法静态判定、且疑似破坏性的命令（如 `rm -rf $(...)`、`cat > /etc/xxx`）同样会被拦下（无法确认删除目标）。同时，AUTO 下 `Shizuku` 工具仍会逐次弹窗确认（不会被「全放行」豁免）。这是防误删的底线。
-- 开启：AUTO 模式下连这层拦截也取消，所有命令一律放行，`Shizuku` 工具也不再弹窗。注意「Shizuku 不可记忆」不受此开关影响：BUILD 模式下它仍逐次确认、不可记忆。BUILD / PLAN 模式的安全拦截不受影响。
+- Off (default): in AUTO (auto) mode, catastrophic deletions are still intercepted — operations like `rm` deleting the root directory, critical system directories (`/etc`, `/usr`, etc.), the workspace root, or the user's home directory are rejected outright; commands containing command substitution, sub-shells, absolute-path redirection, and other things that can't be determined statically and are suspected destructive (such as `rm -rf $(...)`, `cat > /etc/xxx`) are also blocked (the deletion target can't be confirmed). At the same time, in AUTO the `Shizuku` tool still pops up a confirmation for each call (not exempted by "allow everything"). This is the bottom line against accidental deletion.
+- On: in AUTO mode even this layer of interception is removed — all commands are allowed, and the `Shizuku` tool no longer pops up. Note that "Shizuku cannot be remembered" is unaffected by this switch: in BUILD mode it still confirms each time and cannot be remembered. Safety interception in BUILD / PLAN modes is unaffected.
 
-打开开关前会弹出确认框，确认按钮带 **5 秒倒计时**，倒计时结束前不可点，避免误触。
+Before turning the switch on, a confirmation dialog pops up with a **5-second countdown** on the confirm button, which can't be tapped until the countdown ends, to avoid accidental touches.
 
-::: danger 仅在确有需要时开启
-开启后，AUTO 模式下的 `rm` 等破坏性命令不再有任何兜底。只在完全清楚风险、且确实需要时才打开。
+::: danger Only enable when truly necessary
+Once enabled, destructive commands like `rm` in AUTO mode have no fallback protection at all. Only turn it on when you fully understand the risks and truly need it.
 :::
 
-## 高危命令提权
+## Elevating High-Risk Commands
 
-非 PLAN 模式下，`rm` 删除根目录、系统关键目录（`/etc`、`/usr` 等）、工作区根目录或用户主目录等灾难性操作会被内置安全防护直接拒绝。如果 AI 判断确有必要执行，它会在调用时带上 `elevate: true` 重试——此时不再直接拒绝，而是弹窗请你**一次性授权**（弹窗标题为「高危操作提权确认」）。
+In non-PLAN modes, catastrophic operations — `rm` deleting the root directory, critical system directories (`/etc`, `/usr`, etc.), the workspace root, or the user's home directory — are rejected directly by the built-in safety guard. If the AI judges that execution is truly necessary, it retries the call with `elevate: true` — at that point it's no longer rejected outright, but a dialog asks you for **one-time authorization** (the dialog title is "High-Risk Operation Elevation Confirmation").
 
-- BUILD 与 AUTO 模式下都可用；AUTO 下会弹窗的场景有两种：灾难性删除提权确认，以及 `Shizuku` 工具调用。
-- 提权只对单次调用有效，不会生成记忆规则（「始终允许」不可用）。
-- PLAN 模式仍为硬拦截，不受提权影响。
+- Available in both BUILD and AUTO modes; in AUTO there are two scenarios that pop up a dialog: catastrophic deletion elevation confirmation, and `Shizuku` tool calls.
+- Elevation is only valid for a single call and generates no memory rule ("Always allow" is unavailable).
+- PLAN mode remains a hard interception, unaffected by elevation.
 
-## 关于「禁止」规则
+## About "Deny" Rules
 
-授权弹窗里没有「禁止」这个选项（拒绝只影响单次），所以正常使用不会产生禁止规则。
+There is no "Deny" option in the authorization dialog (denying only affects a single call), so normal use produces no deny rules.
 
-禁止规则目前只能手动编辑配置文件产生：项目规则写在 `<项目根>/.aicode/permissions.json`，全局规则写在 `~/.aicode/permissions.json`。手工编辑保存后 App 会在几秒内自动检测并刷新页面，规则立即生效。
+Deny rules currently can only be produced by manually editing the configuration file: project rules are written in `<project root>/.aicode/permissions.json`, global rules in `~/.aicode/permissions.json`. After you manually edit and save, the app automatically detects it within a few seconds and refreshes the page; the rules take effect immediately.
 
-配置文件格式：
+Configuration file format:
 
 ```json
 {
@@ -68,6 +68,6 @@ AI 要执行命令、写文件之前需要你授权。本页管理已经保存�
 }
 ```
 
-::: tip 全局禁止优先于项目允许
-`deny` 里的规则会挡掉同名的 `allow` 规则。例如全局禁止了 `Bash(rm -rf /)`，那么任何项目都不能放行这条命令。如需额外的安全兜底，可在全局 `deny` 里添加规则。
+::: tip Global deny takes precedence over project allow
+Rules in `deny` block the `allow` rules of the same name. For example, if `Bash(rm -rf /)` is globally denied, no project can allow that command. If you need an extra safety fallback, add rules to the global `deny`.
 :::

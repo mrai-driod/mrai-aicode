@@ -1,44 +1,44 @@
-# 日志与故障排查
+# Logs & Troubleshooting
 
-App 出问题时，日志是最直接的线索。「设置 → 日志」可以直接在应用内看。
+When something goes wrong with the app, logs are the most direct clue. "Settings → Logs" lets you view them right inside the app.
 
-## 应用内看日志
+## Viewing Logs in the App
 
-进去默认定位到今天的日志，页面上能做这些事：
+On entry, it positions at today's log by default. On the page you can:
 
-- **日志等级**：顶部设置行显示当前等级，点击从底部面板选择（Verbose / Debug / Info / Warn / Error / None）。遇到 bug 时建议调成 `Debug`，日常保持 `Info`。正式版默认是 `Info`，过滤掉调试噪音。
-- **切换文件**：点「日志文件」行从底部弹出日期列表，默认选中今天。
-- **搜索与复制**：关键字实时过滤，右上角一键复制当前筛选结果。
-- **彩色分级**：Verbose 灰、Debug 蓝、Info 绿、Warn 橙、Error 红。
-- **单行复制**：点任意一行复制这条完整日志（含时间、等级、来源）；长按弹菜单可以选复制范围——本条、本条及堆栈、或只要消息内容。
-- **实时滚动**：默认开启，每 3 秒自动刷新并跟随最新；关掉后停止刷新，保持你手动浏览的位置。
+- **Log level**: the settings row at the top shows the current level; tap to choose from a bottom sheet (Verbose / Debug / Info / Warn / Error / None). When hitting a bug, it's recommended to set it to `Debug`; keep `Info` for everyday use. Release builds default to `Info`, filtering out debug noise.
+- **Switch files**: tap the "Log File" row to pop up a date list from the bottom; today is selected by default.
+- **Search & copy**: keywords filter in real time; one tap at the top right copies the current filtered results.
+- **Color coding**: Verbose gray, Debug blue, Info green, Warn orange, Error red.
+- **Copy a single line**: tap any line to copy that complete log entry (including time, level, and source); long-press to open a menu to choose the copy range — this entry, this entry plus stack trace, or just the message content.
+- **Live scrolling**: on by default, auto-refreshes every 3 seconds and follows the latest; turn it off to stop refreshing and keep your manual browsing position.
 
-为了避免大日志卡顿，应用内只显示当前文件在筛选条件下的最后一部分，完整文件需到文件系统查看。
+To avoid lag from large logs, the app only shows the last portion of the current file under the filter conditions; see the complete file in the file system.
 
-## 日志文件在哪
+## Where the Log Files Are
 
 ```
 /storage/emulated/0/Android/data/com.aicode/files/logs/
 ```
 
-无需 root 权限，用手机自带的文件管理器即可打开。
+No root permission needed — just open it with the phone's built-in file manager.
 
-工作区项目文件与 AI 配置存放在应用私有目录，普通文件管理器看不到，访问方式见[文件浏览与代码编辑](/guide/files#工作区文件在手机上的位置)。
+Workspace project files and AI configuration are stored in the app's private directory, invisible to ordinary file managers; for how to access them, see [File Browsing & Code Editing](/guide/files#工作区文件在手机上的位置).
 
-## 按 MCP 名称过滤
+## Filtering by MCP Name
 
-排查 MCP 连不上的问题时，进「设置 → MCP 服务器」，编辑某个服务器后点右上角的日志按钮，会跳到日志页并自动按这个服务器名过滤（页面顶部有过滤徽章，可一键清除）。列表页右上角的日志按钮则是看全部日志。
+When troubleshooting an MCP connection problem, go to "Settings → MCP Servers", edit a server, and tap the log button at the top right — it jumps to the log page automatically filtered by that server's name (there's a filter badge at the top of the page, clearable with one tap). The log button at the top right of the list page shows all logs.
 
-## 崩溃如何处理
+## How Crashes Are Handled
 
-App 遇到未捕获的异常**不会直接闪退**，而是全屏显示一个崩溃错误页：
+When the app hits an uncaught exception, it **doesn't crash directly**; instead it shows a full-screen crash error page:
 
-- 页面展示崩溃时的版本、设备、时间和完整堆栈。
-- 点「复制错误信息」可以复制完整的崩溃报告（含堆栈和日志文件路径），直接粘贴发给开发者即可，无需自行查阅日志。
-- 可以选「重启应用」回到主界面，或者「退出应用」完全退出。
+- The page shows the version, device, time, and full stack trace at the moment of the crash.
+- Tap "Copy error info" to copy the complete crash report (including the stack trace and log file path); paste it directly to the developer — no need to dig through logs yourself.
+- You can choose "Restart app" to return to the main interface, or "Exit app" to quit completely.
 
-崩溃日志同样会落盘到上面那个 `logs/` 目录。
+Crash logs are also written to the `logs/` directory above.
 
-## 长任务切后台被中断如何处理
+## What to Do When Long Tasks Get Interrupted in the Background
 
-如果 AI 执行长任务（如编译、深度代码审查）或终端运行耗时命令时切到后台经常被杀掉，请前往「设置 → 软件权限」开启**后台运行保活**、**忽略电池优化**与**自启动管理**，详见[软件权限](/guide/app-permissions)。
+If the AI executing a long task (such as a build or deep code review) or a terminal running a time-consuming command is often killed when you switch to the background, go to "Settings → App Permissions" and enable **background run keep-alive**, **ignore battery optimization**, and **auto-start management**. See [App Permissions](/guide/app-permissions) for details.

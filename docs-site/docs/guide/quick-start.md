@@ -1,66 +1,66 @@
-# 快速上手
+# Quick Start
 
-从安装到完成第一条 AI 对话。如需先观看操作演示，参见[视频教程](/guide/video-tutorials)。
+From installation to your first AI conversation. To watch an operation demo first, see the [Video Tutorials](/guide/video-tutorials).
 
-## 系统要求
+## System Requirements
 
-- Android 8.0（API 26）及以上
-- arm64-v8a 或 x86_64 设备
+- Android 8.0 (API 26) and above
+- arm64-v8a or x86_64 device
 
-## 下载安装
+## Download & Install
 
-从 [GitHub Releases](https://github.com/jieapi/aicode/releases/latest) 下载，三个包按设备选择：
+Download from [GitHub Releases](https://github.com/jieapi/aicode/releases/latest); choose among the three packages by device:
 
-| 包名 | 适用场景 |
+| Package | Suitable scenario |
 | --- | --- |
-| `armsolo` | 真机（arm64 设备），体积最小 |
-| `x86solo` | 模拟器、Chromebook（x86_64） |
-| `universal` | 通用包，同时含两种架构，体积较大 |
+| `armsolo` | Real devices (arm64), smallest size |
+| `x86solo` | Emulators, Chromebooks (x86_64) |
+| `universal` | Universal package, contains both architectures, larger size |
 
-::: warning 架构要选对
-架构不匹配会导致内置容器无法运行。不确定时使用 `universal`。
+::: warning Choose the right architecture
+An architecture mismatch will prevent the built-in container from running. If unsure, use `universal`.
 :::
 
-推荐直接点击[文档站首页](/)的「下载 APK」，将通过加速镜像直接下载最新正式版的 `universal` 通用包（镜像不可用时自动回退至 GitHub 原链）。
+It's recommended to click "Download APK" on the [docs site home page](/) directly — it downloads the latest official `universal` package through an accelerated mirror (automatically falling back to the original GitHub link if the mirror is unavailable).
 
-## 1. 配置 AI 供应商
+## 1. Configure an AI Provider
 
-::: tip 首次启动有新手引导
-首次启动时会自动开启新手引导（1.12.0 新增），依次引导完成下面几步；也可随时点击「跳过」，或之后在「设置 → 重新运行新手引导」再次启动。
+::: tip First launch has an onboarding guide
+On first launch, an onboarding guide starts automatically (new in 1.12.0), walking you through the steps below in order; you can also tap "Skip" at any time, or start it again later in "Settings → Re-run onboarding guide".
 :::
 
-AiCode 自身不提供模型，需要先接入一个模型服务。
+AiCode doesn't provide models itself; you need to connect a model service first.
 
-1. 点主页左上角菜单按钮打开侧边栏，点底部「设置」。
-2. 进入「AI 配置 → AI 供应商」，点右上角 + 新建，在「配置」标签填写四项：
-   - **名称**：别名，例如「官方 OpenAI」。
-   - **上游格式**：`OpenAI` / `Anthropic` / `Gemini` 三选一。第三方中转站一般选 `OpenAI`。
-   - **API Key**：你的密钥，形如 `sk-xxx`。
-   - **Base URL**：API 根地址，**留空时按上游格式使用官方地址**；用第三方中转时填入中转服务的地址。
-3. 底部切到「模型」标签添加模型：
-   - 点击「拉取模型」从服务端同步可用列表，点击每行右侧的「+」逐个添加，或用右上角「全部添加」一键加入。
-   - 点击右上角 + 手动输入模型名（例如 `gpt-4o`）。中转站模型名拉取不全时使用此方式。
-   - 可选：点击模型行编辑元数据（上下文窗口、价格、图片输入与工具调用等能力开关）。
+1. Tap the menu button at the top left of the home page to open the sidebar, and tap "Settings" at the bottom.
+2. Enter "AI Configuration → AI Providers", tap + at the top right to create new, and fill in four items in the "Configuration" tab:
+   - **Name**: an alias, e.g. "Official OpenAI".
+   - **Upstream format**: one of `OpenAI` / `Anthropic` / `Gemini`. For third-party relay stations, generally choose `OpenAI`.
+   - **API Key**: your key, in the form `sk-xxx`.
+   - **Base URL**: the API root address; **when left empty, the official address for the upstream format is used**; for a third-party relay, fill in the relay service's address.
+3. Switch to the "Models" tab at the bottom to add models:
+   - Tap "Fetch Models" to sync the available list from the server; tap the "+" on the right of each row to add one by one, or use "Add All" at the top right to add them all at once.
+   - Tap + at the top right to manually enter a model name (e.g. `gpt-4o`). Use this when a relay station's model names aren't fully fetched.
+   - Optional: tap a model row to edit metadata (context window, price, and capability switches such as image input and tool calling).
 
-填完退出编辑页时会自动保存，没有单独的保存按钮。
+Exiting the edit page saves automatically; there's no separate save button.
 
-## 2. 选择模型
+## 2. Choose a Model
 
-回到聊天主页，点击输入框下方工具栏的模型按钮，在弹窗中选择刚添加的模型。顶部搜索框可以筛选，模型按供应商分组显示，点击分组标题可以折叠或展开。
+Return to the chat home page, tap the model button in the toolbar below the input box, and choose the model you just added in the dialog. The search box at the top can filter; models are displayed grouped by provider, and tapping a group title collapses or expands it.
 
-## 3. 准备执行环境
+## 3. Prepare the Execution Environment
 
-默认使用内置的本地容器，无需任何配置。第一次使用时，在主页点击进入终端，按提示完成一次初始化即可（解压系统、安装基础工具），之后 AI 就能正常执行命令。
+The built-in local container is used by default, needing no configuration. On first use, enter the terminal from the home page and follow the prompts to complete a one-time initialization (extract the system, install basic tools); after that the AI can execute commands normally.
 
-如需把远程服务器当执行后端，见[远程 SSH 模式](/guide/remote-ssh)；容器与镜像的详细设置见[容器与镜像](/guide/container)。
+To use a remote server as the execution backend, see [Remote SSH Mode](/guide/remote-ssh); for detailed container and image settings, see [Containers & Images](/guide/container).
 
-## 4. 开始对话
+## 4. Start Chatting
 
-在输入框输入内容后点击发送。输入框下方工具栏最左侧的模式按钮可以在 BUILD、PLAN、AUTO 之间切换，区别见[三种模式](/guide/modes)。
+Type content in the input box and tap send. The mode button at the far left of the toolbar below the input box can switch between BUILD, PLAN, and AUTO; for the differences see [Three Modes](/guide/modes).
 
-## 实用贴士
+## Useful Tips
 
-- 在主页空会话中选择的模型将被记录为新会话的默认模型，后续新建会话自动沿用。
-- 识图、生图与标题总结支持独立指定专属模型，详见[默认模型](/guide/default-models)。
-- AI 修改代码前会自动创建快照，支持一键安全回滚，详见[检查点与撤销](/guide/checkpoint)。
-- 执行编译等耗时任务前，建议开启[软件权限](/guide/app-permissions)中的后台运行保活，防止系统在切换后台时终止进程。
+- The model selected in an empty session on the home page is recorded as the default model for new sessions, and newly created sessions automatically use it afterwards.
+- Image recognition, image generation, and title summary support independently specified dedicated models — see [Default Models](/guide/default-models).
+- Before the AI modifies code, a snapshot is created automatically, supporting one-tap safe rollback — see [Checkpoints & Undo](/guide/checkpoint).
+- Before executing time-consuming tasks such as builds, it's recommended to enable background run keep-alive in [App Permissions](/guide/app-permissions) to prevent the system from terminating the process when you switch to the background.

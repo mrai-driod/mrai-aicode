@@ -1,39 +1,39 @@
-# 常见错误提示
+# Common Error Messages
 
-AI 请求失败或网络波动时，聊天页会先显示「正在重试 N/6」的气泡，气泡首行标注本次重试的原因；重试耗尽仍失败时，错误会以红色气泡展示。本文说明这些提示的分类含义与排查思路。
+When an AI request fails or the network fluctuates, the chat page first shows a "Retrying N/6" bubble, whose first line states the reason for this retry; when retries are exhausted and it still fails, the error is shown in a red bubble. This article explains what these messages mean by category and how to troubleshoot them.
 
-## 重试提示分类
+## Retry Message Categories
 
-请求中途断线或服务端暂时异常时，AiCode 会自动重试（最多 6 次、指数退避）。每次重试前气泡会先显示失败原因：
+When a request disconnects mid-way or the server has a temporary anomaly, AiCode automatically retries (up to 6 times, with exponential backoff). Before each retry, the bubble first shows the failure reason:
 
-| 气泡提示 | 触发条件 | 可能原因与排查 |
+| Bubble message | Trigger condition | Possible causes & troubleshooting |
 | --- | --- | --- |
-| 速率限制 (429) | 服务端返回 429 | 请求过于频繁，或套餐额度将尽。稍候自动重试即可；频繁出现请到供应商后台查看用量 |
-| 服务器负载过高 (503) | 服务端返回 503 | 模型服务或中转站负载过高，属临时故障，等待自动重试即可 |
-| 服务端错误 (5xx) | 服务端返回 500 / 502 / 504 等 | 服务端异常或网关问题，与你的配置无关，稍后重试 |
-| 连接超时 | 建立连接或等待响应超时 | 网络较慢、服务无响应，或中转站响应慢。检查网络，必要时更换网络或节点 |
-| 连接被拒绝 | 目标端口没有服务在监听 | 供应商 Base URL 填错（域名 / IP 或端口不对），或服务未启动，到「设置 → AI 供应商」核对 |
-| DNS 解析失败 | 域名解析失败 | 网络未连通，或自定义 Base URL 的域名拼写错误 |
-| 连接中断 | 连接建立后被断开、流被中断 | 网络抖动、代理不稳定或服务端主动断开。自动重试即可；反复出现请检查网络与代理设置 |
-| SSL 握手失败 | TLS 证书校验失败 | 自定义 Base URL 时确认协议（https）与证书正确，或服务端证书异常 |
-| 网络连接断开 | 其它网络层故障 | 移动网络切换、弱网环境，检查网络后手动重试 |
-| 网络异常 | 无法归类的错误 | 查看具体错误文本，仍无法解决时可附日志反馈 |
+| Rate limited (429) | Server returned 429 | Requests too frequent, or your plan quota is nearly exhausted. Just wait for the automatic retry; if it happens frequently, check usage in the provider's console |
+| Server overloaded (503) | Server returned 503 | The model service or relay station is overloaded — a temporary fault; just wait for the automatic retry |
+| Server error (5xx) | Server returned 500 / 502 / 504, etc. | A server-side anomaly or gateway problem, unrelated to your configuration; retry later |
+| Connection timed out | Establishing a connection or waiting for a response timed out | Slow network, no response from the service, or a slow relay station. Check your network; change network or node if necessary |
+| Connection refused | No service listening on the target port | The provider Base URL is wrong (domain / IP or port incorrect), or the service isn't started; verify in "Settings → AI Providers" |
+| DNS resolution failed | Domain name resolution failed | Network not connected, or the domain of a custom Base URL is misspelled |
+| Connection interrupted | Connection dropped after being established, stream interrupted | Network jitter, unstable proxy, or the server actively disconnecting. Just retry automatically; if it recurs, check network and proxy settings |
+| SSL handshake failed | TLS certificate verification failed | With a custom Base URL, confirm the protocol (https) and certificate are correct, or the server certificate is abnormal |
+| Network connection lost | Other network-layer faults | Mobile network switching, weak network environment; check your network and retry manually |
+| Network error | Unclassifiable error | Read the specific error text; if still unresolved, attach logs when sending feedback |
 
-## 常见 HTTP 错误码
+## Common HTTP Error Codes
 
-请求失败时，重试气泡和最终错误气泡会附上 HTTP 状态码。常见状态码含义如下：
+When a request fails, the retry bubble and the final error bubble include the HTTP status code. Common status codes mean the following:
 
-| 状态码 | 含义 | 可能原因 |
+| Status code | Meaning | Possible cause |
 | --- | --- | --- |
-| 401 | 鉴权失败 | API Key 错误、已过期或被吊销，到「设置 → AI 供应商」检查密钥 |
-| 403 | 权限不足 | 密钥没有该模型或接口的权限、地域限制、余额为 0 |
-| 404 | 接口不存在 | 自定义 Base URL 路径填错（如漏了 `/v1`），到供应商设置核对 |
-| 429 | 速率限制 | 请求过于频繁或额度用尽，稍候重试或升级套餐 |
-| 500 | 服务端内部错误 | 服务端临时故障，与配置无关 |
-| 502 | 网关错误 | 中转站上游不可用 |
-| 503 | 服务过载 | 服务端负载过高，稍候重试 |
-| 504 | 网关超时 | 上游响应超时 |
+| 401 | Authentication failed | API key wrong, expired, or revoked; check the key in "Settings → AI Providers" |
+| 403 | Insufficient permission | The key has no permission for that model or endpoint, regional restrictions, or zero balance |
+| 404 | Endpoint not found | Custom Base URL path is wrong (e.g. missing `/v1`); verify in provider settings |
+| 429 | Rate limited | Requests too frequent or quota exhausted; retry later or upgrade your plan |
+| 500 | Internal server error | Temporary server-side fault, unrelated to configuration |
+| 502 | Gateway error | The relay station's upstream is unavailable |
+| 503 | Service overloaded | Server load too high; retry later |
+| 504 | Gateway timeout | Upstream response timed out |
 
-## 与多 Key 切换的关系
+## Relation to Multi-Key Switching
 
-「设置 → AI 供应商」开启多 Key 后，只有**密钥本身有问题**的错误（鉴权失败、权限不足、限流、余额用尽）才会消耗失败计数并触发 Key 切换；服务器 5xx、请求超时、网络不可达等错误换 Key 也无法解决，因此不会误切换。未开启多 Key 时，限流（429）没有可切换的密钥，会像其它瞬时故障一样退避重试。详见 [AI 供应商与模型 → 多 Key](/guide/providers)。
+With multi-key enabled in "Settings → AI Providers", only errors where **the key itself is the problem** (authentication failed, insufficient permission, rate limited, balance exhausted) consume the failure count and trigger a key switch; errors like server 5xx, request timeouts, and unreachable network can't be fixed by switching keys, so they don't trigger a mistaken switch. When multi-key is not enabled, rate limiting (429) has no key to switch to and retries with backoff like other transient faults. See [AI Providers & Models → Multi-Key](/guide/providers).

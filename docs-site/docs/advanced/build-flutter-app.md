@@ -1,53 +1,53 @@
-# 在容器中编译 Flutter 应用
+# Building Flutter apps in the container
 
-在 AiCode 的 Linux 容器（PRoot）中配置 JDK、Android SDK 与 Flutter SDK 后，即可直接从源码编译 Flutter 应用的 Android APK。本文以 Debian 12 (bookworm) aarch64 为例，已在 PRoot 容器内实测通过 debug APK 的构建。
+Once the JDK, Android SDK, and Flutter SDK are set up in AiCode's Linux container (PRoot), you can build the Android APK of a Flutter app directly from source. This article uses Debian 12 (bookworm) aarch64 as the example and has been tested end-to-end inside a PRoot container, successfully building a debug APK.
 
-::: tip 支持范围
-ARM64 容器仅支持构建 **debug APK**（JIT 模式，原生支持 ARM64）。**release / profile 包无法在本地构建**：Google 仅为 Android AOT 发布 linux-x64 平台的 gen_snapshot，ARM64 宿主机上无法执行 AOT 编译。如需 release 包，请使用 GitHub Actions 等远程构建方式。
+::: tip Scope of support
+An ARM64 container only supports building **debug APKs** (JIT mode, with native ARM64 support). **release / profile packages cannot be built locally**: Google only publishes gen_snapshot for Android AOT on linux-x64, so AOT compilation can't run on an ARM64 host. If you need a release package, use a remote build such as GitHub Actions.
 :::
 
-::: tip 镜像与网络说明
-本文默认使用国内镜像进行安装与构建（下载更快、更稳）。镜像产物与官方完全等价：即使网络可直接访问 `dl.google.com` 等官方源，也无需还原为官方配置。
+::: tip Mirrors and networking
+This article uses domestic mirrors for installation and building by default (faster and more reliable downloads). Mirror artifacts are fully equivalent to the official ones: even if your network can reach official sources such as `dl.google.com` directly, there's no need to switch back to the official configuration.
 :::
 
-## 环境基线
+## Environment baseline
 
-| 项 | 值 |
+| Item | Value |
 | --- | --- |
-| 系统 | Debian GNU/Linux 12 (bookworm) aarch64（PRoot） |
-| JDK | OpenJDK 17（headless） |
-| Flutter | 3.27.4 stable（git clone 指定 tag） |
-| Dart | 3.6.2（linux-arm64） |
-| Gradle | 项目 wrapper 自带（8.3），无需系统安装 |
-| SDK | platforms android-35，build-tools 33.0.1 + 35.0.0，platform-tools |
-| aapt2 | ARM64 静态编译版（lzhiyong/android-sdk-tools） |
+| System | Debian GNU/Linux 12 (bookworm) aarch64 (PRoot) |
+| JDK | OpenJDK 17 (headless) |
+| Flutter | 3.27.4 stable (git clone at a specific tag) |
+| Dart | 3.6.2 (linux-arm64) |
+| Gradle | Provided by the project wrapper (8.3); no system install needed |
+| SDK | platforms android-35, build-tools 33.0.1 + 35.0.0, platform-tools |
+| aapt2 | ARM64 statically built version (lzhiyong/android-sdk-tools) |
 
-## 1. 安装基础依赖
+## 1. Install the basic dependencies
 
 ```bash
 apt update
 apt install -y openjdk-17-jdk-headless curl unzip zip git
 ```
 
-验证 JDK：
+Verify the JDK:
 
 ```bash
 java -version
 # openjdk version "17..."
 ```
 
-## 2. 安装 Android SDK
+## 2. Install the Android SDK
 
-默认使用国内镜像安装（下载更快、更稳）。除 sdkmanager 本体（cmdline-tools）需手工下载解压外，其余组件通过 `SDK_TEST_BASE_URL` 环境变量覆盖 sdkmanager 的默认仓库根 URL（需以 `/` 结尾，镜像需提供 `repository2-3.xml`），一条命令全部装完（`--list` 与 `--install` 均已实测可用）：
+By default this uses a domestic mirror for installation (faster and more reliable downloads). Except for sdkmanager itself (cmdline-tools), which has to be downloaded and unpacked manually, all components are installed with a single command by overriding sdkmanager's default repository root URL with the `SDK_TEST_BASE_URL` environment variable (it must end with `/`, and the mirror must provide `repository2-3.xml`); both `--list` and `--install` have been tested and work:
 
 ```bash
-# 唯一手工步骤：获取 sdkmanager 本体（从镜像下载）
+# The only manual step: get sdkmanager itself (download from the mirror)
 mkdir -p ~/android/sdk && cd ~/android/sdk
 curl -fL -C - -o clt.zip https://mirrors.cloud.tencent.com/AndroidSDK/commandlinetools-linux-13114758_latest.zip
 unzip -q clt.zip
 mkdir -p cmdline-tools/latest && mv cmdline-tools/* cmdline-tools/latest/
 
-# 组件全部走镜像安装（自动处理目录布局与许可接受）
+# Install all components from the mirror (directory layout and license acceptance handled automatically)
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
 export ANDROID_HOME=$HOME/android/sdk
 export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
@@ -56,17 +56,17 @@ export SDK_TEST_BASE_URL=https://mirrors.cloud.tencent.com/AndroidSDK/
 yes | sdkmanager --install "platforms;android-35" "build-tools;33.0.1" "build-tools;35.0.0" "platform-tools"
 ```
 
-::: tip 版本说明
-Flutter 3.27 模板的 `compileSdk` 为 35（需要 `platforms;android-35`），`buildToolsVersion` 默认值为 **33.0.1**（缺失时会报 `Failed to find Build Tools revision 33.0.1`）。build-tools 35.0.0 用于第 5 节的 aapt2 override，可选但建议安装。
+::: tip Choosing versions
+The Flutter 3.27 template has `compileSdk` 35 (needs `platforms;android-35`), and the default `buildToolsVersion` is **33.0.1** (if it's missing you'll get `Failed to find Build Tools revision 33.0.1`). build-tools 35.0.0 is used for the aapt2 override in section 5 — optional but recommended.
 :::
 
-::: tip 镜像与官方源
-`SDK_TEST_BASE_URL` 虽为测试用途的环境变量（非官方文档化的常规配置），但已被镜像方案广泛使用。镜像安装的 SDK 与官方安装完全等价：即使网络可直接访问 `dl.google.com`，也无需还原为官方流程。若该方式在特定场景下失效，可改用官方源（见下）或手工组装。
+::: tip Mirrors vs. the official source
+Although `SDK_TEST_BASE_URL` is an environment variable meant for testing (not a documented regular configuration), it is widely used by mirror setups. An SDK installed from a mirror is fully equivalent to an official installation: even if your network can reach `dl.google.com` directly, there's no need to switch back to the official flow. If this approach fails in a specific scenario, you can switch to the official source (below) or assemble the SDK manually.
 :::
 
-### 可选：官方源安装
+### Optional: install from the official source
 
-若网络可直连 `dl.google.com`，也可使用官方标准流程：
+If your network can reach `dl.google.com` directly, you can also use the official standard flow:
 
 ```bash
 mkdir -p ~/android/sdk && cd ~/android/sdk
@@ -81,11 +81,11 @@ export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 yes | sdkmanager --install "platforms;android-35" "build-tools;33.0.1" "build-tools;35.0.0" "platform-tools"
 ```
 
-### 备选：从镜像手工组装 SDK
+### Alternative: assemble the SDK manually from the mirror
 
-若 `SDK_TEST_BASE_URL` 方式不可用，可从腾讯云镜像下载组件 zip 手工组装，最终得到 `build-tools/`、`platforms/`、`platform-tools/`、`cmdline-tools/` 四个目录，效果与 sdkmanager 一致：
+If the `SDK_TEST_BASE_URL` approach doesn't work, you can download the component zips from the Tencent Cloud mirror and assemble them manually. The result is `build-tools/`, `platforms/`, `platform-tools/`, and `cmdline-tools/` directories, with the same effect as sdkmanager:
 
-| 组件 | 镜像地址 |
+| Component | Mirror URL |
 | --- | --- |
 | commandlinetools | `https://mirrors.cloud.tencent.com/AndroidSDK/commandlinetools-linux-13114758_latest.zip` |
 | platform-35 | `https://mirrors.cloud.tencent.com/AndroidSDK/platform-35_r02.zip` |
@@ -93,67 +93,67 @@ yes | sdkmanager --install "platforms;android-35" "build-tools;33.0.1" "build-to
 | build-tools 35.0.0 | `https://mirrors.cloud.tencent.com/AndroidSDK/build-tools_r35_linux.zip` |
 | platform-tools | `https://mirrors.cloud.tencent.com/AndroidSDK/platform-tools_r35.0.2-linux.zip` |
 
-镜像下载大文件时易发生连接中断，建议使用 `curl -fL -C -` 断点续传并配合循环重试。目录组装：
+When downloading large files from a mirror, connections are prone to dropping; use `curl -fL -C -` for resumable downloads together with a retry loop. Assemble the directories:
 
 ```bash
 cd ~/android/sdk
-# cmdline-tools：解压出 cmdline-tools/，重命名为 latest
-unzip clt.zip && mv cmdline-tools cmdline-tools/latest   # 实际解压布局以 zip 为准
-# platform-35：解压出 android-35/，移入 platforms/
+# cmdline-tools: unpacks to cmdline-tools/, rename it to latest
+unzip clt.zip && mv cmdline-tools cmdline-tools/latest   # The actual unpacked layout depends on the zip
+# platform-35: unpacks to android-35/, move it into platforms/
 mkdir -p platforms && mv android-35 platforms/android-35
-# build-tools：zip 解压出 android-13/（33.0.1）或 android-15/（35.0.0），移入对应版本目录
+# build-tools: the zip unpacks to android-13/ (33.0.1) or android-15/ (35.0.0); move them into the matching version directories
 mkdir -p build-tools/33.0.1 build-tools/35.0.0
 mv android-13/* build-tools/33.0.1/ && mv android-15/* build-tools/35.0.0/
-# platform-tools：解压即得 platform-tools/，无需移动
+# platform-tools: unpacks directly to platform-tools/, no moving needed
 ```
 
-## 3. 替换 ARM64 原生二进制
+## 3. Replace the native binaries with ARM64 builds
 
-Google 官方的 `aapt2`、`aidl`、`zipalign`、`adb` 等工具为 x86_64 架构编译，无法在 aarch64 上执行（属架构限制，与网络无关），必须替换为社区提供的 ARM64 静态编译版。从 `https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip` 下载；下载缓慢或失败时，可在原链接前加 GitHub 代理前缀：`https://gh-proxy.com/https://github.com/...`
+Google's official tools such as `aapt2`, `aidl`, `zipalign`, and `adb` are built for the x86_64 architecture and can't run on aarch64 (an architecture limitation, unrelated to networking), so they must be replaced with the community-provided ARM64 static builds. Download from `https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip`; if the download is slow or fails, prepend a GitHub proxy prefix to the original link: `https://gh-proxy.com/https://github.com/...`
 
 ```bash
 curl -L -O https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip
 unzip android-sdk-tools-static-aarch64.zip -d ~/armtools35
-# 覆盖 build-tools（33.0.1 与 35.0.0 两个目录）与 platform-tools
+# Overwrite build-tools (both the 33.0.1 and 35.0.0 directories) and platform-tools
 cp -p ~/armtools35/build-tools/* ~/android/sdk/build-tools/35.0.0/
 cp -p ~/armtools35/build-tools/* ~/android/sdk/build-tools/33.0.1/
 cp -p ~/armtools35/platform-tools/* ~/android/sdk/platform-tools/
 chmod +x ~/android/sdk/build-tools/*/* ~/android/sdk/platform-tools/*
 ```
 
-验证：
+Verify:
 
 ```bash
-~/android/sdk/build-tools/35.0.0/aapt2 version   # 能输出版本号即正常
-~/android/sdk/build-tools/35.0.0/zipalign        # 有 usage 输出即正常
+~/android/sdk/build-tools/35.0.0/aapt2 version   # Normal if it prints a version number
+~/android/sdk/build-tools/35.0.0/zipalign        # Normal if it prints usage output
 ```
 
-## 4. 安装 Flutter SDK
+## 4. Install the Flutter SDK
 
-使用 git 克隆指定 tag：
+Clone the specified tag with git:
 
 ```bash
 git clone --depth 1 --branch 3.27.4 https://github.com/flutter/flutter.git ~/.local/flutter-3.27.4
 export PATH=$PATH:~/.local/flutter-3.27.4/bin
 
-flutter --version   # 首次运行会自动下载 dart-sdk 与引擎产物
+flutter --version   # The first run automatically downloads the dart-sdk and engine artifacts
 ```
 
-::: tip PRoot 下 dart-sdk 安装缓慢的处理
-首次运行 `flutter --version` 会自动下载 dart-sdk（约 210MB）并解压。PRoot 环境下该步骤可能长时间无响应（下载慢、解压慢、锁等待）。如遇卡住，可手动完成安装以绕开自动引导：
+::: tip Handling a slow dart-sdk install under PRoot
+The first run of `flutter --version` automatically downloads the dart-sdk (about 210MB) and unpacks it. Under PRoot this step may sit unresponsive for a long time (slow download, slow unpacking, lock waits). If it gets stuck, complete the installation manually to bypass the automatic bootstrap:
 
 ```bash
 cd ~/.local/flutter-3.27.4/bin/cache
-EV=$(cat ../internal/engine.version)     # 如 82bd5b7209295a5b7ff8cae0df96e7870171e3a5
+EV=$(cat ../internal/engine.version)     # e.g. 82bd5b7209295a5b7ff8cae0df96e7870171e3a5
 curl -fL -o dart-sdk-linux-arm64.zip \
   "https://storage.flutter-io.cn/flutter_infra_release/flutter/$EV/dart-sdk-linux-arm64.zip"
-# 网络可达时亦可改用官方源：https://storage.googleapis.com/flutter_infra_release/flutter/$EV/dart-sdk-linux-arm64.zip
-unzip -q dart-sdk-linux-arm64.zip -d .   # 解压出 dart-sdk/
+# When the network allows it, you can use the official source instead: https://storage.googleapis.com/flutter_infra_release/flutter/$EV/dart-sdk-linux-arm64.zip
+unzip -q dart-sdk-linux-arm64.zip -d .   # Unpacks to dart-sdk/
 rm -f dart-sdk-linux-arm64.zip
-echo "$EV" > engine-dart-sdk.stamp       # 写入 stamp，flutter 将跳过自动下载
+echo "$EV" > engine-dart-sdk.stamp       # Write the stamp and flutter will skip the automatic download
 ```
 
-验证：
+Verify:
 
 ```bash
 ~/.local/flutter-3.27.4/bin/cache/dart-sdk/bin/dart --version
@@ -161,117 +161,117 @@ echo "$EV" > engine-dart-sdk.stamp       # 写入 stamp，flutter 将跳过自�
 ```
 :::
 
-## 5. 配置
+## 5. Configure
 
 ### local.properties
 
-`flutter create` 会自动生成（含 `sdk.dir` 与 `flutter.sdk`），无需手写，确认内容正确即可：
+`flutter create` generates this automatically (including `sdk.dir` and `flutter.sdk`), so there's no need to write it by hand — just confirm the contents are correct:
 
 ```bash
-cat ~/workspace/<项目>/android/local.properties
+cat ~/workspace/<project>/android/local.properties
 # sdk.dir=/root/android/sdk
 # flutter.sdk=/root/.local/flutter-3.27.4
 ```
 
-### 全局 Gradle 配置
+### Global Gradle configuration
 
-aapt2 覆盖配置应写入全局文件，不要写进项目的 `gradle.properties`：
+The aapt2 override should be written to the global file, not into the project's `gradle.properties`:
 
 ```bash
 mkdir -p ~/.gradle
 echo "android.aapt2FromMavenOverride=/root/android/sdk/build-tools/35.0.0/aapt2" > ~/.gradle/gradle.properties
 ```
 
-容器可用内存约 4G，项目 `android/gradle.properties` 默认 `-Xmx4G` 可能触发 OOM，建议调低：
+The container has about 4G of memory available, and the project `android/gradle.properties` default of `-Xmx4G` can trigger an OOM, so lowering it is recommended:
 
 ```properties
 org.gradle.jvmargs=-Xmx2G -XX:MaxMetaspaceSize=1G -XX:+HeapDumpOnOutOfMemoryError
 ```
 
-### 镜像配置（默认）
+### Mirror configuration (default)
 
-gradle 解析依赖时若仓库列表包含 `google()`（指向 dl.google.com），网络不可达时会因连接超时长时间挂起。默认推荐直接使用镜像仓库（构建更快），即使网络可直连官方源也无需还原以下配置：
+When Gradle resolves dependencies, if the repository list contains `google()` (pointing at dl.google.com) and the network can't reach it, the build will hang for a long time on connection timeouts. The recommended default is to use mirror repositories directly (builds are faster), and even if the network can reach the official sources there's no need to revert the following configuration:
 
-1. **Gradle wrapper 镜像**：项目 `android/gradle/wrapper/gradle-wrapper.properties` 的 `distributionUrl` 默认指向 `services.gradle.org`，可改为国内镜像：
+1. **Gradle wrapper mirror**: the `distributionUrl` in the project's `android/gradle/wrapper/gradle-wrapper.properties` points at `services.gradle.org` by default; change it to a domestic mirror:
 
 ```
 distributionUrl=https\://mirrors.huaweicloud.com/gradle/gradle-8.3-all.zip
 ```
 
-2. **依赖仓库镜像**：所有 repositories 移除 `google()` / `mavenCentral()` / `gradlePluginPortal()`，仅保留阿里云镜像：
+2. **Dependency repository mirrors**: remove `google()` / `mavenCentral()` / `gradlePluginPortal()` from all repositories and keep only the Aliyun mirrors:
 
 ```groovy
 maven { url 'https://maven.aliyun.com/repository/google' }
 maven { url 'https://maven.aliyun.com/repository/central' }
-maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }   // 插件仓库需要时添加
+maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }   // Add when the plugin repository is needed
 ```
 
-需要修改的位置共 5 处：
+There are 5 places that need changing in total:
 
-| 文件 | 说明 |
+| File | Description |
 | --- | --- |
-| 项目 `android/settings.gradle` | pluginManagement.repositories |
-| 项目 `android/build.gradle` | allprojects.repositories |
-| `flutter SDK/packages/flutter_tools/gradle/settings.gradle.kts` | :gradle 子项目仓库（不修改时 AGP 7.3.0 将连接 dl.google.com） |
-| `flutter SDK/packages/flutter_tools/gradle/resolve_dependencies.gradle` | 依赖预解析 |
-| `flutter SDK/packages/flutter_tools/gradle/src/main/kotlin/dependency_version_checker.gradle.kts` | 版本检查 buildscript |
+| Project `android/settings.gradle` | pluginManagement.repositories |
+| Project `android/build.gradle` | allprojects.repositories |
+| `flutter SDK/packages/flutter_tools/gradle/settings.gradle.kts` | The :gradle subproject repositories (without this change, AGP 7.3.0 will connect to dl.google.com) |
+| `flutter SDK/packages/flutter_tools/gradle/resolve_dependencies.gradle` | Dependency pre-resolution |
+| `flutter SDK/packages/flutter_tools/gradle/src/main/kotlin/dependency_version_checker.gradle.kts` | Version-check buildscript |
 
-::: warning 注意
-flutter 引擎产物仓库（`download.flutter.io`）由 flutter 插件自动注入，其地址基于 `FLUTTER_STORAGE_BASE_URL` 拼接，请勿删除。上述 5 处仅需处理 google/mavenCentral 相关条目。SDK 内文件在 flutter 升级后会被覆盖，需重新修改。
+::: warning Note
+The Flutter engine artifact repository (`download.flutter.io`) is injected automatically by the Flutter plugin, and its URL is built from `FLUTTER_STORAGE_BASE_URL` — do not delete it. Of the 5 places above, only the google/mavenCentral entries need handling. Files inside the SDK are overwritten when Flutter is upgraded, so the changes must be reapplied.
 :::
 
-3. **引擎产物与依赖下载源**：构建时设置环境变量，使 flutter 的 dart-sdk、引擎产物与 pub 包改走中国镜像或官方源：
+3. **Engine artifacts and dependency download sources**: set environment variables at build time so Flutter's dart-sdk, engine artifacts, and pub packages go through the Chinese mirror or the official source:
 
 ```bash
-export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn   # 引擎产物等走中国镜像
-unset PUB_HOSTED_URL    # 使用官方 pub.dev（一般可直连）；pub.flutter-io.cn 曾出现 content-hash 校验失败的案例
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn   # Engine artifacts etc. via the Chinese mirror
+unset PUB_HOSTED_URL    # Use the official pub.dev (generally reachable directly); pub.flutter-io.cn has had cases of content-hash verification failures
 ```
 
-## 6. 编译
+## 6. Build
 
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
 export PATH=$PATH:~/.local/flutter-3.27.4/bin
-export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn   # 引擎产物等走中国镜像（默认推荐）
-unset PUB_HOSTED_URL    # 使用官方 pub.dev（默认推荐，可直连）
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn   # Engine artifacts etc. via the Chinese mirror (recommended default)
+unset PUB_HOSTED_URL    # Use the official pub.dev (recommended default, reachable directly)
 
-cd ~/workspace/<项目>
+cd ~/workspace/<project>
 flutter build apk --debug --target-platform android-arm64
 ```
 
-上方环境变量为默认推荐配置（第 5 节已说明），网络可达官方源时也可保留，无需还原。
+The environment variables above are the recommended default configuration (explained in section 5). If the network can reach the official sources, you can keep them as-is too — no need to revert.
 
-首次构建约 3~10 分钟（下载 Gradle 发行版、依赖并编译，视网络而定），后续增量构建约 1~2 分钟。Gradle daemon 在 PRoot 下可正常工作；若 daemon 异常退出导致锁文件冲突，可加 `--no-daemon` 或删除 `~/.gradle/caches/*.lock`。
+The first build takes about 3–10 minutes (downloading the Gradle distribution and dependencies and compiling, depending on the network); incremental builds afterwards take about 1–2 minutes. The Gradle daemon works normally under PRoot; if the daemon exits abnormally and causes lock file conflicts, add `--no-daemon` or delete `~/.gradle/caches/*.lock`.
 
-构建成功后 APK 输出：
+On success, the APK is output to:
 
 ```
 build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-可使用 `aapt2 dump badging` 验证：
+You can verify it with `aapt2 dump badging`:
 
 ```bash
 ~/android/sdk/build-tools/35.0.0/aapt2 dump badging build/app/outputs/flutter-apk/app-debug.apk | head -3
 ```
 
-## 常见问题
+## Troubleshooting
 
-| 现象 | 原因 | 解决 |
+| Symptom | Cause | Fix |
 | --- | --- | --- |
-| `Connect to dl.google.com timed out`（长时间挂起） | 仓库包含 `google()`/`mavenCentral()` 且 dl.google.com 不可达 | 按第 5 节使用镜像仓库（默认配置） |
-| `Could not resolve io.flutter:flutter_embedding_debug` | 同上，flutter 引擎依赖解析时访问 dl.google.com | 同上 |
-| `Failed to find Build Tools revision 33.0.1` | Flutter 模板默认 buildTools 33.0.1，SDK 缺少该版本 | 补装 `build-tools;33.0.1`（并替换 ARM64 二进制） |
-| `aapt2 ... cannot execute binary / syntax error` | 使用了 x86 版 aapt2 | 确认 `~/.gradle/gradle.properties` 的 `aapt2FromMavenOverride` 指向 ARM64 版 |
-| flutter 引导下载 dart-sdk 长时间无响应 / 反复锁等待 | PRoot 下自动下载与解压不稳定 | 按第 4 节手动安装 dart-sdk 并写入 stamp |
-| `Downloaded archive for xxx had wrong content-hash`（pub 反复重试） | pub 镜像返回损坏包 | `unset PUB_HOSTED_URL` 改用官方 pub.dev，并清空 `~/.pub-cache` |
-| `flutter doctor` Android toolchain 检查超时 | doctor 内部通过 sdkmanager 联网验证 dl.google.com | dl.google.com 不可达时属正常现象，不影响构建 |
-| Gradle 锁文件冲突 | 上次构建未正常退出 | 删除 `~/.gradle/caches/*.lock` 或加 `--no-daemon` |
-| 构建命令接管道后看不到进度 | `\| tail` 缓冲输出 | 直接运行构建命令，勿接 tail；失败信息在前 1~3 分钟的依赖解析阶段即可见 |
+| `Connect to dl.google.com timed out` (hangs for a long time) | The repositories contain `google()`/`mavenCentral()` and dl.google.com is unreachable | Use mirror repositories as in section 5 (the default configuration) |
+| `Could not resolve io.flutter:flutter_embedding_debug` | Same as above: engine dependency resolution reaches for dl.google.com | Same as above |
+| `Failed to find Build Tools revision 33.0.1` | The Flutter template defaults to buildTools 33.0.1, and the SDK lacks that version | Install `build-tools;33.0.1` (and replace the ARM64 binaries) |
+| `aapt2 ... cannot execute binary / syntax error` | Using the x86 build of aapt2 | Make sure `aapt2FromMavenOverride` in `~/.gradle/gradle.properties` points to the ARM64 build |
+| Flutter bootstrap download of the dart-sdk unresponsive for a long time / repeated lock waits | Automatic download and unpacking are unstable under PRoot | Install the dart-sdk manually as in section 4 and write the stamp |
+| `Downloaded archive for xxx had wrong content-hash` (pub retries repeatedly) | The pub mirror returned a corrupted package | `unset PUB_HOSTED_URL` to use the official pub.dev, and clear `~/.pub-cache` |
+| `flutter doctor` Android toolchain check times out | The doctor verifies dl.google.com online via sdkmanager internally | This is normal when dl.google.com is unreachable and doesn't affect building |
+| Gradle lock file conflict | The last build didn't exit cleanly | Delete `~/.gradle/caches/*.lock` or add `--no-daemon` |
+| No build progress visible when the command is piped | `\| tail` buffers the output | Run the build command directly, don't pipe to tail; failure details are visible in the first 1–3 minutes during dependency resolution |
 
-## 限制与提示
+## Limitations and tips
 
-- **release/profile 无法在 ARM64 构建**：Android AOT 的 gen_snapshot 仅有 linux-x64 版。如需 release 包，请使用 GitHub Actions（在 x64 上执行 `flutter build apk --release`）或其它远程构建方式。
-- 模板 `flutter create` 的 `compileSdk=35`、`buildToolsVersion=33.0.1`，修改模板前请先确认对应 SDK 组件已安装。
-- PRoot 下大量小文件的解压（如 dart-sdk、依赖缓存）速度偏慢属正常现象，请勿误判为卡死。
-- 若依赖解析持续失败，可先单独 `curl -sI` 验证对应仓库 URL 的可达性，再检查仓库顺序。
+- **release/profile can't be built on ARM64**: gen_snapshot for Android AOT only exists in a linux-x64 build. If you need a release package, use GitHub Actions (run `flutter build apk --release` on x64) or another remote build method.
+- The `flutter create` template uses `compileSdk=35` and `buildToolsVersion=33.0.1`; before modifying the template, confirm the corresponding SDK components are installed.
+- Under PRoot, unpacking large numbers of small files (such as the dart-sdk and dependency caches) is slow — that's normal, don't mistake it for a hang.
+- If dependency resolution keeps failing, first verify the reachability of the repository URL with `curl -sI`, then check the repository order.

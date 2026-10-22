@@ -1,60 +1,60 @@
-# 存储空间
+# Storage Space
 
-「设置 → 存储空间」按类别展示 AiCode 在这台设备上占用的空间，并提供清理临时数据的入口。
+"Settings → Storage Space" shows, by category, the space AiCode occupies on this device, and provides an entry point for cleaning temporary data.
 
-## 总览
+## Overview
 
-页面顶部是应用总占用、构成条与设备剩余空间。构成条的整条宽度代表应用总占用，颜色与下方各分类的色点一一对应。页面底部固定显示「清理选中项」按钮及选中数据的大小，滚动列表时仍可操作。
+At the top of the page are the app's total usage, a composition bar, and the device's remaining space. The full width of the composition bar represents the app's total usage, and its colors correspond one-to-one with the color dots of the categories below. A "Clean Selected" button and the size of the selected data are fixed at the bottom of the page, operable while scrolling the list.
 
-统计需要逐个目录遍历文件，容器与工作区通常最慢。为了不让页面一直空着，各分类算完一个就显示一个，尚未算出的显示「—」，顶部会有「统计中…」提示。如需重新统计，点击右上角的刷新图标。
+Computing the statistics requires traversing files directory by directory, and the container and workspaces are usually the slowest. To keep the page from sitting empty, each category is displayed as soon as it's computed; categories not yet computed show "—", and a "Computing…" hint appears at the top. To recompute, tap the refresh icon at the top right.
 
-## 占用明细
+## Usage Details
 
-| 分类 | 包含什么 |
+| Category | What's included |
 | --- | --- |
-| 聊天记录 | 数据库文件：会话、消息、工具结果、调用记录、检查点索引 |
-| 容器 | 各容器的根文件系统。展开可看到每个容器，以及占用最大的那个容器中最大的几个目录 |
-| 容器镜像包 | 下载或导入的镜像压缩包。容器装好后它不再是必需品，但删掉后该容器无法再次解压 |
-| 工作区 | 应用内置工作区里的项目文件（含 `.git`）。展开可看每个项目，副标题标出其中的聊天附件 |
-| AI 配置与产物 | 技能、记忆、子代理、MCP 配置、提示词、文档，以及工具输出存档与识图会话缓存 |
-| 检查点 | AI 修改文件前留下的快照，用于撤销 |
-| 日志 | 应用运行日志与 AI 请求日志 |
-| 缓存 | 系统缓存目录，随时可清 |
-| 其他数据 | 设置项、背景图、终端字体、SSH 私钥等零散数据 |
-| 应用安装包 | APK 本体，不可清理 |
+| Chat history | Database files: sessions, messages, tool results, call records, checkpoint index |
+| Container | The root file system of each container. Expand to see each container, and the largest few directories in the largest container |
+| Container image packages | Downloaded or imported image archives. Once the container is installed it's no longer essential, but without it the container can't be extracted again |
+| Workspaces | Project files in the app's built-in workspaces (including `.git`). Expand to see each project; the subtitle marks the chat attachments among them |
+| AI configuration & output | Skills, memory, sub-agents, MCP configuration, prompts, docs, as well as tool output archives and image recognition session cache |
+| Checkpoints | Snapshots left before the AI modifies files, used for undo |
+| Logs | App runtime logs and AI request logs |
+| Cache | The system cache directory, clearable at any time |
+| Other data | Scattered data such as settings items, background images, terminal fonts, SSH private keys |
+| App installation package | The APK itself, not cleanable |
 
-名称旁带箭头的分类点击即可展开明细。「AI 配置与产物」仅展开显示可清理的工具输出存档与识图会话缓存；技能、记忆、提示词等不可清理内容不再逐项显示，但仍计入该分类的总占用。因此，展开的可清理子项之和可能小于分类总大小。
+Categories with an arrow next to the name can be tapped to expand the details. "AI configuration & output" only expands to show the cleanable tool output archives and image recognition session cache; non-cleanable content such as Skills, memory, and prompts is no longer displayed item by item, but still counts toward that category's total usage. Therefore, the sum of the expandable cleanable sub-items may be smaller than the category's total size.
 
-::: tip 哪些不计入
-通过「添加本地目录」加进来的外部工作区在你设备的共享存储里，不属于应用占用，因此不统计。远程 SSH 模式下服务器上的文件同理。
+::: tip What doesn't count
+External workspaces added via "Add local directory" live in your device's shared storage and don't belong to the app's usage, so they aren't counted. The same applies to files on the server in remote SSH mode.
 :::
 
-聊天记录的展开明细列出占用最大的几个会话。它是按消息正文估算的字节数，比数据库文件本身小——数据库还包含索引与页对齐开销。如需减小这一项，去会话列表删掉不再需要的会话；若只想清除调用记录，在「Token 统计」页右上角重置。
+The expanded details of chat history list the sessions taking the most space. The sizes are estimated from message body bytes and are smaller than the database file itself — the database also includes indexes and page alignment overhead. To reduce this item, go to the session list and delete sessions you no longer need; if you only want to clear call records, reset at the top right of the "Token Stats" page.
 
-容器和工作区不能在这里删除，请到「容器与镜像」页重置或删除容器、在工作区切换面板里删除工作区，避免误删正在使用的环境。删除工作区会连同该工作区的聊天记录一并删除；外部本地工作区是否删除聊天记录，由「偏好设置」中的开关决定。
+Containers and workspaces can't be deleted here — go to the "Containers & Images" page to reset or delete a container, and delete workspaces in the workspace switching panel, to avoid accidentally deleting an environment in use. Deleting a workspace also deletes that workspace's chat history together with it; whether an external local workspace's chat history is deleted is decided by the switch in "Preferences".
 
-## 可释放空间
+## Releasable Space
 
-清理入口与占用明细放在一起，不再单独列出一组。可清理的四项如下，均不含聊天记录、代码或配置，但部分清理会影响历史内容的回看或追问：
+The clean entry points are placed together with the usage details, no longer listed as a separate group. The four cleanable items are as follows; none include chat history, code, or configuration, but some cleaning affects reviewing or following up on historical content:
 
-- **缓存文件**：勾选「缓存」分类。临时文件之后会自动重建。
-- **运行日志**：勾选「日志」分类。包含应用日志与 AI 请求日志，清空后新日志照常记录；点击分类仍可展开查看两类日志的占用。
-- **工具输出存档**：展开「AI 配置与产物」，勾选对应明细。AI 工具输出过长时会落盘一份完整副本。清除后，历史消息里提到的输出路径不再可读取。
-- **识图会话缓存**：展开「AI 配置与产物」，勾选对应明细。这是识图追问用的历史记录，清除后无法再对旧图片继续追问；这两项只在有占用时显示。
+- **Cache files**: check the "Cache" category. Temporary files are rebuilt automatically afterwards.
+- **Runtime logs**: check the "Logs" category. Includes app logs and AI request logs; after clearing, new logs are recorded as usual. Tapping the category still expands to view the usage of the two log types.
+- **Tool output archives**: expand "AI configuration & output" and check the corresponding detail item. When AI tool output is too long, a complete copy is saved to disk. After clearing, output paths mentioned in historical messages are no longer readable.
+- **Image recognition session cache**: expand "AI configuration & output" and check the corresponding detail item. This is the history used for image recognition follow-ups; after clearing, you can no longer follow up on old images. These two items only appear when they have usage.
 
-日志与缓存默认选中，工具输出与识图缓存默认不选。勾选后，底部按钮会更新选中项的合计大小；折叠分类不会取消选择。没有占用的项不可勾选，没有选中可清理数据时按钮不可点击。
+Logs and cache are selected by default; tool output and image recognition cache are not selected by default. After checking, the bottom button updates the combined size of the selected items; collapsing a category doesn't cancel the selection. Items with no usage can't be checked, and when no cleanable data is selected the button can't be tapped.
 
-点击「清理选中项」后，确认框会列出清理目标、合计大小与各项影响。确认后仅清理这些选中项，完成后页面会自动重新统计，并显示本次释放了多少空间。
+After tapping "Clean Selected", a confirmation dialog lists the cleaning targets, combined size, and each item's impact. After confirming, only these selected items are cleaned; when done, the page automatically recomputes the statistics and shows how much space this cleaning released.
 
-清理范围是本机应用缓存、日志和全局目录中的数据，工具输出与识图缓存可能由多个工作区产生，不限当前工作区。不会清理各工作区自己的文件、附件、构建缓存或远程服务器数据。
+The cleaning scope is data in the local app cache, logs, and global directories; tool output and image recognition cache may be produced by multiple workspaces and aren't limited to the current workspace. It won't clean each workspace's own files, attachments, build cache, or remote server data.
 
-::: warning 清理不可撤销
-删除的文件无法恢复。虽然这些项不含聊天记录、代码或配置，但旧工具输出副本与识图会话历史无法通过重新使用恢复。
+::: warning Cleaning is irreversible
+Deleted files can't be recovered. Although these items contain no chat history, code, or configuration, old tool output copies and image recognition session history can't be restored by using the app again.
 :::
 
-## 占用偏大时如何处理
+## How to Handle Excessive Usage
 
-- **容器几个 G**：容器里的包管理器缓存通常是大头（如 Gradle、npm、pip 的缓存目录）。展开容器分类查看哪个目录最大，然后在终端里清理，例如 `rm -rf ~/.gradle/caches`。不再使用的容器可以在「容器与镜像」页删除。
-- **工作区偏大**：`node_modules`、`build`、`.gradle` 这类构建产物占大部分，删除后重新构建即可恢复。
-- **聊天记录偏大**：长会话里的工具输出最占空间，删掉早期不需要的会话即可。
-- **镜像包还在**：容器已经装好后，可在「容器与镜像 → 下载镜像」页删掉对应的下载文件。
+- **Container taking several GB**: the package manager cache inside the container is usually the bulk of it (cache directories of Gradle, npm, pip, etc.). Expand the container category to see which directory is largest, then clean it in the terminal, e.g. `rm -rf ~/.gradle/caches`. Containers no longer in use can be deleted on the "Containers & Images" page.
+- **Workspace too large**: build products like `node_modules`, `build`, `.gradle` take up the majority; deleting them and rebuilding restores them.
+- **Chat history too large**: tool output in long sessions takes the most space; just delete early sessions you no longer need.
+- **Image package still there**: after the container is installed, you can delete the corresponding download file on the "Containers & Images → Download Image" page.

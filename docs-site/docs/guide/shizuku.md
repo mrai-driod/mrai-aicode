@@ -1,43 +1,43 @@
-# Shizuku 工具
+# Shizuku Tool
 
-Shizuku 让普通应用在**不 root** 的前提下，以 adb shell（uid 2000）身份执行命令。AiCode 接入后，AI 获得一个名为 `Shizuku` 的工具，可直接在手机系统上运行 `pm`、`am`、`cmd` 等命令、读写 `/sdcard`，弥补本地容器（PRoot）拿不到系统权限的短板。
+Shizuku lets ordinary apps execute commands with the adb shell (uid 2000) identity **without root**. After AiCode integrates it, the AI gets a tool named `Shizuku`, which can run `pm`, `am`, `cmd` and other commands directly on the phone system and read/write `/sdcard`, making up for the local container (PRoot) not being able to obtain system permissions.
 
-Shizuku 是 shell 身份，**无法读取其他应用的私有数据目录**（那是 root 才能做的）。
+Shizuku has the shell identity and **cannot read other apps' private data directories** (that's something only root can do).
 
-## 前置：安装并启动 Shizuku
+## Prerequisite: Install & Start Shizuku
 
-1. 从 [Shizuku 官网](https://shizuku.rikka.app/download/) 或应用商店安装 Shizuku。
-2. 打开 Shizuku，按应用内指引启动服务：
-   - Android 11 及以上：开启「无线调试」后可直接在手机上启动；
-   - Android 10 及以下：需连接电脑用 adb 启动。
+1. Install Shizuku from the [Shizuku official website](https://shizuku.rikka.app/download/) or an app store.
+2. Open Shizuku and follow the in-app instructions to start the service:
+   - Android 11 and above: enable "Wireless debugging" and you can start it directly on the phone;
+   - Android 10 and below: you need to connect to a computer and start it with adb.
 
-## 在 AiCode 中授权
+## Authorize in AiCode
 
-打开「设置 → 软件权限 → Shizuku」，页面显示当前状态：
+Open "Settings → App Permissions → Shizuku"; the page shows the current state:
 
-- **未安装**：点击前往下载安装。
-- **服务未运行**：点击打开 Shizuku 并启动服务。
-- **未授权**：点击申请授权，Shizuku 弹出授权框，选择「允许」。
-- **已就绪**：授权完成，AI 即可使用 `Shizuku` 工具。
+- **Not installed**: tap to go download and install.
+- **Service not running**: tap to open Shizuku and start the service.
+- **Not authorized**: tap to request authorization; Shizuku pops up an authorization dialog — choose "Allow".
+- **Ready**: authorization is complete, and the AI can use the `Shizuku` tool.
 
-从 Shizuku 应用返回 AiCode 时，状态会自动刷新。
+When you return to AiCode from the Shizuku app, the state refreshes automatically.
 
-## 使用与安全
+## Usage & Safety
 
-`Shizuku` 直接以 adb shell 身份操作宿主 Android 系统，权限高危，因此在工具授权上按**高危工具**处理：
+`Shizuku` operates the host Android system directly with the adb shell identity — high permissions, high risk — so in tool authorization it's treated as a **high-risk tool**:
 
-- **每次调用都会弹出授权确认**：包括 `ls` 这类只读命令，不走内置安全白名单，也不会因已有规则自动放行。
-- **不支持「始终允许」**：弹窗中的「始终允许」按钮不可用（会显示原因），只能单次放行，不生成记忆规则。
-- **AUTO（自动）模式下同样弹窗**：AUTO 的「全放行」对它不生效；仅当开启「设置 → 工具授权 → 禁用安全拦截」后，AUTO 下才恢复自动放行（BUILD 模式仍逐次确认、不可记忆）。
-- **PLAN（计划）模式**下，该工具与其他写操作一样被拦截。
-- 项目权限规则中的**禁止规则**对它依然生效（命中 `deny` 会被直接拒绝）。
+- **Every call pops up an authorization confirmation**: including read-only commands like `ls`; it doesn't go through the built-in safety whitelist, and won't be let through automatically because of an existing rule.
+- **"Always allow" is not supported**: the "Always allow" button in the dialog is unavailable (the reason is shown); only one-time allowances, generating no memory rules.
+- **It pops up in AUTO (auto) mode too**: AUTO's "allow everything" doesn't apply to it; only when "Settings → Tool Authorization → Disable safety interception" is enabled does AUTO restore automatic allowance (BUILD mode still confirms each time and cannot remember).
+- **In PLAN (plan) mode**, this tool is intercepted like other write operations.
+- **Deny rules** in project permission rules still apply to it (hitting `deny` is rejected directly).
 
-## 常见问题
+## FAQ
 
-**命令报「Shizuku 未就绪」**
+**The command reports "Shizuku not ready"**
 
-按设置页提示依次确认：已安装 → 服务已启动 → 已授权。设备重启后 Shizuku 服务通常需要重新启动（Android 11+ 可在 Shizuku 内重新开启无线调试启动）。
+Confirm in order as prompted on the settings page: installed → service started → authorized. After a device restart, the Shizuku service usually needs to be started again (on Android 11+, you can re-enable wireless debugging startup within Shizuku).
 
-**`Shizuku` 工具执行失败但没有明显报错**
+**The `Shizuku` tool fails to execute but shows no obvious error**
 
-部分命令需要特定系统权限，shell 身份并不具备所有权限（如访问其他应用私有目录）。可在终端中用 `Bash` 对比，确认是命令本身还是权限问题。
+Some commands need specific system permissions that the shell identity doesn't have (such as accessing other apps' private directories). You can compare with `Bash` in the terminal to confirm whether it's the command itself or a permission problem.

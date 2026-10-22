@@ -1,174 +1,174 @@
-# 聊天界面导览
+# Chat Interface Tour
 
-本页说明主界面上各按钮与区域的作用。
+This page explains what each button and area on the main interface does.
 
-新建空白对话时，欢迎语显示在页面中央偏上的位置。点击底部输入框唤起键盘后，欢迎语会随输入框上移，尽量保持在顶部标题栏与输入框之间；收起键盘后回到原位。
+When you start a new empty conversation, the welcome message is shown slightly above the center of the page. Tapping the input box at the bottom to bring up the keyboard moves the welcome message up with the input box, keeping it as much as possible between the top title bar and the input box; after the keyboard is dismissed it returns to its original position.
 
-## 顶部标题栏
+## Top Title Bar
 
-- **菜单按钮**（左上）：打开侧边栏，管理会话列表和浏览文件。
-- **会话标题与模型名**：上面一行是当前会话名，下面一行是当前使用的模型。
-- **新建会话**：新建一个对话。
-- **Git 入口**：跳转到 Git 版本管理页。
-- **终端入口**：跳转到终端页。
+- **Menu button** (top left): opens the sidebar, for managing the session list and browsing files.
+- **Session title and model name**: the top line is the current session name, the line below is the model currently in use.
+- **New session**: creates a new conversation.
+- **Git entry**: goes to the Git version management page.
+- **Terminal entry**: goes to the terminal page.
 
-远程 SSH 模式下，标题栏下方会多一行：左侧是 SSH 连接状态（圆点加文字），右侧是当前会话的 token 累计（上箭头输入、下箭头输出）。本地模式不显示这一行。
+In remote SSH mode, an extra row appears below the title bar: on the left is the SSH connection status (a dot plus text), and on the right is the current session's token totals (up arrow for input, down arrow for output). This row isn't shown in local mode.
 
-## 侧边栏
+## Sidebar
 
-点击左上角菜单按钮，或从屏幕左缘向右滑动。顶部有「会话」和「文件」两个标签页。
+Tap the menu button in the top left, or swipe right from the left edge of the screen. At the top are two tabs: "Sessions" and "Files".
 
-### 会话页
+### Sessions Tab
 
-会话按最后回复时间从新到旧排列，并按时间分组（今天 / 昨天 / 7 天内 / 30 天内 / 更早按月份）。置顶的会话单独放在最前面的「置顶」分组，卡片是浅蓝色背景。
+Sessions are ordered by last reply time from newest to oldest and grouped by time (Today / Yesterday / Within 7 days / Within 30 days / Earlier by month). Pinned sessions are placed separately in a "Pinned" group at the very front, with a light-blue card background.
 
-短按切换会话，**长按弹出操作菜单**：
+A short tap switches sessions; a **long press pops up the action menu**:
 
-- **置顶 / 取消置顶**：置顶后固定排在最前。
-- **重命名**：改会话标题，不影响排序。
-- **导出**：导出这个会话。
-- **批量选择**：进入多选模式，支持勾选多个会话、一键「全选」以及「批量删除」（带二次确认）。按左上角 × 或返回键退出多选模式。
-- **删除**：会弹确认框，确认后删除该会话及其所有消息。
+- **Pin / Unpin**: pinned sessions stay fixed at the very front.
+- **Rename**: changes the session title; doesn't affect ordering.
+- **Export**: exports this session.
+- **Batch select**: enters multi-select mode, supporting checking multiple sessions, one-tap "Select all", and "Batch delete" (with a second confirmation). Tap the × in the top left or the back key to exit multi-select mode.
+- **Delete**: a confirmation dialog appears; confirming deletes the session and all its messages.
 
-派生过子代理的会话，行尾会显示子代理数量和展开箭头，点击展开后可在下方查看其子代理（**1.11.0 起**），详见[子代理](/guide/subagent)。
+A session that has spawned sub-agents shows the sub-agent count and an expand arrow at the end of its row; tapping to expand shows its sub-agents below (**from 1.11.0**), see [Sub-Agents](/guide/subagent).
 
-侧边栏 Tab 栏下方是**搜索聊天记录**（**1.12.0 起**）：输入关键词即可跨当前工作区的所有会话搜索消息内容，列表区就地显示命中结果（会话标题加命中片段，关键词高亮）。点击一条结果会切换到对应会话并定位到该消息；点击搜索框右侧的 × 或删空内容即回到会话列表。搜索只覆盖当前工作区，且只匹配你和 AI 的正文，不含工具执行输出。
+Below the sidebar tab bar is **search chat history** (**from 1.12.0**): entering a keyword searches message content across all sessions in the current workspace, and the list area shows the hits in place (session title plus the matching snippet, keyword highlighted). Tapping a result switches to the corresponding session and jumps to that message; tapping the × on the right of the search box or clearing the content returns to the session list. Search only covers the current workspace, and only matches the body text of you and the AI, not tool execution output.
 
-### 文件页
+### Files Tab
 
-浏览当前工作区的文件，点击文件打开代码编辑页（**1.11.0 起**），详见[文件浏览与代码编辑](/guide/files)。
+Browse the files of the current workspace; tapping a file opens the code editing page (**from 1.11.0**), see [File Browsing & Code Editing](/guide/files).
 
-侧边栏底部有「浏览器」（**1.12.0 起**）和「设置」两个入口。
+At the bottom of the sidebar are two entries: "Browser" (**from 1.12.0**) and "Settings".
 
-## 输入框下方工具栏
+## Toolbar Below the Input Box
 
-从左到右：
+From left to right:
 
-- **模式按钮**：在 BUILD、PLAN、AUTO 之间循环切换，见[三种模式](/guide/modes)。
-- **模型按钮**：显示当前模型，点击弹出选择弹窗。顶部有搜索框可以模糊筛选，模型按供应商分组，点击分组标题可以折叠或展开（折叠状态会被记住，重开弹窗或重启后保持；搜索时自动展开命中的分组），每行标注能力标签（`Image`、`Tools`、输入输出长度），点击即切换。
-- **工作区按钮**：显示当前工作区名，点击弹出工作区管理面板（见下）。
-- **文件按钮**：上传文件作为附件，AI 可以读它的内容。
-- **图片按钮**：上传图片作为附件。点击直接打开系统相册，可以多选。需要当前模型支持图片输入。
-- **发送按钮**：AI 空闲时是普通发送；AI 正在工作时，输入框为空则显示停止按钮，有内容则显示橙色发送按钮（消息会排队）。
+- **Mode button**: cycles through BUILD, PLAN, AUTO — see [The Three Modes](/guide/modes).
+- **Model button**: shows the current model; tapping pops up the selection dialog. There's a search box at the top for fuzzy filtering; models are grouped by provider; tapping a group title collapses or expands it (the collapsed state is remembered and persists when the dialog is reopened or after restart; when searching, matching groups expand automatically), each row is labeled with capability tags (`Image`, `Tools`, input/output lengths), and tapping switches.
+- **Workspace button**: shows the current workspace name; tapping pops up the workspace management panel (see below).
+- **File button**: uploads a file as an attachment; the AI can read its content.
+- **Image button**: uploads an image as an attachment. Tapping opens the system gallery directly, with multi-select. Requires the current model to support image input.
+- **Send button**: when the AI is idle it's a plain send; when the AI is working, if the input box is empty it shows the stop button, and if there's content it shows the orange send button (the message will queue).
 
-输入的内容长到超出输入框高度后，输入框右上角会出现**展开按钮**：点击即用整屏编辑这条草稿，右上角「收起」或系统返回键退出全屏。全屏里修改的内容实时同步回输入框，两边是同一份草稿，收起后按发送即可。
+When the text you input grows beyond the input box height, an **expand button** appears in the top right of the input box: tapping edits this draft fullscreen, and the "Collapse" in the top right or the system back key exits fullscreen. Edits in fullscreen sync back to the input box in real time — both are the same draft — and after collapsing you just press send.
 
-上传的附件会以预览卡显示在输入框上方，发送前可以移除。上传较大的文件需要一定时间，期间输入框上方会显示上传中的提示，传完自动变成预览卡。点击图片缩略图可以[全屏看大图](#全屏看图)。
+Uploaded attachments are shown as preview cards above the input box and can be removed before sending. Uploading a larger file takes some time, during which an "uploading" hint shows above the input box, and when done it automatically becomes a preview card. Tapping an image thumbnail lets you [view it fullscreen](#fullscreen-image-viewing).
 
-未发送的草稿按会话分别保存：在当前会话输入内容后切换至其它会话，返回时草稿依然保留。草稿持久化到本地，强制关闭 App 后重新打开（进程重启）依然存在。
+Unsent drafts are saved per session: after typing content in the current session and switching to another session, the draft is still there when you return. Drafts persist to local storage and still exist after force-closing the app and reopening (process restart).
 
-滚动消息列表时，输入框区域会淡出到 40% 透明度以减少干扰，停止滚动后恢复。
+When scrolling the message list, the input box area fades to 40% opacity to reduce distraction, and restores when scrolling stops.
 
-## 工作区管理
+## Workspace Management
 
-点击工作区按钮弹出的面板里可以：
+In the panel that pops up from the workspace button you can:
 
-- **切换工作区**：点击即切换。如果当前有正在运行的 AI 会话或终端标签，会先弹确认框——切换会停止它们。
-- **新建工作区**：输入名称创建，对应手机上一个独立文件夹。
-- **添加本地目录**（本地模式）：把设备上已有的目录作为工作区。首次点击会显示风险确认弹窗（AI 会直接读写你的真实文件），可以勾选「不再提示」。只支持从「内部存储」或「SD 卡」选择文件夹，云盘之类的其它文件提供方不支持。
-- **删除工作区**：内部工作区连同文件一起删除；通过「添加本地目录」加进来的外部工作区只解除关联，**不会删除目录内容**。
+- **Switch workspace**: tap to switch. If there's a running AI session or terminal tab, a confirmation dialog appears first — switching stops them.
+- **New workspace**: enter a name to create one, corresponding to an independent folder on the phone.
+- **Add local directory** (local mode): use an existing directory on the device as a workspace. The first tap shows a risk confirmation dialog (the AI will directly read and write your real files), with a "Don't show again" checkbox. Only folders from "Internal storage" or "SD card" can be selected; other file providers such as cloud drives aren't supported.
+- **Delete workspace**: internal workspaces are deleted together with their files; external workspaces added via "Add local directory" are only unlinked — **their directory contents are not deleted**.
 
-工作区是 AI 操作的项目根目录，AI 的代码读写和命令执行都被限制在当前工作区内。
+The workspace is the project root directory for the AI's operations; the AI's code reads/writes and command execution are all confined to the current workspace.
 
-## 斜杠命令
+## Slash Commands
 
-在输入框输入 `/` 会弹出命令菜单，**内置命令排在前面（按字母序），技能排在后面（也按字母序）**。
+Typing `/` in the input box pops up the command menu, with **built-in commands first (alphabetical), Skills after (also alphabetical)**.
 
-内置命令：
+Built-in commands:
 
-- `/compress`：手动触发当前会话的上下文压缩。
-- `/init`：让 AI 分析当前工作区代码库，生成或改进项目规则文件 `AGENTS.md`（项目根已有 `CLAUDE.md` 而无 `AGENTS.md` 时改进 `CLAUDE.md`）。可带参数指定关注点，例如 `/init 关注测试与发布流程`。
-- `/usage`：查看今日与累计的调用次数、token 用量与预估费用（全局统计，跨会话）。
+- `/compress`: manually triggers context compaction for the current session.
+- `/init`: has the AI analyze the current workspace codebase and generate or improve the project rules file `AGENTS.md` (if the project root already has `CLAUDE.md` but no `AGENTS.md`, it improves `CLAUDE.md`). Can take an argument specifying a focus, e.g. `/init focus on testing and release flow`.
+- `/usage`: views today's and cumulative call counts, token usage, and estimated cost (global statistics, across sessions).
 
-技能：
+Skills:
 
-- 每个已启用的技能都能用 `/技能名` 直接触发，AI 会把该技能的正文作为本轮指令执行；菜单里技能右侧带「技能」标记。
-- 技能可以带参数，例如 `/pdf-report a4`：参数会替换技能正文里的 `$ARGUMENTS` 占位符；正文没有占位符时，参数会追加到末尾。
+- Every enabled Skill can be triggered directly with `/Skill name`; the AI executes the Skill's body as this turn's instructions; Skills in the menu carry a "Skill" mark on the right.
+- A Skill can take arguments, e.g. `/pdf-report a4`: the arguments replace the `$ARGUMENTS` placeholder in the Skill body; if the body has no placeholder, the arguments are appended at the end.
 
-命令在 AI 忙碌时会进队列，空闲后自动执行。命令文本会作为用户消息显示在对话里，并进入上下文。
+Commands queue when the AI is busy and execute automatically when it's idle. The command text is displayed in the conversation as a user message and enters the context.
 
-## 上下文用量与压缩
+## Context Usage & Compaction
 
-发送按钮外圈反映模型可用输入预算的占用，而非累计消耗。发送前会估算新输入、回复和工具结果增加的用量，模型返回后再用实际报告校准；读屏说明会区分预计用量。切换模型、压缩和回退后，旧用量基线不再沿用，后续请求会重新计算。
+The ring around the send button reflects occupancy of the model's available input budget, not cumulative consumption. Before sending, it estimates the usage the new input, reply, and tool results will add; after the model returns, it calibrates with the actual report; screen-reader descriptions distinguish estimated usage. After switching models, compacting, or rolling back, the old usage baseline no longer carries over, and subsequent requests recompute.
 
-上下文接近阈值时，较早的对话会转成接手摘要，最近消息继续保留。压缩模型窗口较小时会分块处理，可能增加等待时间和调用费用；摘要为空、截断或无法释放足够空间时，不替换原历史。明确的上下文超限最多自动压缩重试一次，仍失败时请缩短输入、减少工具或检查模型窗口设置。
+When the context approaches its threshold, earlier conversation is turned into a handover summary and recent messages are kept. When the compaction model's window is small, it's processed in chunks, which may increase waiting time and call cost; if the summary is empty, truncated, or can't free enough space, the original history isn't replaced. An explicit context overflow auto-compacts and retries at most once; if it still fails, shorten the input, reduce tools, or check the model window settings.
 
-## 消息队列
+## Message Queue
 
-AI 工作时输入框仍然可用。输入内容后点橙色发送按钮不会打断当前任务，而是加入**待发送队列**：
+The input box remains usable while the AI works. Typing content and tapping the orange send button doesn't interrupt the current task but adds it to the **pending send queue**:
 
-- 队列面板显示在输入框上方，列出排队消息的序号和摘要；点标题栏可收起/展开，弹窗或键盘弹出时会自动收起。
-- 当前一轮任务结束后，队列里的下一条自动发送，多条按顺序执行。
-- **拖拽排序**：按住每行左侧的拖拽手柄（☰）上下拖动，可调整排队消息的执行顺序。
-- **编辑**：点每行的铅笔图标可修改该条消息内容，确认后更新。
-- **立即插入**：点每行的闪电图标会把该条消息立即发给正在工作的 AI——不再等当前轮结束，而是直接注入 AI 正在进行的工具结果中，让它当轮就按新内容调整。若当前轮 AI 没有调用工具（正在纯文本输出），则会在本轮结束时作为下一条发出。
-- 点「停止」会跳过当前轮，立即执行队列里的下一条。
-- 每条消息右侧的 × 可以把它从队列移除。
+- The queue panel shows above the input box, listing each queued message's number and summary; tapping the title bar collapses/expands it, and it auto-collapses when a dialog or the keyboard pops up.
+- After the current turn's task ends, the next message in the queue sends automatically; multiple messages execute in order.
+- **Drag to reorder**: press and hold the drag handle (☰) on the left of each row and drag up or down to adjust the execution order of queued messages.
+- **Edit**: tap the pencil icon on each row to modify that message's content; confirming updates it.
+- **Insert immediately**: tapping the lightning icon on a row sends that message to the working AI immediately — no longer waiting for the current turn to end, but injected directly into the AI's in-progress tool results, so it adjusts to the new content in the same turn. If the AI isn't calling tools in the current turn (it's outputting plain text), it will be sent as the next message when this turn ends.
+- Tapping "Stop" skips the current turn and immediately executes the next message in the queue.
+- The × on the right of each message removes it from the queue.
 
-::: warning 队列只在内存里
-切换工作区或进程被系统终止时，队列会清空，请勿将重要内容仅保留在队列中。
+::: warning The queue lives only in memory
+Switching workspaces or the process being terminated by the system clears the queue; don't keep important content only in the queue.
 :::
 
-## 回复与工具卡片
+## Replies & Tool Cards
 
-AI 生成回复时以**打字机效果**逐字显示，速度跟随模型的输出速度自动调节：模型输出快时显示跟着加速，只落后最后一小段，不会越拖越多。思考过程的预览行、工具执行输出照旧实时更新，不受打字机影响；生成结束时剩下的那一小段会快速完成（约零点几秒），不会整段突然跳出来。
+When the AI generates a reply it's displayed character by character with a **typewriter effect**, its speed auto-adjusting to the model's output speed: when the model outputs fast the display accelerates to follow, lagging only the last small segment, never falling further and further behind. The thinking-process preview row and tool execution output still update in real time, unaffected by the typewriter; at the end of generation, the remaining small segment completes quickly (about a fraction of a second) rather than appearing all at once.
 
-中途离开再回来（切到终端、设置页，或切到另一个也在输出的会话）时，已经输出的部分直接展示到当前进度，不会从头重新逐字；之后新产出的内容继续逐字显示。
+If you leave midway and come back (switching to the terminal, a settings page, or another session that's also outputting), the already-output part is shown directly at the current progress rather than re-typing from the beginning; newly produced content afterwards continues character by character.
 
-消息区采用**扁平文档流**排版：你发送的内容是右侧的浅色气泡，下方标注发送时间；AI 的回复直接铺在页面上，不再套一层边框卡片。
+The message area uses a **flat document flow** layout: what you sent is a light-colored bubble on the right, with the send time labeled below; the AI's replies are laid directly on the page, no longer wrapped in a bordered card.
 
-AI 的每一次回复外面都套着一层**任务折叠**（**1.13.0 起**），把这一整轮的过程收在一起：
+Each AI reply is wrapped in a **task fold** (**from 1.13.0**), gathering the whole turn's process together:
 
-- 折叠头显示这一轮的状态：正在运行时是「执行中」，完成后变成「已完成 Xs」（X 是本轮耗时）；点它展开或收起。
-- 运行过程中，正文、思考与工具调用按发生顺序显示，不会把工具调用前的说明文字挪到工具后面；任务结束后才将最终回答单独保留在过程下方。
-- **任务完成后自动收起**，只留最终回答；展开后可以回看这一轮的过程（思考、工具调用、中间的过渡内容）。
-- 手动展开或收起后，会按你的选择保持（切换会话、滚出屏幕再回来都不变）；任务完成时若你未手动操作过，才会自动收起。
-- 如果这一轮 AI 一次回答完、既没有思考也没有工具调用，则不显示折叠头，与之前一致。
+- The fold header shows this turn's state: while running it's "Running", and when done it becomes "Done Xs" (X is this turn's duration); tap it to expand or collapse.
+- During the run, the body text, thinking, and tool calls are shown in the order they occurred — explanatory text written before a tool call isn't moved after the tool; only after the task ends is the final answer kept separately below the process.
+- **Auto-collapses when the task completes**, leaving only the final answer; expanding lets you review this turn's process (thinking, tool calls, transitions in between).
+- After you manually expand or collapse, your choice is kept (unchanged by switching sessions or scrolling off screen and back); it auto-collapses on task completion only if you haven't manually operated it.
+- If the AI answers in one go this turn, with neither thinking nor tool calls, no fold header is shown, same as before.
 
-**你发出去的每条消息**下方常驻发送时间与「复制 / 回退 / 更多」按钮，可随时复制或回退其中某一条。**AI 回复的按钮只挂在整段会话最新的一条上**（一轮任务中 AI 可能分多步、中间夹有工具调用，按钮只挂在最后一步；且仅当本轮正常完成时出现，主动暂停或出错不显示）。每轮任务的用量、缓存命中率与耗时按轮合计挂在轮末回复下方，详见[回复下方的用量与耗时](#回复下方的用量与耗时)。
+Below **every message you send** there's a permanent send time and "Copy / Rollback / More" buttons, so you can copy it or roll back to it at any time. **The AI reply buttons are only attached to the latest reply in the whole session** (within one turn the AI may take multiple steps with tool calls in between; the buttons are attached only to the last step, and only appear when this turn completed normally — not on manual pause or error). Each turn's usage, cache hit rate, and duration are totaled per turn and attached below the final reply of the turn — see [Usage and Time Below Replies](#usage-and-time-below-replies).
 
-AI 的思考过程另外占一行，**默认收起**，收起时只有一行：行首思考图标 + 一行内容预览——思考进行中显示正在写的那一行（跟着内容滚动），思考结束后固定显示思考的第一行，一行放不下便以 `…` 截断；点这一行随时展开查看全文，再点收起。正文开始输出或开始准备工具调用时，思考状态变为「思考完成」，耗时停止增加，不包含后续正文生成时间。展开后的思考内容在一个固定高度的窗口里滚动查看（不会把整页撑得很长），左侧有一条竖线标明这段是思考。
+The AI's thinking process occupies its own row, **collapsed by default**, showing only one line when collapsed: a thinking icon at the start of the row plus a one-line content preview — while thinking, it shows the line currently being written (scrolling with the content); after thinking ends it fixes on the first line of the thinking, truncated with `…` if one line doesn't fit; tap this row anytime to expand and view the full text, tap again to collapse. When body text starts outputting or preparing a tool call begins, the thinking state becomes "Thinking done" and the duration stops increasing, not including subsequent body generation time. The expanded thinking content is viewed in a fixed-height window with scrolling (it won't stretch the whole page very long), with a vertical line on the left marking this segment as thinking.
 
-等待模型响应时，消息区底部显示一行状态：一条白色高光往复地从这行文字上划过，后面跟着三个跳动的点（点不参与高光）。模型正在准备某次工具调用时（工具名先到、参数还在传输，可能需要数秒），这行文案会直接说明将要执行的操作，而不是一直显示「正在思考」——例如 `正在编辑文件`、`正在执行命令`、`正在联网搜索`。
+While waiting for the model's response, a status line shows at the bottom of the message area: a white highlight sweeps back and forth across the line of text, followed by three jumping dots (the dots don't take part in the highlight). When the model is preparing a tool call (the tool name arrives first, the parameters still transmitting, possibly taking a few seconds), this line's text directly states the action about to be performed rather than always showing "Thinking" — e.g. `Editing file`, `Executing command`, `Searching online`.
 
-工具调用按「连续的一批」折叠成一行：
+Tool calls are folded by "consecutive batch" into one row:
 
-- **`N 次工具调用`**：一轮任务里连续多次工具调用合并成这一行，**默认收起**——运行中也不自动展开，如需查看细节可自行点开；只要这批里还有工具在运行，**这行文案自身**就带着一条来回划过的高光。点这一行可以随时手动展开或收起，**手动选择之后会一直按你的选择显示**——不会被自动规则改回去，也不会因为滚出屏幕、切去终端或设置页再回来而变回默认态。
-- 展开后每次调用占一行，并且**整体向内缩进一级**，一眼能看出这些行属于上方分组，而不是和分组头平级的独立内容。
-- 正在运行的那条工具，行尾显示它**正在做的事**（折叠态也可见），而不是笼统的「执行中」：`正在执行命令`、`正在编辑文件`、`正在读取文件`、`正在联网搜索`、`正在生成图片`、`正在整理待办`、`正在启动子代理`、`正在读写记忆`；认不出具体动作的工具（MCP 工具等）显示 `正在调用工具`。
-- 点单行可以查看「指令」与「执行结果」；内容过长时在一个固定高度的窗口里上下滚动查看，底部渐隐提示下方还有内容。单行的展开/收起同样会被记住，划走再划回来不会自动合上。工具仍在输出时，在窗口内滚动会暂时固定正在浏览的内容，避免新输出替换文字导致跳动；滚回窗口底部并停止滚动后恢复实时更新。浏览期间工具仍会继续执行，外层聊天不会自动滚动抢走位置。工具和思考窗口内，按住拖动到顶部或底部后继续拖动，可以带动外层聊天列表；快速滑动并松手后，窗口的惯性滚动到边界即停止，不会带动外层列表。
-- 改动文件的工具（写文件、改文件）**和其他工具一样默认收起**，点击展开后是一张**差异卡**：左上角是文件路径，右上角「复制」可复制这段差异，正文是带行号的 `+ / −` 彩色差异，底部汇总本次改动（如 `+3 −0 · 1 个文件`）。
+- **`N tool calls`**: consecutive multiple tool calls in one turn are merged into this row, **collapsed by default** — they don't auto-expand while running either; open it yourself if you need the details; as long as any tool in this batch is still running, **this row's text itself** carries a sweeping highlight. Tapping this row lets you manually expand or collapse at any time, and **after a manual choice it always displays per your choice** — it won't be changed back by automatic rules, nor revert to the default state because you scrolled off screen or went to the terminal or a settings page and came back.
+- After expanding, each call occupies one row, and the **whole block indents one level inward**, so at a glance you can see these rows belong to the group above rather than being independent content at the same level as the group header.
+- The row of the currently running tool shows at its end **what it's doing** (also visible in the collapsed state) rather than a generic "Running": `Executing command`, `Editing file`, `Reading file`, `Searching online`, `Generating image`, `Organizing todos`, `Starting sub-agent`, `Reading/writing memory`; tools whose concrete action can't be recognized (such as MCP tools) show `Calling tool`.
+- Tapping a single row lets you view the "Instruction" and "Execution result"; when content is too long it's viewed by scrolling in a fixed-height window, with a fade at the bottom hinting there's more below. A single row's expanded/collapsed state is likewise remembered — scrolling away and back won't auto-close it. While a tool is still outputting, scrolling inside the window temporarily fixes the content being browsed, avoiding jumps from new output replacing text; scrolling back to the window bottom and stopping restores real-time updates. While browsing, the tool keeps executing, and the outer chat doesn't auto-scroll to steal your position. Inside tool and thinking windows, press-dragging to the top or bottom and continuing to drag can drive the outer chat list; after a fast swipe and release, the window's inertial scrolling stops at the boundary and doesn't drive the outer list.
+- File-changing tools (write file, edit file) are **collapsed by default like other tools**; after expanding, it's a **diff card**: the file path in the top left, "Copy" in the top right to copy this diff, the body is a colored `+ / −` diff with line numbers, and the bottom summarizes this change (e.g. `+3 −0 · 1 file`).
 
-若工具卡片底部显示「后台任务／子代理已结束」提示（绿点代表成功，红点代表失败或被手动终止），表明后台任务或子代理已在该轮中完成并被当前会话捕获，AI 会自动接续处理。
+If the bottom of a tool card shows a "Background task / sub-agent ended" hint (a green dot means success, a red dot means failure or manual termination), it means a background task or sub-agent completed within that turn and was captured by the current session, and the AI will automatically continue processing.
 
-## 全屏看图
+## Fullscreen Image Viewing
 
-聊天里的图片都可以点开查看大图，四个位置一致：
+Images in the chat can all be tapped to view large, consistently in four places:
 
-- 输入框上方待发送的图片附件；
-- 已发出的消息气泡里的图片附件；
-- AI 回复正文里显示出来的图片（AI 生成的图表、截图，或它从工作区读取的图）；
-- AI 用发送工具（或图片生成）发给你的图片。
+- Image attachments pending send above the input box;
+- Image attachments in sent message bubbles;
+- Images displayed in the AI's reply body (charts and screenshots the AI generated, or images it read from the workspace);
+- Images the AI sent you with the send tool (or image generation).
 
-全屏之后：双指捏合放大、放大后单指拖动查看细节、双击在原图和放大之间来回切换。点画面、按返回键或点右上角的 × 关闭（放大状态下点画面不会关闭，避免查看细节时误触）。平板上无论聊天区占半屏还是全屏，大图都铺满整个屏幕。
+After going fullscreen: pinch with two fingers to zoom, drag with one finger after zooming to view details, double-tap to toggle between original and zoomed. Tap the screen, press the back key, or tap the × in the top right to close (tapping the screen while zoomed won't close, avoiding accidental touches while viewing details). On a tablet, whether the chat area occupies half the screen or all of it, the large image fills the whole screen.
 
-图片文件被移动或删除后无法打开，会提示「图片加载失败」。GIF 只显示第一帧。
+If an image file has been moved or deleted it can't be opened, and you'll be told "Image failed to load". GIFs only show the first frame.
 
-## AI 发来的文件
+## Files Sent by the AI
 
-AI 用 `sendFile` 发来的文件（以及它生成的图片）在聊天区**一个文件一行**：左边是缩略图或类型图标，中间是文件名与「大小 · 路径」，右边有 `›` 提示可点。
+Files the AI sends with `sendFile` (and images it generates) are shown in the chat area **one file per row**: on the left a thumbnail or type icon, in the middle the file name and "size · path", and on the right a `›` hint that it's tappable.
 
-- 点图片行 → 应用内全屏看图；点其它类型 → 交给系统对应的 app 打开（安装包会先确认「允许安装未知应用」）。
-- 文件被移动或删除后点开会提示「文件不存在或已被移动」；所在位置不支持分享给其它应用时会给出对应说明。用「添加本地目录」加进来的外部工作区、自定义镜像里挂载进来的目录，其中的文件同样可以点开。
-- 每行排在发出这个文件的工具调用**所在位置**，因此翻记录时能看清「AI 是在哪一步发来的这份文件」；带文件的工具**不参与「N 次工具调用」折叠**，分组是否收起都不影响它显示。
-- 一次调用最多 10 个文件、单个文件大小上限默认 100MB（可在「偏好设置 → 工具」调整）；只要有一个不存在或超限，整批都不发，AI 会收到失败原因并修正后重试。
+- Tap an image row → fullscreen viewing in the app; tap another type → handed to the system's corresponding app to open (installation packages first confirm "Allow installing unknown apps").
+- After a file has been moved or deleted, tapping it open shows "File doesn't exist or has been moved"; when its location doesn't support sharing to other apps, a corresponding explanation is given. Files in external workspaces added via "Add local directory", and in directories mounted in from custom images, can likewise be tapped open.
+- Each row is placed at the **position of the tool call that sent this file**, so when flipping through history you can clearly see "At which step did the AI send this file"; tools carrying files **don't participate in the "N tool calls" folding**, and whether the group is collapsed doesn't affect their display.
+- One call can send at most 10 files, and the single-file size limit defaults to 100MB (adjustable in "Preferences → Tools"); if just one doesn't exist or exceeds the limit, the whole batch isn't sent, and the AI receives the failure reason and retries after fixing.
 
-## 回复下方的用量与耗时
+## Usage and Time Below Replies
 
-AI 回复正文下方有一行统计信息，**按「本轮合计」计算，只挂在每轮最后一条回复下方**（按钮排列为「复制 → 统计 → 更多选项」，行尾是 `···` 操作入口）：
+Below the AI reply body there's a row of statistics, **calculated as "this turn's total", attached only below the last reply of each turn** (the buttons are arranged "Copy → Statistics → More options", with a `···` action entry at the row's end):
 
-- **token 用量**：`↑` 是本轮的输入 token、`↓` 是输出 token。一轮任务里模型可能被调用多次（每次工具调用都会再请求一次），这里是这一轮所有请求的总和，不是某一步的数字。
-- **缓存命中率**（**1.11.0 起**）：数据库图标旁的百分比，是本轮命中服务端缓存的输入占本轮总输入的比例。命中越高越便宜也越快。未命中缓存、或渠道不返回缓存数据时不显示。该字段从 1.11.0 开始记录，旧消息看不到。
-- **本轮总耗时**（**1.11.0 起**）：时钟图标旁的时间，只挂在一轮任务的最后一条回复下。从你按下发送算到 AI 完成，中间的工具执行、等待你点授权的时间都计入。不到 1 分钟显示成 `12s`，更长显示成 `2:05`（分:秒）或 `1:02:05`（时:分:秒）。任务还在运行时不会显示，完成后才出现。
+- **Token usage**: `↑` is this turn's input tokens, `↓` is output tokens. Within one turn's task the model may be called multiple times (each tool call requests again), and this is the sum of all requests in this turn, not one step's number.
+- **Cache hit rate** (**from 1.11.0**): the percentage next to the database icon, the proportion of this turn's input that hit the server-side cache out of this turn's total input. The higher the hit, the cheaper and faster. Not shown when there's no cache hit or the channel doesn't return cache data. This field is recorded from 1.11.0; older messages can't see it.
+- **This turn's total duration** (**from 1.11.0**): the time next to the clock icon, attached only below the last reply of a turn's task. Counted from when you press send until the AI completes, including tool execution and time waiting for you to tap authorization in between. Under 1 minute it's shown like `12s`; longer it's shown as `2:05` (minutes:seconds) or `1:02:05` (hours:minutes:seconds). Not shown while the task is still running; appears only after completion.
 
-整个会话、整个渠道的累计用量与缓存命中率在[Token 用量统计](/guide/token-stats)里看。
+For the cumulative usage and cache hit rate of a whole session or a whole channel, see [Token Usage Statistics](/guide/token-stats).

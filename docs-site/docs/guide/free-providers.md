@@ -1,63 +1,63 @@
-# 免费供应商
+# Free Providers
 
-希望低成本体验 AI 编程？下列平台提供免费额度或活动 token，注册后即可在 AiCode 中接入使用。免费额度通常有时效，用完或过期后需要充值，具体以各平台规则为准。
+Mrai AiCode works out of the box — two free providers are built in and need no registration and no API key. This page explains them first, then lists other free platforms you can connect yourself with your own key.
 
-## MiMo 开放平台（小米）
+## Built in: Mrai AI (default)
 
-- **平台**：小米 MiMo 开放平台
-- **注册地址**：[platform.xiaomimimo.com](https://platform.xiaomimimo.com?ref=66QSUD)（邀请码 `66QSUD`）
-- **说明**：小米自研 MiMo 系列模型（MiMo V2.5 等），注册后可申请 API Key 接入。
+- **Cost**: free, no signup, no key.
+- **How it works**: Mrai AI is a fallback chain, ported from Mrai Buddy. Each request tries, in order:
+  1. **Pollinations** (OpenAI-compatible) — the full agent path; tool calls work here.
+  2. **PowerBrain** — a second, independent service (text replies).
+  3. **Pollinations plain-text GET** — a last-resort path on a different pool.
+- A step counts as failed if it errors or answers empty; the chain then moves on silently. You never see which step answered, and advertising blocks injected by free services are stripped from replies automatically.
+- **Good to know**: free services can be slow or briefly saturated at busy times. If a reply fails, just send the message again — the chain re-tries from the top.
 
-::: tip 新人福利
-通过上方邀请链接注册送 10 元体验金，享首单 9 折；体验金 40 天有效。
-:::
+## Built in: OpenCode Free
 
-## 日日新
+- **Cost**: free, no signup, no key.
+- **What it is**: the free model catalog of [OpenCode](https://opencode.ai) (Zen) — models such as Big Pickle and the other `-free` models.
+- **Switching**: on the home screen, open the model picker and choose the **OpenCode Free** provider and the model you want. Different free models have different strengths; Big Pickle is the default.
 
-- **平台**：日日新大模型开放平台（商汤 SenseNova）
-- **注册地址**：[platform.sensenova.cn](https://platform.sensenova.cn/login)
-- **说明**：商汤科技旗下的大模型平台，注册登录后可申请 API Key。
+## Other free platforms (bring your own key)
 
-::: tip 公测免费
-目前处于公测阶段，token plan 免费。
-:::
+These platforms offer free quotas or promotional tokens after registration. Free quotas usually expire or need topping up; each platform's own rules apply.
 
-## 基元律动（OpenSquilla）
+## MiMo Open Platform (Xiaomi)
 
-- **平台**：基元律动 TokenRhythm
-- **官网地址**：[tokenrhythm.studio](https://tokenrhythm.studio/)
-- **说明**：多模型统一 API 接入平台，配套 OpenSquilla 智能路由，注册后可申请 API Key 接入。
+- **Platform**: Xiaomi MiMo Open Platform
+- **Registration**: [platform.xiaomimimo.com](https://platform.xiaomimimo.com)
+- **Description**: Xiaomi's self-developed MiMo series models; after registering you can apply for an API key to connect.
 
-::: tip 新人福利
-需先完成实名认证，认证通过后可获得 18 元体验金。
-:::
+## SenseNova
 
-## 硅基流动（SiliconFlow）
+- **Platform**: SenseNova large model open platform (SenseTime)
+- **Registration**: [platform.sensenova.cn](https://platform.sensenova.cn/login)
+- **Description**: The large model platform under SenseTime; after registering and logging in you can apply for an API key.
 
-- **平台**：硅基流动（SiliconFlow）开放平台
-- **活动地址**：[https://cloud.siliconflow.cn/i/HNDIQWXd](https://cloud.siliconflow.cn/i/HNDIQWXd)
-- **说明**：通过邀请链接注册并完成实名认证可获取免费额度，活动截止到年底，具体以平台公告为准。
+## TokenRhythm (OpenSquilla)
 
-::: tip 实名认证
-新用户需先注册并完成实名认证，方可获得赠送额度。
-:::
+- **Platform**: TokenRhythm
+- **Official website**: [tokenrhythm.studio](https://tokenrhythm.studio/)
+- **Description**: A unified multi-model API access platform, paired with OpenSquilla intelligent routing; after registering you can apply for an API key to connect.
+
+## SiliconFlow
+
+- **Platform**: SiliconFlow open platform
+- **Website**: [cloud.siliconflow.cn](https://cloud.siliconflow.cn)
+- **Description**: An inference platform with periodic free-quota campaigns for new users — refer to platform announcements for current details.
 
 ## Agnes AI
 
-- **平台**：Agnes AI（新加坡 Sapiens AI 团队）
-- **注册地址**：[platform.agnes-ai.com](https://platform.agnes-ai.com/)
-- **说明**：全模态 AI 平台，文本、图像、视频三大模型 API 无限期免费开放，OpenAI 兼容接口，注册后即可申请 API Key 接入。
+- **Platform**: Agnes AI (Sapiens AI team, Singapore)
+- **Registration**: [platform.agnes-ai.com](https://platform.agnes-ai.com/)
+- **Description**: An all-modality AI platform — text, image, and video model APIs, with an OpenAI compatible API; after registering you can apply for an API key to connect.
 
-::: tip 全模态免费
-文本、图像、视频模型 API 均免费开放，免费访问有基础速率限制与公平使用配额，具体以平台规则为准。
-:::
+## Connecting your own provider
 
-## 在 AiCode 中接入
+Once you have a platform's API key and Base URL, configure it per the steps in [AI Providers & Models](/guide/providers):
 
-拿到平台的 API Key 和 Base URL 后，按 [AI 供应商与模型](/guide/providers) 的步骤配置即可：
+1. Open "Settings → AI Providers" and tap + at the top right to create new.
+2. Fill in the upstream format, API key, and Base URL (don't include `/v1` in the address).
+3. Switch to the "Models" tab to fetch models, then return to the home page to start chatting.
 
-1. 打开「设置 → AI 供应商」，点右上角 + 新建。
-2. 填入上游格式、API Key、Base URL（地址不要带 `/v1`）。
-3. 切到「模型」标签页拉取模型，回到主页即可开始对话。
-
-如果平台对上游格式、Base URL 有特殊要求（例如提供 OpenAI 兼容或 Anthropic 兼容端点），以平台文档为准。
+If a platform has special requirements for the upstream format or Base URL (e.g. offering an OpenAI compatible or Anthropic compatible endpoint), follow the platform's documentation.

@@ -1,26 +1,26 @@
 ---
 layout: home
-title: AiCode - 手机端 AI 编程工具与内置 Linux 终端
+title: AiCode - AI Coding Tool & Built-in Linux Terminal for Android
 titleTemplate: false
-description: AiCode 是一款开源的 Android 端 AI 编程工具，无需电脑，在手机上即可完成完整开发流程。内置 Linux 容器与终端，AI Agent 可直接读写代码并执行构建；支持 Git 版本控制、MCP 协议与远程 SSH 开发。
+description: AiCode is an open-source AI coding tool for Android. No computer needed — complete the full development workflow right on your phone. It ships a built-in Linux container and terminal so the AI Agent can read/write code and run builds directly, with Git version control, the MCP protocol, and remote SSH development.
 head:
   - - meta
     - name: keywords
-      content: AiCode, Android AI 编程, 手机编程, 移动端开发, Linux 终端, PRoot, Termux, AI Agent, MCP 协议, 手机代码编辑器, Git 客户端, 移动工作站, 手机跑终端, 远程 SSH 开发
+      content: AiCode, Android AI coding, mobile coding, mobile development, Linux terminal, PRoot, Termux, AI Agent, MCP protocol, mobile code editor, Git client, mobile workstation, terminal on phone, remote SSH development
 
 hero:
   name: AiCode
-  text: 手机上的 AI 编程工具与移动工作站
-  tagline: 无需电脑，在手机上即可完成从写代码、调试到提交的完整开发流程。内置 Linux 容器与终端，AI Agent 可自主读写文件、执行 Shell 命令与运行构建，还支持 Git、MCP、远程 SSH 与完整模型生态。
+  text: AI Coding Tool & Mobile Workstation on Your Phone
+  tagline: No computer needed — write code, debug, and commit entirely from your phone. A built-in Linux container and terminal let the AI Agent read/write files, run shell commands, and execute builds on its own, with Git, MCP, remote SSH, and a full model ecosystem.
   image:
     src: /logo.png
     alt: AiCode
   actions:
     - theme: brand
-      text: 快速上手
+      text: Quick Start
       link: /guide/quick-start
     - theme: alt
-      text: 下载 APK
+      text: Download APK
       link: https://aicode.murk.top/download
     - theme: alt
       text: GitHub
@@ -28,15 +28,15 @@ hero:
 
 features:
   - title: AI Agent
-    details: 支持 OpenAI / Anthropic / Gemini 兼容协议，多供应商随时切换；内置文件读写、Shell 执行、后台终端、搜索与图片识别等工具，流式输出，长对话自动压缩上下文。
-  - title: 内置终端与 Linux 容器
-    details: 基于 Termux 组件与 PRoot 的本地容器，内置 Alpine 镜像，可导入自定义 rootfs、挂载宿主目录，终端支持后台常驻。
-  - title: 远程 SSH 模式
-    details: 以远程服务器作为执行后端，命令走 exec channel、文件走 SFTP、终端走 shell channel，在手机上直接操作远程项目。
-  - title: 检查点与撤销
-    details: AI 改代码前自动记录文件快照，对话中可一键回滚，支持只恢复代码、只恢复对话，或两者同时恢复。
-  - title: MCP、技能与记忆
-    details: 可连接本地 stdio 与远程 HTTP 的 MCP 服务器动态扩展工具；支持全局与项目级技能和长期记忆，让 AI 跨会话复用经验。
-  - title: Git 与工作区同步
-    details: 内置状态、分支、提交、差异与标签管理；支持 SFTP / FTP 同步，并自带 FTP 服务端方便电脑侧管理文件。
+    details: Supports OpenAI / Anthropic / Gemini compatible protocols, with multiple providers switchable at any time; built-in tools for file read/write, shell execution, background terminal, search, and image recognition, with streaming output and automatic context compression for long conversations.
+  - title: Built-in Terminal & Linux Container
+    details: A local container built on Termux components and PRoot, shipping with an Alpine image. Import custom rootfs, mount host directories, and keep terminals running in the background.
+  - title: Remote SSH Mode
+    details: Use a remote server as the execution backend — commands over the exec channel, files over SFTP, terminals over the shell channel — and work on remote projects directly from your phone.
+  - title: Checkpoints & Undo
+    details: File snapshots are recorded automatically before the AI modifies code, so you can roll back with one tap in the conversation — restore code only, conversation only, or both.
+  - title: MCP, Skills & Memory
+    details: Connect local stdio and remote HTTP MCP servers to dynamically extend tools; global and project-level Skills plus long-term memory let the AI reuse experience across sessions.
+  - title: Git & Workspace Sync
+    details: Built-in status, branch, commit, diff, and tag management; SFTP / FTP sync support, plus a built-in FTP server for managing files from your computer.
 ---

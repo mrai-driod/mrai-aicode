@@ -1,31 +1,31 @@
-# 后台运行
+# Background Run
 
-「设置 → 后台运行」集中管理 App 在后台的运行与提醒行为。
+"Settings → Background Run" centrally manages how the app runs and notifies you in the background.
 
-## 后台运行保活
+## Background Run Keep-Alive
 
-开启后显示一个前台通知，避免 App 退到后台时进程被系统终止。即使没有任何终端会话、AI 也空闲，进程同样保持存活；进程被系统回收重建后会自动恢复这个常驻状态。点通知可以回到 App 主页。
+When enabled, a foreground notification is shown to prevent the app's process from being terminated by the system when it goes to the background. Even with no terminal sessions and the AI idle, the process stays alive the same way; if the process is reclaimed by the system and rebuilt, this persistent state is restored automatically. Tapping the notification returns to the app's home page.
 
-运行编译这类长任务前建议开启。
+It's recommended to enable this before running long tasks such as builds.
 
-::: tip AI 执行期间会自动保活
-即使该开关关闭，AI 开始执行任务时也会自动亮起同一个常驻通知并保持 CPU 唤醒（避免熄屏后回复中断、工具卡住），所有会话的任务结束后自动收起。手动打开开关的意义在于「空闲时也常驻」：希望终端里自行运行的后台命令不被打断，就保持开启。开关开启时，AI 任务结束不会将其关闭。
+::: tip The AI keeps itself alive automatically while executing
+Even if this switch is off, when the AI starts executing a task it automatically lights up the same persistent notification and keeps the CPU awake (to avoid replies being interrupted or tools getting stuck after the screen turns off), and automatically dismisses it once all sessions' tasks finish. The point of turning the switch on manually is "stay resident while idle too": if you want background commands you run yourself in the terminal to not be interrupted, keep it on. When the switch is on, finishing an AI task won't turn it off.
 :::
 
-## 屏幕常亮
+## Keep Screen On
 
-开启后只要 App 停留在前台，屏幕就不会自动息屏，适合持续观察 AI 任务或终端输出。切到其它 App 或回桌面后自动失效，不影响系统的自动锁屏设置，也不需要额外授权。
+When enabled, the screen won't automatically turn off as long as the app stays in the foreground — suitable for continuously watching AI tasks or terminal output. It stops applying automatically when you switch to another app or return to the home screen, doesn't affect the system's auto-lock settings, and needs no extra authorization.
 
-长时间开着会多耗电，插着充电器用更合适。
+Leaving it on for long periods uses more battery; using it while plugged into a charger is more suitable.
 
-## Agent 完成通知
+## Agent Completion Notifications
 
-开启后，当 App 在后台、AI 完成一轮对话时会弹系统通知（标题「任务完成」，内容是你发的那条消息；如果是后台任务触发的自动轮次，显示对应的任务标题），点通知回到 App 看结果。
+When enabled, if the app is in the background and the AI completes a round of conversation, a system notification pops up (title "Task complete", content is the message you sent; if it was an automatic round triggered by a background task, it shows the corresponding task title). Tap the notification to return to the app and see the result.
 
-App 在前台时不弹，避免打扰你正在看的对话。
+No notification is shown while the app is in the foreground, to avoid disturbing the conversation you're looking at.
 
-::: tip Android 13 及以上
-首次开启上面两个开关时会先申请「通知」权限。如果系统弹不出授权框（权限之前被关过或拒绝过），会有弹窗提示，点「去设置」跳到系统设置页手动开启。权限授予前开关不生效。
+::: tip Android 13 and above
+The first time you enable the two switches above, the "Notifications" permission is requested first. If the system can't pop up the authorization dialog (the permission was turned off or denied before), a dialog will prompt you to tap "Go to Settings" and enable it manually on the system settings page. The switches don't take effect until the permission is granted.
 :::
 
-系统权限（安装未知应用、存储、电池优化、自启动、Shizuku）见[软件权限](/guide/app-permissions)。
+For system permissions (install unknown apps, storage, battery optimization, auto-start, Shizuku), see [App Permissions](/guide/app-permissions).

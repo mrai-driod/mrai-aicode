@@ -1,40 +1,40 @@
-# 默认模型
+# Default Models
 
-「设置 → 默认模型」里除了新会话使用的默认模型，还可以给几个特定用途单独指定模型。
+In "Settings → Default Models", besides the default model used for new sessions, you can also assign models separately for a few specific purposes.
 
-## 识图模型
+## Image Recognition Model
 
-决定 AI 用哪个模型看图片。
+Determines which model the AI uses to look at images.
 
-- **跟随当前聊天模型**（默认）：用你当前选中的聊天模型看图。
-- **指定专用模型**：固定用某个模型看图，不随聊天模型切换。适合聊天用的模型不支持图片、或者你想用更便宜的模型处理图片的情况。
+- **Follow current chat model** (default): uses the chat model you currently have selected to view images.
+- **Specify a dedicated model**: always uses a particular model for images, not following chat model switches. Suitable when your chat model doesn't support images, or when you want to use a cheaper model to handle images.
 
-列表里每个模型旁边会标注是否支持图片输入，供你参考。注意这里**不做强制拦截**：如果你选了一个不支持图片的模型，识图会失败，AI 会收到错误信息并自行处理（通常会提示你换一个模型）。
+Each model in the list is marked with whether it supports image input, for your reference. Note that there is **no hard blocking** here: if you pick a model that doesn't support images, image recognition will fail, and the AI receives the error and handles it itself (usually by suggesting you switch models).
 
-识图的用法上有两点值得知道：
+Two things worth knowing about image recognition usage:
 
-- AI 一次最多可以给识图模型 4 到 5 张图做对比分析，之后仍可在同一个识图会话里继续追问，识图模型会保留之前看过的图和问答。
-- 图片默认会按需压缩以节省 token，也可以要求原图直传或更省 token 的低清模式。
+- The AI can give the image recognition model up to 4 to 5 images at once for comparative analysis, and can keep asking follow-ups within the same image recognition session afterwards; the model retains the previously viewed images and Q&A.
+- Images are compressed on demand by default to save tokens; you can also request the original image to be sent directly, or a lower-resolution mode that saves more tokens.
 
-## 生图模型
+## Image Generation Model
 
-设置 `generateImage` 工具使用的模型，支持 OpenAI 和 Gemini 兼容接口。
+Sets the model used by the `generateImage` tool, supporting OpenAI and Gemini compatible APIs.
 
-- OpenAI 兼容接口支持尺寸、数量、画质、背景、风格和输出格式等参数。
-- Gemini 兼容接口使用模型默认尺寸与分辨率；生成多张图片时会调用多次。
-- 图片默认保存到 `~/.aicode/generated-images/`，也可指定工作区路径。单张图片上限 20MB，单次调用总计上限 48MB。
+- The OpenAI compatible API supports parameters such as size, count, quality, background, style, and output format.
+- The Gemini compatible API uses the model's default size and resolution; generating multiple images calls the API multiple times.
+- Images are saved by default to `~/.aicode/generated-images/`, or you can specify a workspace path. A single image is limited to 20MB, and a single call to 48MB in total.
 
-## 图像模型对话生图
+## Image Generation via Image-Capable Chat Models
 
-通过 Gemini 兼容接口接入支持图像输出的聊天模型后，可直接生成图片、上传参考图，并在后续对话中继续修改生成结果。
+After connecting a chat model with image output support through the Gemini compatible API, you can generate images directly, upload reference images, and keep modifying the generated results in later conversation.
 
-## 标题总结模型
+## Title Summary Model
 
-新会话发出第一条消息后，AiCode 会自动给会话生成一个标题。这里可以指定专门用于该任务的模型。
+After you send the first message in a new session, AiCode automatically generates a title for the session. You can specify a dedicated model for this task here.
 
-- **跟随当前聊天模型**（默认）。
-- **指定专用模型**：建议选一个便宜快速的小模型，标题这种活不需要好模型。
+- **Follow current chat model** (default).
+- **Specify a dedicated model**: a cheap, fast small model is recommended — a job like titles doesn't need a good model.
 
-标题生成在后台异步进行，不会拖慢你的对话。如果生成失败或者取不到结果，会保留系统按首句截断的临时标题，不影响使用。
+Title generation runs asynchronously in the background and won't slow down your conversation. If generation fails or returns nothing, the temporary title the system truncated from the first sentence is kept, which doesn't affect usage.
 
-生成标题用的提示词也可以自行修改，方式见「自定义提示词」。
+The prompt used to generate titles can also be customized — see "Custom Prompts".

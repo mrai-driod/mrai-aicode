@@ -1,47 +1,47 @@
-# 在容器中编译 Android 应用
+# Building Android apps in the container
 
-在 AiCode 的 Linux 容器里配置好 JDK 与 Android SDK，即可直接从源码编译 Android 应用。本文以 Debian 12 (bookworm) aarch64 为例，Ubuntu、Arch 等发行版同样适用。
+Once the JDK and Android SDK are set up in AiCode's Linux container, you can build Android apps directly from source. This article uses Debian 12 (bookworm) aarch64 as the example; Ubuntu, Arch, and other distributions work the same way.
 
-::: tip 建议使用自定义 Debian / Ubuntu 镜像
-内置的 Alpine 容器使用 musl libc，在 PRoot 下编译 Android 应用需要额外处理（见文末补充）。导入自定义镜像的方法见「自定义容器镜像」。
+::: tip Prefer a custom Debian / Ubuntu image
+The built-in Alpine container uses musl libc, and building Android apps under PRoot needs extra handling there (see the supplement at the end). See "Custom container images" for how to import a custom image.
 :::
 
-## 环境基线
+## Environment baseline
 
-| 项 | 值 |
+| Item | Value |
 | --- | --- |
-| 系统 | Debian GNU/Linux 12 (bookworm) aarch64 |
+| System | Debian GNU/Linux 12 (bookworm) aarch64 |
 | JDK | OpenJDK 17 |
-| Gradle | 项目 wrapper 自带，无需系统安装 |
+| Gradle | Provided by the project wrapper; no system install needed |
 | SDK | Android 36 / build-tools 35.0.0 |
-| aapt2 | ARM64 静态编译版 35.0.2（社区构建） |
+| aapt2 | ARM64 statically built version 35.0.2 (community build) |
 
-## 1. 安装基础依赖
+## 1. Install the basic dependencies
 
 ```bash
 apt update
 apt install -y openjdk-17-jdk-headless curl wget unzip ripgrep
 ```
 
-验证 JDK：
+Verify the JDK:
 
 ```bash
 /usr/lib/jvm/java-17-openjdk-arm64/bin/java -version
-# 应输出 openjdk version "17..."
+# Should output openjdk version "17..."
 ```
 
-## 2. 安装 Android SDK
+## 2. Install the Android SDK
 
-默认使用国内镜像安装（下载更快、更稳）。除 sdkmanager 本体（cmdline-tools）需手工下载解压外，其余组件通过 `SDK_TEST_BASE_URL` 环境变量覆盖 sdkmanager 的默认仓库根 URL（需以 `/` 结尾，镜像需提供 `repository2-3.xml`），一条命令全部装完（`--list` 与 `--install` 均已实测可用）：
+By default this uses a domestic mirror for installation (faster and more reliable downloads). Except for sdkmanager itself (cmdline-tools), which has to be downloaded and unpacked manually, all components are installed with a single command by overriding sdkmanager's default repository root URL with the `SDK_TEST_BASE_URL` environment variable (it must end with `/`, and the mirror must provide `repository2-3.xml`); both `--list` and `--install` have been tested and work:
 
 ```bash
-# 唯一手工步骤：获取 sdkmanager 本体（从镜像下载）
+# The only manual step: get sdkmanager itself (download from the mirror)
 mkdir -p ~/android/sdk && cd ~/android/sdk
 curl -fL -C - -o clt.zip https://mirrors.cloud.tencent.com/AndroidSDK/commandlinetools-linux-13114758_latest.zip
 unzip -q clt.zip
 mkdir -p cmdline-tools/latest && mv cmdline-tools/* cmdline-tools/latest/
 
-# 组件全部走镜像安装（自动处理目录布局与许可接受）
+# Install all components from the mirror (directory layout and license acceptance handled automatically)
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
 export ANDROID_HOME=$HOME/android/sdk
 export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
@@ -50,17 +50,17 @@ export SDK_TEST_BASE_URL=https://mirrors.cloud.tencent.com/AndroidSDK/
 yes | sdkmanager --install "platforms;android-36" "build-tools;35.0.0" "platform-tools"
 ```
 
-::: tip 版本说明
-按目标项目的 `compileSdk` 和 `buildToolsVersion` 选择组件版本，本文示例为 Android 36 / build-tools 35.0.0。
+::: tip Choosing versions
+Pick the component versions according to the target project's `compileSdk` and `buildToolsVersion`; the examples in this article use Android 36 / build-tools 35.0.0.
 :::
 
-::: tip 镜像与官方源
-`SDK_TEST_BASE_URL` 虽为测试用途的环境变量（非官方文档化的常规配置），但已被镜像方案广泛使用。镜像安装的 SDK 与官方安装完全等价：即使网络可直接访问 `dl.google.com`，也无需还原为官方流程。若该方式在特定场景下失效，可改用官方源（见下）或手工组装。
+::: tip Mirrors vs. the official source
+Although `SDK_TEST_BASE_URL` is an environment variable meant for testing (not a documented regular configuration), it is widely used by mirror setups. An SDK installed from a mirror is fully equivalent to an official installation: even if your network can reach `dl.google.com` directly, there's no need to switch back to the official flow. If this approach fails in a specific scenario, you can switch to the official source (below) or assemble the SDK manually.
 :::
 
-### 可选：官方源安装
+### Optional: install from the official source
 
-若网络可直连 `dl.google.com`，也可使用官方标准流程：
+If your network can reach `dl.google.com` directly, you can also use the official standard flow:
 
 ```bash
 mkdir -p ~/android/sdk && cd ~/android/sdk
@@ -75,11 +75,11 @@ export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 yes | sdkmanager --install "platforms;android-36" "build-tools;35.0.0" "platform-tools"
 ```
 
-### 备选：从镜像手工组装 SDK
+### Alternative: assemble the SDK manually from the mirror
 
-若 `SDK_TEST_BASE_URL` 方式不可用，可从腾讯云镜像下载组件 zip 手工组装，最终得到 `build-tools/`、`platforms/`、`platform-tools/` 三个目录，效果与 sdkmanager 一致：
+If the `SDK_TEST_BASE_URL` approach doesn't work, you can download the component zips from the Tencent Cloud mirror and assemble them manually. The result is `build-tools/`, `platforms/`, and `platform-tools/` directories, with the same effect as sdkmanager:
 
-| 组件 | 镜像地址 |
+| Component | Mirror URL |
 | --- | --- |
 | commandlinetools | `https://mirrors.cloud.tencent.com/AndroidSDK/commandlinetools-linux-13114758_latest.zip` |
 | platform-36 | `https://mirrors.cloud.tencent.com/AndroidSDK/platform-36_r01.zip` |
@@ -92,97 +92,97 @@ curl -L -O https://mirrors.cloud.tencent.com/AndroidSDK/platform-36_r01.zip
 curl -L -O https://mirrors.cloud.tencent.com/AndroidSDK/build-tools_r35_linux.zip
 curl -L -O https://mirrors.cloud.tencent.com/AndroidSDK/platform-tools_r35.0.2-linux.zip
 
-# 1) build-tools：zip 解压出的目录是 android-15/，把内容移到 build-tools/35.0.0/
+# 1) build-tools: the zip unpacks to a directory called android-15/; move its contents into build-tools/35.0.0/
 unzip build-tools_r35_linux.zip -d ~/android/sdk
 mkdir -p ~/android/sdk/build-tools/35.0.0
 mv ~/android/sdk/android-15/* ~/android/sdk/build-tools/35.0.0/
 
-# 2) platform：解压出 android-36/
+# 2) platform: unpacks to android-36/
 unzip platform-36_r01.zip -d ~/android/sdk
 mkdir -p ~/android/sdk/platforms
 mv ~/android/sdk/android-36 ~/android/sdk/platforms/android-36
 
-# 3) platform-tools：解压即得 platform-tools/，无需移动
+# 3) platform-tools: unpacks directly to platform-tools/, no moving needed
 unzip platform-tools_r35.0.2-linux.zip -d ~/android/sdk
 
-ls ~/android/sdk   # 应看到 build-tools/ platforms/ platform-tools/ 三个目录
+ls ~/android/sdk   # You should see the three directories build-tools/ platforms/ platform-tools/
 ```
 
-## 3. 替换 ARM64 原生二进制
+## 3. Replace the native binaries with ARM64 builds
 
-Google 官方的 `aapt2`、`adb` 等工具是 x86_64 编译的，在 aarch64 上无法运行，需要换成社区维护的 ARM64 静态编译版本。
+Google's official tools such as `aapt2` and `adb` are built for x86_64 and can't run on aarch64, so they need to be replaced with community-maintained ARM64 static builds.
 
-从 `https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip` 下载。下载缓慢或失败时，可以在原链接前加 GitHub 代理前缀（实测可用，2026-08）：
+Download from `https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip`. If the download is slow or fails, you can prepend a GitHub proxy prefix to the original link (tested working, 2026-08):
 
-| 加速服务 | 用法 |
+| Acceleration service | Usage |
 | --- | --- |
 | gh-proxy.com | `https://gh-proxy.com/https://github.com/...` |
 | ghproxy.vip | `https://ghproxy.vip/https://github.com/...` |
 
 ```bash
-# 示例：走 gh-proxy.com 加速下载
+# Example: download via the gh-proxy.com accelerator
 curl -L -O https://gh-proxy.com/https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip
-# 容器能直连 GitHub 时可直接下载
+# If the container can reach GitHub directly, download it directly
 # curl -L -O https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip
 unzip /workspace/android-sdk-tools-static-aarch64.zip -d ~/armtools35
 ```
 
-替换 SDK 里的二进制：
+Replace the binaries in the SDK:
 
 ```bash
 cp -p ~/armtools35/build-tools/* ~/android/sdk/build-tools/35.0.0/
 cp -p ~/armtools35/platform-tools/* ~/android/sdk/platform-tools/
 ```
 
-验证 `aapt2` 可执行：
+Verify that `aapt2` runs:
 
 ```bash
 ~/android/sdk/build-tools/35.0.0/aapt2 version
-# 应输出版本号，不报错
+# Should output the version number with no error
 ```
 
-## 4. 配置
+## 4. Configure
 
-### local.properties（项目根目录）
+### local.properties (project root)
 
 ```bash
 echo "sdk.dir=/root/android/sdk" > /workspace/local.properties
 ```
 
-这个文件通常已被 `.gitignore` 忽略，不会污染仓库。
+This file is usually already covered by `.gitignore`, so it won't pollute the repository.
 
-### 全局 Gradle 配置
+### Global Gradle configuration
 
-aapt2 覆盖配置写入全局文件，不要写进项目的 `gradle.properties`：
+Write the aapt2 override into the global file, not into the project's `gradle.properties`:
 
 ```bash
 mkdir -p ~/.gradle
 echo "android.aapt2FromMavenOverride=/root/android/sdk/build-tools/35.0.0/aapt2" > ~/.gradle/gradle.properties
 ```
 
-### apt 源（可选）
+### apt sources (optional)
 
-容器默认可能连不上官方源，建议换国内镜像：
+The container may not be able to reach the official sources by default, so switching to a domestic mirror is recommended:
 
 ```
 URIs: http://mirrors.ustc.edu.cn/debian
 URIs: http://mirrors.ustc.edu.cn/debian-security
 ```
 
-### 下载 Gradle 发行版（可选）
+### Downloading a Gradle distribution (optional)
 
-项目使用 Gradle wrapper 时不需要系统 Gradle，但从零搭建新项目时要先有一个发行版。官方源 `https://services.gradle.org/distributions/gradle-8.11.1-bin.zip` 下载缓慢时可用镜像：
+When a project uses the Gradle wrapper there's no need for a system Gradle, but when setting up a brand-new project from scratch you first need a distribution. If the official source `https://services.gradle.org/distributions/gradle-8.11.1-bin.zip` downloads slowly, use a mirror:
 
-- 华为云：`https://mirrors.huaweicloud.com/gradle/gradle-8.11.1-bin.zip`
-- 腾讯云：`https://mirrors.cloud.tencent.com/gradle/gradle-8.11.1-bin.zip`
+- Huawei Cloud: `https://mirrors.huaweicloud.com/gradle/gradle-8.11.1-bin.zip`
+- Tencent Cloud: `https://mirrors.cloud.tencent.com/gradle/gradle-8.11.1-bin.zip`
 
 ```bash
 curl -L -o /workspace/gradle.zip https://mirrors.huaweicloud.com/gradle/gradle-8.11.1-bin.zip
 unzip gradle.zip -d /workspace/tools
-/workspace/tools/gradle-8.11.1/bin/gradle --version   # 用它执行构建或生成 wrapper
+/workspace/tools/gradle-8.11.1/bin/gradle --version   # Use it to run builds or generate the wrapper
 ```
 
-## 5. 编译
+## 5. Build
 
 ```bash
 cd /workspace
@@ -191,7 +191,7 @@ ANDROID_HOME=/root/android/sdk \
 ./gradlew assembleDebug
 ```
 
-依赖下载慢时，可以在 `settings.gradle.kts` 的 `dependencyResolutionManagement.repositories` 里改用阿里云镜像（AGP 默认从 `google()` / `mavenCentral()` 拉依赖）：
+If dependencies download slowly, you can switch to the Aliyun mirror in the `dependencyResolutionManagement.repositories` block of `settings.gradle.kts` (by default AGP pulls dependencies from `google()` / `mavenCentral()`):
 
 ```kotlin
 maven { url = uri("https://maven.aliyun.com/repository/google") }
@@ -199,34 +199,34 @@ maven { url = uri("https://maven.aliyun.com/repository/central") }
 maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
 ```
 
-首次构建大约 10 到 15 分钟（下载依赖加 Kotlin 编译），之后增量构建 1 到 2 分钟。Gradle daemon 在 PRoot 下可以正常工作，能加速增量构建；如果遇到 daemon 异常退出导致锁文件冲突，单次加 `--no-daemon` 即可。
+The first build takes about 10 to 15 minutes (downloading dependencies plus Kotlin compilation); incremental builds afterwards take 1 to 2 minutes. The Gradle daemon works normally under PRoot and speeds up incremental builds; if the daemon exits abnormally and causes lock file conflicts, add `--no-daemon` for that run.
 
-成功后 APK 的输出路径取决于项目配置，通常是：
+On success, the APK output path depends on the project configuration, usually:
 
 ```
 app/build/outputs/apk/<flavor>/debug/app-<flavor>-debug.apk
 ```
 
-## 常见问题
+## Troubleshooting
 
-| 现象 | 原因 | 解决 |
+| Symptom | Cause | Fix |
 | --- | --- | --- |
-| `JAVA_HOME is not set` | 未设环境变量 | 命令行加 `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64` |
-| `SDK location not found` | 缺 local.properties | 创建 `local.properties` 写入 `sdk.dir=/root/android/sdk` |
-| `aapt2 syntax error` | 用了 x86 版 aapt2 | 确认 `~/.gradle/gradle.properties` 里的 `aapt2FromMavenOverride` 指向 ARM 版 |
-| `Failed to install build-tools` | AGP 联网验证失败 | 确认本地已装项目所需的 build-tools 版本 |
-| apt 下载 403 | 镜像源临时不可用 | 换镜像源（清华 → 中科大） |
-| Gradle 锁文件冲突 | 上次构建未正常退出 | 删除 `~/.gradle/caches/*.lock`，或加 `--no-daemon` |
+| `JAVA_HOME is not set` | Environment variable not set | Add `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64` on the command line |
+| `SDK location not found` | Missing local.properties | Create `local.properties` with `sdk.dir=/root/android/sdk` |
+| `aapt2 syntax error` | Using the x86 build of aapt2 | Make sure `aapt2FromMavenOverride` in `~/.gradle/gradle.properties` points to the ARM build |
+| `Failed to install build-tools` | AGP's online verification failed | Make sure the build-tools version the project needs is installed locally |
+| apt download returns 403 | Mirror temporarily unavailable | Switch mirror (Tsinghua → USTC) |
+| Gradle lock file conflict | The last build didn't exit cleanly | Delete `~/.gradle/caches/*.lock`, or add `--no-daemon` |
 
-## 补充：内置 Alpine 容器的修复
+## Supplement: fixing the built-in Alpine container
 
-在内置 Alpine 容器里编译 Android 应用，可能遇到 `Failed to delete /tmp/tempdir_*`。原因是 AGP 的 apkzlib 里 `TemporaryFile` 用 `File.delete()` 删临时目录，这个操作在 PRoot 环境下可能失败。自定义 Debian 镜像不受影响。
+When building an Android app in the built-in Alpine container, you may hit `Failed to delete /tmp/tempdir_*`. The cause is that `TemporaryFile` in AGP's apkzlib uses `File.delete()` to delete temporary directories, and that operation can fail in a PRoot environment. Custom Debian images are not affected.
 
-::: warning 版本相关
-下述代码针对 Gradle 8.11.1 / AGP 8.x 中的 apkzlib（包名 `com.android.tools.build.apkzlib.bytestorage.TemporaryFile`）。不同版本的包路径与内部结构可能不同，请按实际使用的 jar 反编译结构调整。
+::: warning Version-specific
+The code below targets apkzlib in Gradle 8.11.1 / AGP 8.x (package name `com.android.tools.build.apkzlib.bytestorage.TemporaryFile`). The package path and internal structure may differ between versions; adjust it according to the decompiled structure of the jar you actually use.
 :::
 
-把 `File.delete()` 换成 `Files.delete()`（走 unlinkat 绕过底层删除失效）：
+Replace `File.delete()` with `Files.delete()` (which goes through unlinkat, bypassing the broken low-level delete):
 
 ```java
 package com.android.tools.build.apkzlib.bytestorage;
@@ -274,7 +274,7 @@ public class TemporaryFile implements Closeable {
             try {
                 Files.delete(f.toPath());
             } catch (NoSuchFileException e) {
-                // 已删除则忽略
+                // Already deleted; ignore
             } catch (IOException e) {
                 if (!f.delete()) {
                     throw new IOException("Failed to delete '" + f.getAbsolutePath() + "'", e);
@@ -285,4 +285,4 @@ public class TemporaryFile implements Closeable {
 }
 ```
 
-编译这段源码，把 `.class` 文件替换回 Gradle 缓存中的 `instrumented-apkzlib-*.jar` 即可。
+Compile this source and replace the `.class` file back into the `instrumented-apkzlib-*.jar` in the Gradle cache, and you're done.

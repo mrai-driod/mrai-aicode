@@ -1,59 +1,59 @@
-# 远程 SSH 模式
+# Remote SSH Mode
 
-选中一个「远程 SSH」容器后，AiCode 进入远程工作区模式：AI 的**读写文件、执行命令、运行终端均发生在远程服务器上**，`~/workspace` 映射到服务器上的指定目录，手机仅作为操作界面。
+After selecting a "Remote SSH" container, AiCode enters remote workspace mode: the AI's **file reading/writing, command execution, and terminals all happen on the remote server**, `~/workspace` maps to a specified directory on the server, and the phone serves only as the operating interface.
 
-适用于服务器上已有完整工具链，或需要 AI 直接修改远程项目的场景。
+Suitable for scenarios where the server already has a complete toolchain, or where you need the AI to directly modify a remote project.
 
-## 前置：先建一个 SFTP 通道
+## Prerequisite: Create an SFTP Channel First
 
-远程 SSH 复用「连接与同步」页中 **SFTP** 通道的连接信息（主机、端口、用户名、密码），需先在该页建好一个 SFTP 连接，见[工作区同步](/guide/sync)。
+Remote SSH reuses the connection info (host, port, username, password) of an **SFTP** channel from the "Connections & Sync" page; you need to create an SFTP connection on that page first — see [Workspace Sync](/guide/sync).
 
-FTP 通道不支持执行命令，不会出现在可选列表中。
+FTP channels don't support command execution and won't appear in the selectable list.
 
-## 新建远程 SSH 容器
+## Creating a Remote SSH Container
 
-在「设置 → 容器与镜像」点击右上角 +，选「远程 SSH」：
+In "Settings → Containers & Images", tap + at the top right and choose "Remote SSH":
 
-- **名称**：配置的别名。
-- **SSH 连接通道**：下拉选择一个已配置的 SFTP 通道。无可用通道时，界面提示先前往「连接与同步」页配置，且保存按钮不可用。
-- **远程工作区路径**：服务器上的目录，AI 的 `~/workspace` 映射到此。选中通道时会自动填入默认值 `~/.aicode/workspaces`（按服务器上该用户的真实 home 解析，如 root 用户为 `/root/.aicode/workspaces`），可修改。
+- **Name**: an alias for the configuration.
+- **SSH connection channel**: dropdown to select a configured SFTP channel. When no channel is available, the UI prompts you to go configure one on the "Connections & Sync" page first, and the save button is unavailable.
+- **Remote workspace path**: a directory on the server; the AI's `~/workspace` maps to it. When a channel is selected, the default `~/.aicode/workspaces` is filled in automatically (resolved against that user's real home on the server, e.g. `/root/.aicode/workspaces` for the root user), and can be modified.
 
-保存后在列表中选中即生效。
+After saving, select it in the list to take effect.
 
-认证方式沿用所选 SFTP 通道的配置，支持**密码认证**与**SSH 私钥认证**（含带密码保护的私钥）。
+The authentication method follows the selected SFTP channel's configuration, supporting **password authentication** and **SSH private key authentication** (including password-protected private keys).
 
-## 连接行为
+## Connection Behavior
 
-- **自动连接**：App 启动时若当前为远程模式，会在后台自动连接；连接失败不会阻塞界面，首次执行命令时会重试。
-- **保活与自动重连**：连接后每 30 秒发送一次心跳，防止空闲断连；断线后由后台自动重连（5 秒起、最长 30 秒的退避间隔），App 回到前台时也会立即重试一次。
-- **状态显示**：对话页顶部显示「SSH：已连接 / 连接中 / 连接失败 / 未连接」。未连接时消息区显示等待提示。
-- **两条独立连接**：文件读写走 SFTP，终端与命令走 exec，各占一条 SSH 连接、互不影响；文件通道异常时自动重建，不中断正在运行的命令。
-- **路径自举**：远程工作区路径不存在时自动创建；若该目录下无任何子目录，会自动创建一个名为 `default` 的工作区，保证 AI 始终有可用的 `~/workspace`。
+- **Auto-connect**: at app startup, if currently in remote mode, it connects automatically in the background; a connection failure doesn't block the UI, and the first command execution retries.
+- **Keep-alive & auto-reconnect**: after connecting, a heartbeat is sent every 30 seconds to prevent idle disconnection; after a disconnect, the background reconnects automatically (backoff starting at 5 seconds, up to 30 seconds), and also retries immediately when the app returns to the foreground.
+- **Status display**: the top of the conversation page shows "SSH: Connected / Connecting / Connection failed / Not connected". When not connected, the message area shows a waiting prompt.
+- **Two independent connections**: file reading/writing goes over SFTP, while terminals and commands go over exec — each occupies its own SSH connection without affecting the other; when the file channel has an anomaly it's rebuilt automatically, without interrupting running commands.
+- **Path bootstrap**: if the remote workspace path doesn't exist, it's created automatically; if there are no subdirectories under it, a workspace named `default` is created automatically, ensuring the AI always has a usable `~/workspace`.
 
-## 本地数据与跟随执行环境的数据
+## Local Data vs Data Following the Execution Environment
 
-远程模式下命令、文件、终端与工作区均在服务器上。大多数配置仍存于手机本地；少数「执行环境资源」则跟随环境、以远端为准：
+In remote mode, commands, files, terminals, and workspaces are all on the server. Most configuration is still stored locally on the phone; a few "execution environment resources" follow the environment, with the remote side authoritative:
 
-| 项目 | 说明 |
+| Item | Description |
 | --- | --- |
-| 聊天历史、模型与供应商配置、API Key、应用设置 | 全部本地 |
-| 记忆（memory） | 本地。项目级记忆按「项目名 + 服务器标识」隔离，不同服务器上的同名工作区不会混淆 |
-| 全局技能、子代理与面板脚本 | **跟随执行环境**：远程模式下读写**服务器**上的 `~/.aicode/skills/`、`~/.aicode/agents/`、`~/.aicode/scripts/`，与本地模式的那份互相独立 |
-| 项目级技能与子代理 | 直接读写**服务器工作区**中的 `<工作区>/.aicode/skills/`、`agents/`，可随代码库提交到 git |
-| 项目级配置（工具授权规则 / MCP / 技能与子代理的停用名单） | 手机本地。远程模式按「项目名 + 服务器标识」隔离在 App 私有目录下，不写入服务器 |
-| MCP 服务器 | HTTP 类型由 App 直接连接；stdio 类型运行在「默认容器」上（见下），不在远程服务器 |
-| 日志与工具输出 | 本地 |
+| Chat history, model & provider configuration, API keys, app settings | All local |
+| Memory | Local. Project-level memory is isolated by "project name + server identity", so same-named workspaces on different servers don't get confused |
+| Global Skills, sub-agents & panel scripts | **Follow the execution environment**: in remote mode, reads/writes the **server's** `~/.aicode/skills/`, `~/.aicode/agents/`, `~/.aicode/scripts/`, independent from the local mode copies |
+| Project-level Skills & sub-agents | Directly read/write `<workspace>/.aicode/skills/`, `agents/` in the **server workspace**, and can be committed to git with the codebase |
+| Project-level configuration (tool authorization rules / MCP / disable lists for Skills & sub-agents) | Local on the phone. In remote mode, isolated in the app's private directory by "project name + server identity", not written to the server |
+| MCP servers | HTTP type is connected directly by the app; stdio type runs on the "default container" (see below), not on the remote server |
+| Logs & tool output | Local |
 
-连接成功后，AiCode 会将内置文档同步到服务器的 `~/.aicode/docs/`，远程模式下 AI 也可查阅这些说明文档。
+After a successful connection, AiCode syncs the built-in docs to the server's `~/.aicode/docs/`, so in remote mode the AI can also consult these instruction documents.
 
-## 默认容器
+## Default Container
 
-远程模式下仍有部分功能需在本地运行，例如 stdio 类型的 MCP server。它们运行在**默认容器**上，默认为内置 Alpine，可在容器列表下方的「默认容器」分组中改为任意本地容器。
+In remote mode, some features still need to run locally — for example, stdio-type MCP servers. They run on the **default container**, which defaults to the built-in Alpine, and can be changed to any local container in the "Default Container" group below the container list.
 
-切换容器（包括切到远程 SSH）后，所有 stdio MCP 会自动断开并用新容器重连；HTTP MCP 不依赖容器，不受影响。
+After switching containers (including switching to remote SSH), all stdio MCPs automatically disconnect and reconnect with the new container; HTTP MCPs don't depend on the container and are unaffected.
 
-## Git 署名与凭据的去向
+## Where Git Signatures & Credentials Go
 
-Git 页面中保存的**署名**会写入当前执行环境——远程模式下即写入服务器的 git 配置。
+The **signature** saved on the Git page is written to the current execution environment — in remote mode, that's the server's git configuration.
 
-**凭据**以手机本地的凭据文件为唯一来源。远程模式下可在凭据页开启「自动注入凭证」（按服务器分别记忆，首次进入时询问），将凭据同步到服务器，且仅对工作区目录下的仓库生效，不影响服务器上其它目录的仓库，也不改动服务器用户的全局 git 配置。
+**Credentials** use the credential file on the phone as the sole source. In remote mode, you can enable "Auto-inject credentials" on the credentials page (remembered per server, asked on first entry) to sync credentials to the server, effective only for repositories under the workspace directory; it doesn't affect repositories in other directories on the server, nor does it change the server user's global git configuration.

@@ -1,61 +1,61 @@
-# 平板与大屏
+# Tablets & Large Screens
 
-::: tip 版本说明
-本页描述的大屏布局从 1.11.0 起提供。
+::: tip Version note
+The large-screen layout described on this page is available from 1.11.0.
 :::
 
-大屏下 AiCode 会自动换成双栏布局：侧边栏常驻、聊天旁边可以并排开着代码或终端。手机上的界面和操作完全不变。
+On a large screen, AiCode automatically switches to a two-column layout: the sidebar stays resident, and code or a terminal can be opened side by side next to the chat. The interface and operations on phones are completely unchanged.
 
-## 切换时机
+## When It Switches
 
-判断依据是**当前窗口的宽度**，不是屏幕大小：
+The criterion is the **current window's width**, not the screen size:
 
-| 窗口宽度 | 界面形态 |
+| Window width | Interface form |
 | --- | --- |
-| 窄（多数手机竖屏） | 单栏，侧边栏靠汉堡键滑出，和原来一样 |
-| 中等（平板竖握、手机横屏） | 单栏，侧边栏稍宽一些 |
-| 宽（平板横屏、折叠屏展开、桌面窗口） | 侧边栏常驻，聊天页可开右栏 |
+| Narrow (most phones in portrait) | Single column; the sidebar slides out via the hamburger button, same as before |
+| Medium (tablets held in portrait, phones in landscape) | Single column; the sidebar is slightly wider |
+| Wide (tablets in landscape, foldables unfolded, desktop windows) | Sidebar resident; the chat page can open a right column |
 
-因为判断依据是窗口宽度，因此在平板上把 AiCode 拖成半屏或三分之一屏时，它会自动退回单栏，不会挤成一团。
+Because the criterion is window width, when you drag AiCode to half or a third of the screen on a tablet, it automatically falls back to a single column rather than getting squeezed into a clump.
 
-## 常驻侧边栏
+## Resident Sidebar
 
-宽屏进入聊天页时，会话列表和文件树直接固定在左侧，无需每次滑出。此时标题栏的汉堡键会消失（侧栏已常驻）。
+When entering the chat page on a wide screen, the session list and file tree are fixed directly on the left, with no need to slide them out each time. At this point the hamburger button in the title bar disappears (the sidebar is already resident).
 
-点文件树里的文件、或者选中另一个会话，侧栏都不会收起，可以连续点着看。
+Tapping a file in the file tree, or selecting another session, doesn't collapse the sidebar, so you can tap through and view continuously.
 
-## 并排的工作台
+## Side-by-Side Workbench
 
-宽屏下聊天页右侧可以并排显示一个面板：
+On a wide screen, a panel can be displayed side by side on the right of the chat page:
 
-- 点标题栏的**终端**图标 → 右栏开终端，再点一次收起
-- 点标题栏的 **Git** 图标 → 右栏开 Git 面板，再点一次收起
-- 点文件树里的文件，或点 AI 回复里的文件路径链接 → 右栏打开代码编辑器（文件树里的图片改为全屏预览、APK 改为系统安装器）
+- Tap the **Terminal** icon in the title bar → the right column opens the terminal; tap again to collapse it
+- Tap the **Git** icon in the title bar → the right column opens the Git panel; tap again to collapse it
+- Tap a file in the file tree, or a file path link in an AI reply → the right column opens the code editor (images in the file tree switch to full-screen preview; APKs switch to the system installer)
 
-右栏当前开的是哪个，标题栏对应图标会高亮显示。
+Whichever panel the right column currently has open, the corresponding icon in the title bar is highlighted.
 
-一边看 AI 改代码、一边在右侧核对文件内容或执行命令，无需来回切换页面。
+Watch the AI change code on one side while checking file contents or executing commands on the right — no need to switch pages back and forth.
 
-**调整宽度**：拖动中间的竖线，可以在三七和七三之间任意调整，比例会记住。
+**Adjusting the width**: drag the vertical divider in the middle to adjust freely between a 30/70 and 70/30 split; the ratio is remembered.
 
-**关掉右栏**：点右栏左上角的 ✕，或者按一次返回键。编辑器里有未保存的修改时，仍然会先弹出保存提示。
+**Closing the right column**: tap the ✕ at the top left of the right column, or press the back button once. If the editor has unsaved changes, the save prompt still pops up first.
 
-## 设置页双栏
+## Two-Column Settings Page
 
-宽屏打开设置后，左边是设置项列表（一直显示），右边是选中项的内容。切换设置项时只有右半边变化，不再整页跳转。左上角的返回箭头用于离开设置回到聊天。
+After opening Settings on a wide screen, the left is the settings item list (always displayed) and the right is the selected item's content. Switching settings items only changes the right half, without jumping the whole page. The back arrow at the top left is for leaving Settings and returning to chat.
 
-## 旋转和分屏不再中断
+## Rotation & Split Screen No Longer Interrupt
 
-横竖屏切换、拖动分屏大小时，界面会跟着重新排布，但不会重新加载：
+When switching between landscape and portrait or dragging the split-screen size, the interface re-lays out accordingly but doesn't reload:
 
-- 终端里运行着的命令继续执行，输出不丢
-- 编辑器里未保存的修改还在
-- 聊天列表停在原来的位置
+- Commands running in the terminal keep executing, output isn't lost
+- Unsaved changes in the editor are still there
+- The chat list stays at its original position
 
-## 阅读宽度
+## Reading Width
 
-宽屏下聊天内容不会拉满整个屏幕，而是限制在适合阅读的宽度并居中——单行文字过长会增加阅读负担。右栏打开后左半边变窄，内容会自动跟着收窄。
+On a wide screen, chat content doesn't stretch across the entire screen, but is limited to a reading-friendly width and centered — overly long lines of text increase the reading burden. After the right column opens and the left half narrows, the content automatically narrows along with it.
 
-## 鼠标与触控板
+## Mouse & Touchpad
 
-连接鼠标时，把指针移到分栏竖线上会变成拖拽光标，按住左右拖动即可调整两栏宽度。
+When a mouse is connected, moving the pointer over the column divider turns it into a drag cursor; hold and drag left or right to adjust the two columns' widths.
