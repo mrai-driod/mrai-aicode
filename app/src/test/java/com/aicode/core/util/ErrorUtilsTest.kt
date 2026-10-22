@@ -49,14 +49,14 @@ class ErrorUtilsTest {
     fun unknownHostException_friendlyName() {
         val e = java.net.UnknownHostException()
         val msg = e.toUserMessage()
-        assert(msg.contains("DNS") || msg.contains("网络"))
+        assert(msg.contains("DNS resolution failed"))
     }
 
     @Test
     fun socketTimeoutException_friendlyName() {
         val e = java.net.SocketTimeoutException()
         val msg = e.toUserMessage()
-        assert(msg.contains("超时"))
+        assert(msg.contains("Request timed out"))
     }
 
     @Test

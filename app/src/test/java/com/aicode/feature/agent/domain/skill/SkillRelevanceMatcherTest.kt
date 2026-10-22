@@ -24,7 +24,7 @@ class SkillRelevanceMatcherTest {
         assertTrue(hint!!.contains("root-toolkit"))
         assertFalse("不相关的技能不应出现", hint.contains("pdf-report"))
         assertTrue(hint.contains("loadSkill"))
-        assertTrue(hint.contains("忽略本段"))
+        assertTrue(hint.contains("ignore this section"))
     }
 
     @Test

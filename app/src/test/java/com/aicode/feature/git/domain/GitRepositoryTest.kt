@@ -429,6 +429,6 @@ class GitRepositoryTest {
         val repo = createRepo("", exitCode = 1)
         val e = runCatching { repo.commit("msg") }.exceptionOrNull()
         assertTrue(e is GitCommandFailureException)
-        assertEquals("git 退出码 1", e?.message)
+        assertEquals("git exit code 1", e?.message)
     }
 }

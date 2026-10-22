@@ -147,7 +147,7 @@ class SlashCommandRegistryTest {
     @Test
     fun buildSkillPrompt_appendsArgsWhenNoPlaceholder() {
         val s = skill("x", "d", instructions = "do it")
-        assertEquals("do it\n\n用户附加输入：a4", SlashCommandRegistry.buildSkillPrompt(s, "a4"))
+        assertEquals("do it\n\nAdditional user input: a4", SlashCommandRegistry.buildSkillPrompt(s, "a4"))
     }
 
     @Test

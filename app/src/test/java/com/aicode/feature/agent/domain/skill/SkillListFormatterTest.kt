@@ -26,14 +26,14 @@ class SkillListFormatterTest {
         val out = SkillListFormatter.format(skills, charBudget = 1000)
         assertTrue(out.contains("- a: 甲"))
         assertTrue(out.contains("- b: 乙"))
-        assertFalse(out.contains("未在此列出"))
+        assertFalse(out.contains("not listed here"))
         assertEquals(2, out.lines().size)
     }
 
     @Test
     fun blankDescription_usesPlaceholder() {
         val out = SkillListFormatter.format(listOf(skill("a", "")), charBudget = 1000)
-        assertTrue(out.contains("- a: （无描述）"))
+        assertTrue(out.contains("- a: (No description)"))
     }
 
     @Test
@@ -50,7 +50,7 @@ class SkillListFormatterTest {
 
         val omitted = skills.size - fullLines.size - nameLines.size
         assertTrue("应有省略技能", omitted > 0)
-        assertTrue(out.contains("$omitted 个技能"))
+        assertTrue(out.contains("$omitted more skills are not listed here"))
         assertTrue(out.contains("~/.aicode/skills/"))
         assertTrue(out.contains("loadSkill"))
         assertTrue("输出长度 ${out.length} 超过预算 $budget", out.length <= budget)
@@ -64,8 +64,8 @@ class SkillListFormatterTest {
     fun tinyBudget_onlyNoticeAndStaysBounded() {
         val skills = (1..10).map { skill("skill-$it", "描述") }
         val out = SkillListFormatter.format(skills, charBudget = 200)
-        assertTrue(out.contains("未在此列出"))
-        assertTrue(out.contains("${skills.size} 个技能"))
+        assertTrue(out.contains("not listed here"))
+        assertTrue(out.contains("${skills.size} more skills"))
         assertTrue("输出长度 ${out.length} 超过预算 200", out.length <= 200)
     }
 
@@ -75,14 +75,14 @@ class SkillListFormatterTest {
         val skills = (1..118).map { skill("builtin-skill-$it", "描".repeat(131)) }
         val out = SkillListFormatter.format(skills)
         assertTrue(out.length <= SkillListFormatter.DEFAULT_CHAR_BUDGET)
-        assertTrue(out.contains("未在此列出"))
+        assertTrue(out.contains("not listed here"))
     }
 
     @Test
     fun allEntriesFit_nothingOmitted() {
         val skills = (1..50).map { skill("s$it", "短描述") }
         val out = SkillListFormatter.format(skills)
-        assertFalse(out.contains("未在此列出"))
+        assertFalse(out.contains("not listed here"))
         assertEquals(50, out.lines().size)
     }
 }

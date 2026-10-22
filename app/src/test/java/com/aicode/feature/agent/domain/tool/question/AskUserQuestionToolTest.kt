@@ -74,7 +74,7 @@ class AskUserQuestionToolTest {
         val result = deferredResult.await()
         assertTrue(result is ToolResult.Success)
         val text = (result as ToolResult.Success).data.jsonPrimitive.content
-        assertEquals("「请选择需要包含的依赖？」= Ktor, Coroutines, Other: Serialization", text)
+        assertEquals("\"请选择需要包含的依赖？\" = Ktor, Coroutines, Other: Serialization", text)
     }
 
     @Test
@@ -122,7 +122,7 @@ class AskUserQuestionToolTest {
         val result = deferredResult.await()
         assertTrue(result is ToolResult.Success)
         val text = (result as ToolResult.Success).data.jsonPrimitive.content
-        assertEquals("「选择方案？」= 方案A", text)
+        assertEquals("\"选择方案？\" = 方案A", text)
     }
 
     @Test
@@ -170,7 +170,7 @@ class AskUserQuestionToolTest {
         val result = deferredResult.await()
         assertTrue(result is ToolResult.Success)
         val text = (result as ToolResult.Success).data.jsonPrimitive.content
-        assertEquals("「选择方案？」= Other: 自定义方案C", text)
+        assertEquals("\"选择方案？\" = Other: 自定义方案C", text)
     }
 
     @Test

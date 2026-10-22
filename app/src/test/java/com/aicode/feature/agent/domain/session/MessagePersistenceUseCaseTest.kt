@@ -17,7 +17,7 @@ class MessagePersistenceUseCaseTest {
 
         val result = MessagePersistenceUseCase.sanitizeContent(input)
 
-        assertTrue(result.contains("图片已省略"))
+        assertTrue(result.contains("Image omitted"))
         assertFalse(result.contains("iVBORw0KGgo"))
         assertTrue(result.contains("这是回复"))
     }
@@ -28,7 +28,7 @@ class MessagePersistenceUseCaseTest {
 
         val result = MessagePersistenceUseCase.sanitizeContent(input)
 
-        assertTrue(result.contains("图片已省略"))
+        assertTrue(result.contains("Image omitted"))
         assertFalse(result.contains("/9j/4AAQSk"))
     }
 
