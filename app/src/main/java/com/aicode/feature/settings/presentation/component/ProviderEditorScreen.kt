@@ -206,7 +206,7 @@ fun ProviderEditorScreen(
         mutableStateOf(initialProvider?.keySwitchStatusCodes?.joinToString(",") ?: "")
     }
     var baseUrl by remember { mutableStateOf(initialProvider?.baseUrl ?: presetPrefill?.baseUrl ?: "") }
-    var useFullUrl by remember { mutableStateOf(initialProvider?.useFullUrl ?: false) }
+    var useFullUrl by remember { mutableStateOf(initialProvider?.useFullUrl ?: presetPrefill?.useFullUrl ?: false) }
     var useResponseApi by remember { mutableStateOf(initialProvider?.useResponseApi ?: false) }
     var anthropicCacheBreakpoints by remember { mutableStateOf(initialProvider?.anthropicCacheBreakpoints ?: true) }
     var openaiChatCacheKey by remember { mutableStateOf(initialProvider?.openaiChatCacheKey ?: false) }

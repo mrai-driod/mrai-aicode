@@ -16,6 +16,8 @@ data class ProviderPreset(
     val type: String,
     /** Base URL, auto-filled when selected, can be changed on the edit page. */
     val baseUrl: String,
+    /** When true, [baseUrl] is the complete request URL and is used as-is (no API path is appended). */
+    val useFullUrl: Boolean = false,
     /** List of associated model ids (optional; when selected, imported as available models). */
     val models: List<String> = emptyList(),
     /** Whether recommended/pinned to the top */

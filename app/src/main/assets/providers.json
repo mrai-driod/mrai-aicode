@@ -5,23 +5,44 @@
     "type": "OPENAI",
     "baseUrl": "https://opencode.ai/zen/v1",
     "models": [
-      "big-pickle",
-      "beam-free",
-      "flint-40b-free",
       "mimo-v2.6-flash-free",
       "nemotron-3.5-super-vl-free",
-      "nemotron-3.5-lightning-free",
-      "jev-1.13-free",
-      "longcat-2.5-preview-free",
       "deepseek-v4.1-flash-free",
       "glm-5.3-flash-free",
-      "minimax-m3.1-flash-free"
+      "beam-free",
+      "flint-40b-free",
+      "nemotron-3-ultra-free",
+      "nemotron-3.5-lightning-free"
     ],
     "isRecommended": true,
     "badge": "Free - no key needed",
     "websiteUrl": "https://opencode.ai",
     "tags": [
       "Keyless"
+    ]
+  },
+  {
+    "id": "github-models",
+    "name": "GitHub Models",
+    "type": "OPENAI",
+    "baseUrl": "https://models.github.ai/inference/chat/completions",
+    "useFullUrl": true,
+    "models": [
+      "openai/gpt-4o-mini",
+      "openai/gpt-4o",
+      "microsoft/phi-4-multimodal-instruct",
+      "meta/llama-4-scout-17b-16e-instruct",
+      "meta/llama-4-maverick-17b-128e-instruct-fp8",
+      "deepseek/deepseek-v3-0324",
+      "mistral-ai/mistral-medium-2505"
+    ],
+    "isRecommended": false,
+    "badge": "API key required",
+    "websiteUrl": "https://github.com/settings/tokens",
+    "tags": [
+      "Free tier",
+      "Vision",
+      "GitHub token"
     ]
   },
   {

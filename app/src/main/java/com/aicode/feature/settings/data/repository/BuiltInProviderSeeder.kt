@@ -30,8 +30,24 @@ class BuiltInProviderSeeder @Inject constructor(
         if (providerRepository.getProviderById(MRAI_ID) == null) {
             providerRepository.saveProvider(mraiAiConfig())
         }
-        if (providerRepository.getProviderById(OPENCODE_FREE_ID) == null) {
+        val existingOpenCode = providerRepository.getProviderById(OPENCODE_FREE_ID)
+        if (existingOpenCode == null) {
             providerRepository.saveProvider(openCodeFreeConfig())
+        } else if (existingOpenCode.models == LEGACY_OPENCODE_FREE_MODELS) {
+            // The install still carries the exact previous built-in list
+            // (user never customised it): Zen has since retired some of
+            // those ids (big-pickle, jev-1.13-free) and deprecated others,
+            // which made the provider look dead. Swap in the current list
+            // and re-point the default/selected model if it was retired.
+            providerRepository.saveProvider(
+                existingOpenCode.copy(
+                    models = OPENCODE_FREE_MODELS,
+                    defaultModel = existingOpenCode.defaultModel
+                        .takeIf { it in OPENCODE_FREE_MODELS } ?: OPENCODE_FREE_MODELS.first(),
+                    selectedModel = existingOpenCode.selectedModel
+                        .takeIf { it in OPENCODE_FREE_MODELS } ?: OPENCODE_FREE_MODELS.first()
+                )
+            )
         }
         // Make Mrai AI the out-of-box default only when the user has not
         // already chosen a default provider themselves.
@@ -111,20 +127,19 @@ class BuiltInProviderSeeder @Inject constructor(
 
         /**
          * Vision-capable models in the OpenCode Free list, per models.dev
-         * input modalities (checked Oct 22, 2026) — all six also support
-         * tool calls, so they stay full agent models with images on.
+         * input modalities (re-checked Oct 22, 2026 against the live
+         * models.dev catalog) — all four also support tool calls, so they
+         * stay full agent models with images on.
          */
         val VISION_MODELS = setOf(
             "mimo-v2.6-flash-free",
             "nemotron-3.5-super-vl-free",
-            "longcat-2.5-preview-free",
             "deepseek-v4.1-flash-free",
-            "glm-5.3-flash-free",
-            "minimax-m3.1-flash-free"
+            "glm-5.3-flash-free"
         )
 
-        /** OpenCode Zen's free tier, as listed by its live /models catalog. */
-        val OPENCODE_FREE_MODELS = listOf(
+        /** The previous built-in list, kept only to recognise un-customised installs for the refresh above. */
+        val LEGACY_OPENCODE_FREE_MODELS = listOf(
             "big-pickle",
             "beam-free",
             "flint-40b-free",
@@ -136,6 +151,22 @@ class BuiltInProviderSeeder @Inject constructor(
             "deepseek-v4.1-flash-free",
             "glm-5.3-flash-free",
             "minimax-m3.1-flash-free"
+        )
+
+        /**
+         * OpenCode Zen's free tier as of Oct 22, 2026 (models.dev catalog,
+         * status active, cost 0). Vision models first so the default
+         * (first entry) can see images out of the box.
+         */
+        val OPENCODE_FREE_MODELS = listOf(
+            "mimo-v2.6-flash-free",
+            "nemotron-3.5-super-vl-free",
+            "deepseek-v4.1-flash-free",
+            "glm-5.3-flash-free",
+            "beam-free",
+            "flint-40b-free",
+            "nemotron-3-ultra-free",
+            "nemotron-3.5-lightning-free"
         )
     }
 }
