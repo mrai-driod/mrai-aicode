@@ -35,7 +35,10 @@ val gitDescribeOutput = providers.exec {
 fun gitVersionName(): String = try {
     val raw = gitDescribeOutput.get().trim()
     if (raw.startsWith("v")) {
-        val version = raw.substring(1) // 去掉开头的 'v'
+        // Mrai fork: strip a trailing "-dirty" — in CI the release keystore is
+        // restored into the tree before Gradle runs, which would otherwise
+        // brand every store build "x.y.z-dirty" even on an exact tag.
+        val version = raw.substring(1).removeSuffix("-dirty") // 去掉开头的 'v'
         // 如 "1.7.0"、"1.7.0-rc1" 或 "1.7.0-2-g04bc2fa"
         // 将 git describe 格式 "1.7.0-2-g04bc2fa" 转为规范语义化版本 "1.7.0-dev.2+g04bc2fa"
         val devRegex = Regex("""^(\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+)?)-(\d+)-g([0-9a-f]+)(.*)$""")
