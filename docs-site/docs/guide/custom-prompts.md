@@ -89,7 +89,7 @@ So you only need to place the few fragments you want to modify or add; the rest 
 Custom prompt fragments are re-read on every request, so changes take effect right away without restarting the app. Note: the Skills list, memory, and sub-agent list still only refresh on a **new session**.
 :::
 
-There are three ways to edit: modify directly with `vi` / `nano` in the terminal; have the AI write it for you (its file tools can read and write this directory directly); or [access the app's private directory with a file manager](/guide/files#工作区文件在手机上的位置).
+There are three ways to edit: modify directly with `vi` / `nano` in the terminal; have the AI write it for you (its file tools can read and write this directory directly); or [access the app's private directory with a file manager](/guide/files#where-workspace-files-live-on-the-phone).
 
 ## Fully Disabling Built-in Prompts
 

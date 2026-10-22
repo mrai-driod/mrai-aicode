@@ -71,9 +71,9 @@ The selectors of `click`, `fill`, `hover`, `getText`, `getHtml`, `scroll`, `wait
 
 - `ref=e22`: an element reference returned by `getBackbone`, directly locating an element in the snapshot
 - CSS: `#id`, `.class`, `a[href=...]`
-- `text=登录`: exact match of element text
-- `text*=登录`: substring match
-- `role=button[name="登录"]`: match by role and name
+- `text=Log in`: exact match of element text
+- `text*=Log in`: substring match
+- `role=button[name="Log in"]`: match by role and name
 - `xpath=//a[@href]`: XPath expression
 
 `getBackbone` returns the accessibility tree: each node is shaped like `{role,name,ref,url,value,children}`, where `role` is the accessible role derived from the tag / `role` attribute (`link`/`button`/`textbox`/`heading`/`navigation`…), `name` is the accessible name (`aria-label`/`aria-labelledby`/`alt`/`placeholder`/associated `label`/content text), and `ref` is only assigned to interactive elements. `script`/`style` and invisible elements are filtered out, and nodes beyond `maxDepth` are marked with `truncated:true`.

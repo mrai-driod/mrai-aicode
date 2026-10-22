@@ -45,4 +45,4 @@ You can follow the system language, or directly specify one of the supported lan
 
 ## Terminal Appearance
 
-The terminal's color theme, font, font size, and cursor style are a separate set of settings — see [Terminal](/guide/terminal#外观设置).
+The terminal's color theme, font, font size, and cursor style are a separate set of settings — see [Terminal](/guide/terminal#appearance-settings).

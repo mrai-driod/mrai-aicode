@@ -23,7 +23,7 @@ To avoid lag from large logs, the app only shows the last portion of the current
 
 No root permission needed — just open it with the phone's built-in file manager.
 
-Workspace project files and AI configuration are stored in the app's private directory, invisible to ordinary file managers; for how to access them, see [File Browsing & Code Editing](/guide/files#工作区文件在手机上的位置).
+Workspace project files and AI configuration are stored in the app's private directory, invisible to ordinary file managers; for how to access them, see [File Browsing & Code Editing](/guide/files#where-workspace-files-live-on-the-phone).
 
 ## Filtering by MCP Name
 
